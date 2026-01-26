@@ -1,0 +1,40 @@
+# Конфиденциальные файлы
+.env
+
+# Логи
+*.log
+bot.log
+bot_console.log
+
+# Python
+.venv/
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.Python
+
+# Pytest
+.pytest_cache/
+htmlcov/
+.coverage
+
+# Временные файлы
+*.lock
+*.tmp
+~$*
+
+# Резервные копии
+back up/
+backup/
+*.bak
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+
+# Windows
+Thumbs.db
+Desktop.ini

@@ -1,0 +1,179 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>GROO Control Panel</title>
+  <script src="https://telegram.org/js/telegram-web-app.js"></script>
+  <style>
+    :root {
+      color-scheme: light dark;
+      --bg: radial-gradient(circle at 20% 20%, #1c92ff22, transparent 35%),
+            radial-gradient(circle at 80% 10%, #ffd76633, transparent 30%),
+            radial-gradient(circle at 50% 80%, #69f0ae33, transparent 30%),
+            #0f172a;
+      --card: #111827dd;
+      --text: #e5e7eb;
+      --accent: #38bdf8;
+      --muted: #94a3b8;
+    }
+    body {
+      margin: 0;
+      font-family: "Segoe UI", "Helvetica Neue", sans-serif;
+      background: var(--bg);
+      color: var(--text);
+      min-height: 100vh;
+      display: flex;
+      justify-content: center;
+      padding: 24px;
+    }
+    .shell {
+      width: 100%;
+      max-width: 520px;
+      background: var(--card);
+      border-radius: 18px;
+      box-shadow: 0 18px 48px #00000066;
+      padding: 20px 18px 18px;
+      backdrop-filter: blur(6px);
+    }
+    h1 {
+      margin: 0 0 6px;
+      font-size: 22px;
+      letter-spacing: 0.2px;
+    }
+    .muted { color: var(--muted); margin: 0 0 16px; font-size: 14px; }
+    .card {
+      background: #0b1220;
+      border: 1px solid #1f2a44;
+      border-radius: 12px;
+      padding: 14px;
+      margin-bottom: 14px;
+    }
+    label { display: block; font-size: 14px; margin-bottom: 6px; color: var(--muted); }
+    select, button {
+      width: 100%;
+      font-size: 16px;
+      border-radius: 10px;
+      border: 1px solid #1f2a44;
+      padding: 10px 12px;
+      background: #111d33;
+      color: var(--text);
+      box-sizing: border-box;
+    }
+    button {
+      margin-top: 8px;
+      border: none;
+      background: linear-gradient(135deg, #38bdf8, #4ade80);
+      color: #0b1220;
+      font-weight: 700;
+      cursor: pointer;
+      transition: transform .08s ease, box-shadow .08s ease;
+    }
+    button:active { transform: translateY(1px) scale(.995); box-shadow: 0 8px 16px #00000055; }
+    .pill-row { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px,1fr)); gap: 8px; }
+    .pill {
+      border-radius: 12px;
+      border: 1px solid #1f2a44;
+      padding: 10px 12px;
+      background: #0f172a;
+      cursor: pointer;
+      transition: border-color .08s ease, background .08s ease;
+    }
+    .pill.active { border-color: var(--accent); background: #0b182d; }
+    .pill small { display: block; color: var(--muted); }
+    .footer { text-align: center; color: var(--muted); font-size: 12px; margin-top: 12px; }
+  </style>
+</head>
+<body>
+  <main class="shell">
+    <h1>GROO — Reports</h1>
+    <p class="muted">Выберите отчёт и параметры. Можно добавить новые типы отчётов позже — окно уже готово.</p>
+
+    <div class="card">
+      <label>Тип отчёта</label>
+      <div class="pill-row" id="report-types"></div>
+    </div>
+
+    <div class="card">
+      <label>Год</label>
+      <select id="year"></select>
+    </div>
+
+    <div class="card">
+      <label>Номер недели</label>
+      <select id="week"></select>
+    </div>
+
+    <button id="send">Запустить отчёт</button>
+    <div class="footer">После отправки окно закроется автоматически.</div>
+  </main>
+
+  <script>
+    const tg = window.Telegram?.WebApp;
+    tg?.ready();
+
+    // Report types (more can be added later)
+    const reportTypes = [
+      { id: "report", title: "🚚 LKW Wochenreport", hint: "PDF + XLSX" },
+      { id: "report_new", title: "🧪 Новый отчёт (скоро)", hint: "Заглушка", disabled: true },
+    ];
+
+    const typesRoot = document.getElementById("report-types");
+    reportTypes.forEach((r, idx) => {
+      const div = document.createElement("div");
+      div.className = "pill" + (idx === 0 ? " active" : "");
+      if (r.disabled) div.style.opacity = 0.55;
+      div.dataset.id = r.id;
+      div.innerHTML = `${r.title}<small>${r.hint}</small>`;
+      if (!r.disabled) {
+        div.onclick = () => {
+          document.querySelectorAll(".pill").forEach(p => p.classList.remove("active"));
+          div.classList.add("active");
+        };
+      }
+      typesRoot.appendChild(div);
+    });
+
+    // Years: current-1, current, current+1
+    const yearEl = document.getElementById("year");
+    const now = new Date();
+    const currentYear = now.getFullYear();
+    [currentYear - 1, currentYear, currentYear + 1].forEach(y => {
+      const opt = document.createElement("option");
+      opt.value = String(y);
+      opt.textContent = y;
+      if (y === currentYear) opt.selected = true;
+      yearEl.appendChild(opt);
+    });
+
+    // Weeks 1..53, preselect current ISO week
+    const weekEl = document.getElementById("week");
+    for (let w = 1; w <= 53; w++) {
+      const opt = document.createElement("option");
+      opt.value = String(w);
+      opt.textContent = w.toString().padStart(2, "0");
+      weekEl.appendChild(opt);
+    }
+    const isoWeek = (() => {
+      const d = new Date(Date.UTC(now.getFullYear(), now.getMonth(), now.getDate()));
+      const dayNum = d.getUTCDay() || 7;
+      d.setUTCDate(d.getUTCDate() + 4 - dayNum);
+      const yearStart = new Date(Date.UTC(d.getUTCFullYear(), 0, 1));
+      return Math.ceil(((d - yearStart) / 86400000 + 1) / 7);
+    })();
+    if (isoWeek >= 1 && isoWeek <= 53) weekEl.value = String(isoWeek);
+
+    document.getElementById("send").onclick = () => {
+      const active = document.querySelector(".pill.active");
+      const action = active?.dataset.id || "report";
+      const payload = {
+        action,
+        year: parseInt(yearEl.value, 10),
+        week: parseInt(weekEl.value, 10),
+      };
+      tg?.sendData ? tg.sendData(JSON.stringify(payload)) : console.log(payload);
+      tg?.close?.();
+    };
+  </script>
+</body>
+</html>
