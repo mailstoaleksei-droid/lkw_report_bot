@@ -556,6 +556,7 @@ async def on_cb(update: Update, context: ContextTypes.DEFAULT_TYPE):
 async def on_webapp_data(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Handle data from Telegram Mini App."""
     uid = update.effective_user.id if update.effective_user else "unknown"
+    logger.info("WEBAPP DATA received from user=%s", uid)
 
     if not _allowed(update):
         await update.message.reply_text(T(update, "access_denied", uid=uid))
@@ -580,6 +581,7 @@ async def on_webapp_data(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
         allowed, wait_sec = _check_cooldown(uid)
         if not allowed:
+            logger.info("WEBAPP cooldown active for user=%s, wait=%s sec", uid, wait_sec)
             await update.message.reply_text(T(update, "cooldown", sec=wait_sec), reply_markup=_kb(update))
             return
 
