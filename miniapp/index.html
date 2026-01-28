@@ -26,7 +26,7 @@
       display: flex;
       justify-content: center;
       padding: 24px;
-      padding-bottom: 80px; /* Space for MainButton */
+      padding-bottom: 80px;
     }
     .shell {
       width: 100%;
@@ -37,11 +37,7 @@
       padding: 20px 18px 18px;
       backdrop-filter: blur(6px);
     }
-    h1 {
-      margin: 0 0 6px;
-      font-size: 22px;
-      letter-spacing: 0.2px;
-    }
+    h1 { margin: 0 0 6px; font-size: 22px; }
     .muted { color: var(--muted); margin: 0 0 16px; font-size: 14px; }
     .card {
       background: #0b1220;
@@ -68,11 +64,19 @@
       padding: 10px 12px;
       background: #0f172a;
       cursor: pointer;
-      transition: border-color .08s ease, background .08s ease;
     }
     .pill.active { border-color: var(--accent); background: #0b182d; }
     .pill small { display: block; color: var(--muted); }
-    .footer { text-align: center; color: var(--muted); font-size: 12px; margin-top: 12px; }
+    .status {
+      text-align: center;
+      padding: 12px;
+      margin-top: 8px;
+      border-radius: 8px;
+      font-size: 14px;
+    }
+    .status.sending { background: #1e3a5f; color: #38bdf8; }
+    .status.success { background: #1a4d3e; color: #4ade80; }
+    .status.error { background: #4d1a1a; color: #f87171; }
   </style>
 </head>
 <body>
@@ -83,10 +87,9 @@
     <details class="card" style="cursor:pointer">
       <summary style="font-weight:600;color:var(--accent)">Как пользоваться</summary>
       <ol style="margin:10px 0 0;padding-left:20px;color:var(--muted);font-size:13px">
-        <li>Выберите тип отчёта</li>
-        <li>Укажите год и номер недели</li>
+        <li>Выберите год и неделю</li>
         <li>Нажмите кнопку внизу</li>
-        <li>Дождитесь PDF-файла в чате</li>
+        <li>Окно закроется, отчёт придёт в чат</li>
       </ol>
     </details>
 
@@ -105,31 +108,53 @@
       <select id="week"></select>
     </div>
 
-    <div class="footer">Кнопка отправки внизу экрана</div>
+    <div id="status" class="status" style="display:none"></div>
   </main>
 
   <script>
     const tg = window.Telegram?.WebApp;
+    let dataSent = false;
 
-    // Initialize Telegram WebApp
     if (tg) {
       tg.ready();
       tg.expand();
 
-      // Setup MainButton (native Telegram button at bottom)
+      // MainButton setup
       tg.MainButton.setText("Запустить отчёт");
       tg.MainButton.show();
 
       tg.MainButton.onClick(() => {
+        if (dataSent) {
+          showStatus("Данные уже отправлены. Закройте окно.", "error");
+          return;
+        }
+
+        const year = parseInt(document.getElementById("year").value, 10);
+        const week = parseInt(document.getElementById("week").value, 10);
         const active = document.querySelector(".pill.active");
         const action = active?.dataset.id || "report";
-        const payload = {
-          action,
-          year: parseInt(document.getElementById("year").value, 10),
-          week: parseInt(document.getElementById("week").value, 10),
-        };
-        tg.sendData(JSON.stringify(payload));
+
+        showStatus("Отправка...", "sending");
+        tg.MainButton.showProgress();
+
+        try {
+          const payload = JSON.stringify({ action, year, week });
+          tg.sendData(payload);
+          dataSent = true;
+          showStatus("Отправлено! Закрываю...", "success");
+          // WebApp should close automatically after sendData
+        } catch (e) {
+          showStatus("Ошибка: " + e.message, "error");
+          tg.MainButton.hideProgress();
+        }
       });
+    }
+
+    function showStatus(text, type) {
+      const el = document.getElementById("status");
+      el.textContent = text;
+      el.className = "status " + type;
+      el.style.display = "block";
     }
 
     // Report types
@@ -154,7 +179,7 @@
       typesRoot.appendChild(div);
     });
 
-    // Years: current-1, current, current+1
+    // Years
     const yearEl = document.getElementById("year");
     const now = new Date();
     const currentYear = now.getFullYear();
@@ -166,7 +191,7 @@
       yearEl.appendChild(opt);
     });
 
-    // Weeks 1..53, preselect current ISO week
+    // Weeks
     const weekEl = document.getElementById("week");
     for (let w = 1; w <= 53; w++) {
       const opt = document.createElement("option");
@@ -175,7 +200,7 @@
       weekEl.appendChild(opt);
     }
 
-    // Calculate current ISO week
+    // Current ISO week
     const isoWeek = (() => {
       const d = new Date(Date.UTC(now.getFullYear(), now.getMonth(), now.getDate()));
       const dayNum = d.getUTCDay() || 7;
