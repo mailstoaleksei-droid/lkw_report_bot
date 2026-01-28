@@ -17,6 +17,7 @@ from dotenv import load_dotenv
 from telegram import (
     Update,
     ReplyKeyboardMarkup,
+    ReplyKeyboardRemove,
     KeyboardButton,
     InlineKeyboardButton,
     InlineKeyboardMarkup,
@@ -216,14 +217,15 @@ def _allowed(update: Update) -> bool:
     return bool(update.effective_user) and update.effective_user.id in WL
 
 
-def _kb(update: Update) -> ReplyKeyboardMarkup:
-    """Keyboard with only Open Panel button when WebApp is configured."""
+def _kb(update: Update):
+    """Remove reply keyboard when WebApp is configured (use Menu Button instead)."""
     if WEBAPP_URL:
-        rows = [[KeyboardButton(text=T(update, "btn_panel"), web_app=WebAppInfo(WEBAPP_URL))]]
+        # No reply keyboard - user uses Menu Button "Open" to access WebApp
+        return ReplyKeyboardRemove()
     else:
         # Fallback to old buttons if WebApp not configured
         rows = [[T(update, "btn_report"), T(update, "btn_info")]]
-    return ReplyKeyboardMarkup(rows, resize_keyboard=True)
+        return ReplyKeyboardMarkup(rows, resize_keyboard=True)
 
 
 # =========================
