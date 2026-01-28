@@ -35,6 +35,12 @@ backup/
 *.swp
 *.swo
 
+# Claude Code
+.claude/
+
+# Temp files
+_ul
+
 # Windows
 Thumbs.db
 Desktop.ini
