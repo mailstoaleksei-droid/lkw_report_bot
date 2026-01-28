@@ -22,6 +22,7 @@ from telegram import (
     InlineKeyboardMarkup,
     WebAppInfo,
     BotCommand,
+    MenuButtonWebApp,
 )
 from telegram.ext import (
     ApplicationBuilder,
@@ -109,9 +110,15 @@ def acquire_bot_lock_or_exit():
 # =========================
 # SAFE EDIT WRAPPER
 # =========================
-async def safe_edit(q, text: str, reply_markup=None):
+async def safe_edit(msg, text: str, reply_markup=None):
+    """Edit message text safely. Works with both Message and CallbackQuery objects."""
     try:
-        await q.edit_message_text(text, reply_markup=reply_markup)
+        if hasattr(msg, 'edit_text'):
+            # Message object
+            await msg.edit_text(text, reply_markup=reply_markup)
+        elif hasattr(msg, 'edit_message_text'):
+            # CallbackQuery object
+            await msg.edit_message_text(text, reply_markup=reply_markup)
     except BadRequest as e:
         if "Message is not modified" in str(e):
             return
@@ -210,9 +217,12 @@ def _allowed(update: Update) -> bool:
 
 
 def _kb(update: Update) -> ReplyKeyboardMarkup:
-    rows = [[T(update, "btn_report"), T(update, "btn_info")]]
+    """Keyboard with only Open Panel button when WebApp is configured."""
     if WEBAPP_URL:
-        rows.append([KeyboardButton(text=T(update, "btn_panel"), web_app=WebAppInfo(WEBAPP_URL))])
+        rows = [[KeyboardButton(text=T(update, "btn_panel"), web_app=WebAppInfo(WEBAPP_URL))]]
+    else:
+        # Fallback to old buttons if WebApp not configured
+        rows = [[T(update, "btn_report"), T(update, "btn_info")]]
     return ReplyKeyboardMarkup(rows, resize_keyboard=True)
 
 
@@ -322,8 +332,14 @@ async def _send_sticker_if_exists(msg, path: str):
 # COMMANDS / MENU
 # =========================
 async def _post_init(app):
-    await app.bot.set_my_commands([BotCommand("report", "Generate report")], language_code="en")
-    await app.bot.set_my_commands([BotCommand("report", "Сгенерировать отчёт")], language_code="ru")
+    # Set bot commands
+    await app.bot.set_my_commands([BotCommand("start", "Start bot")], language_code="en")
+    await app.bot.set_my_commands([BotCommand("start", "Запустить бота")], language_code="ru")
+
+    # Set Menu Button to open WebApp directly (like BotFather)
+    if WEBAPP_URL:
+        menu_button = MenuButtonWebApp(text="Open", web_app=WebAppInfo(WEBAPP_URL))
+        await app.bot.set_chat_menu_button(menu_button=menu_button)
 
 
 # =========================
