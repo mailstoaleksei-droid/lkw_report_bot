@@ -240,7 +240,7 @@ def _validate_year_week(year: int, week: int) -> bool:
 # RATE LIMITING
 # =========================
 COOLDOWNS: dict[int, float] = {}
-COOLDOWN_SECONDS = 30  # Минимальный интервал между генерациями
+COOLDOWN_SECONDS = 5  # Минимальный интервал между генерациями (секунд)
 
 
 def _check_cooldown(user_id: int) -> tuple[bool, int]:
