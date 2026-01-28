@@ -77,6 +77,20 @@
     .status.sending { background: #1e3a5f; color: #38bdf8; }
     .status.success { background: #1a4d3e; color: #4ade80; }
     .status.error { background: #4d1a1a; color: #f87171; }
+    .btn-submit {
+      width: 100%;
+      padding: 14px;
+      font-size: 16px;
+      font-weight: 600;
+      border: none;
+      border-radius: 12px;
+      background: var(--accent);
+      color: #0f172a;
+      cursor: pointer;
+      margin-top: 10px;
+    }
+    .btn-submit:active { opacity: 0.8; }
+    .btn-submit:disabled { opacity: 0.5; cursor: not-allowed; }
   </style>
 </head>
 <body>
@@ -109,46 +123,15 @@
     </div>
 
     <div id="status" class="status" style="display:none"></div>
+
+    <!-- Fallback button (shown if MainButton doesn't work) -->
+    <button id="fallback-btn" class="btn-submit" style="display:none">Запустить отчёт</button>
   </main>
 
   <script>
     const tg = window.Telegram?.WebApp;
     let dataSent = false;
-
-    if (tg) {
-      tg.ready();
-      tg.expand();
-
-      // MainButton setup
-      tg.MainButton.setText("Запустить отчёт");
-      tg.MainButton.show();
-
-      tg.MainButton.onClick(() => {
-        if (dataSent) {
-          showStatus("Данные уже отправлены. Закройте окно.", "error");
-          return;
-        }
-
-        const year = parseInt(document.getElementById("year").value, 10);
-        const week = parseInt(document.getElementById("week").value, 10);
-        const active = document.querySelector(".pill.active");
-        const action = active?.dataset.id || "report";
-
-        showStatus("Отправка...", "sending");
-        tg.MainButton.showProgress();
-
-        try {
-          const payload = JSON.stringify({ action, year, week });
-          tg.sendData(payload);
-          dataSent = true;
-          showStatus("Отправлено! Закрываю...", "success");
-          // WebApp should close automatically after sendData
-        } catch (e) {
-          showStatus("Ошибка: " + e.message, "error");
-          tg.MainButton.hideProgress();
-        }
-      });
-    }
+    let mainButtonWorking = false;
 
     function showStatus(text, type) {
       const el = document.getElementById("status");
@@ -156,6 +139,84 @@
       el.className = "status " + type;
       el.style.display = "block";
     }
+
+    function sendReport() {
+      if (dataSent) {
+        showStatus("Данные уже отправлены. Закройте окно.", "error");
+        return;
+      }
+
+      const year = parseInt(document.getElementById("year").value, 10);
+      const week = parseInt(document.getElementById("week").value, 10);
+      const active = document.querySelector(".pill.active");
+      const action = active?.dataset.id || "report";
+
+      showStatus("Отправка...", "sending");
+
+      if (tg && mainButtonWorking) {
+        try { tg.MainButton.showProgress(); } catch(e) {}
+      }
+
+      const fallbackBtn = document.getElementById("fallback-btn");
+      if (fallbackBtn) fallbackBtn.disabled = true;
+
+      try {
+        const payload = JSON.stringify({ action, year, week });
+
+        if (tg && tg.sendData) {
+          tg.sendData(payload);
+          dataSent = true;
+          showStatus("Отправлено! Окно закроется автоматически.", "success");
+        } else {
+          showStatus("Telegram WebApp недоступен", "error");
+          if (fallbackBtn) fallbackBtn.disabled = false;
+        }
+      } catch (e) {
+        showStatus("Ошибка: " + e.message, "error");
+        if (tg && mainButtonWorking) {
+          try { tg.MainButton.hideProgress(); } catch(ex) {}
+        }
+        if (fallbackBtn) fallbackBtn.disabled = false;
+      }
+    }
+
+    // Initialize Telegram WebApp
+    if (tg) {
+      try {
+        tg.ready();
+        tg.expand();
+
+        // Try MainButton
+        if (tg.MainButton) {
+          tg.MainButton.setText("Запустить отчёт");
+          tg.MainButton.enable();
+          tg.MainButton.show();
+          tg.MainButton.onClick(sendReport);
+          mainButtonWorking = true;
+        }
+      } catch (e) {
+        console.error("MainButton error:", e);
+        mainButtonWorking = false;
+      }
+    }
+
+    // Show fallback button if MainButton doesn't work or not in Telegram
+    if (!mainButtonWorking) {
+      const fallbackBtn = document.getElementById("fallback-btn");
+      if (fallbackBtn) {
+        fallbackBtn.style.display = "block";
+        fallbackBtn.onclick = sendReport;
+      }
+    }
+
+    // Also show fallback after 2 seconds if MainButton might not have shown
+    setTimeout(() => {
+      const fallbackBtn = document.getElementById("fallback-btn");
+      if (fallbackBtn && !dataSent) {
+        fallbackBtn.style.display = "block";
+        fallbackBtn.onclick = sendReport;
+      }
+    }, 2000);
 
     // Report types
     const reportTypes = [
