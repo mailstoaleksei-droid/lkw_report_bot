@@ -1,5 +1,5 @@
 <!doctype html>
-<html lang="en">
+<html lang="ru">
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width,initial-scale=1" />
@@ -26,6 +26,7 @@
       display: flex;
       justify-content: center;
       padding: 24px;
+      padding-bottom: 80px; /* Space for MainButton */
     }
     .shell {
       width: 100%;
@@ -50,7 +51,7 @@
       margin-bottom: 14px;
     }
     label { display: block; font-size: 14px; margin-bottom: 6px; color: var(--muted); }
-    select, button {
+    select {
       width: 100%;
       font-size: 16px;
       border-radius: 10px;
@@ -60,16 +61,6 @@
       color: var(--text);
       box-sizing: border-box;
     }
-    button {
-      margin-top: 8px;
-      border: none;
-      background: linear-gradient(135deg, #38bdf8, #4ade80);
-      color: #0b1220;
-      font-weight: 700;
-      cursor: pointer;
-      transition: transform .08s ease, box-shadow .08s ease;
-    }
-    button:active { transform: translateY(1px) scale(.995); box-shadow: 0 8px 16px #00000055; }
     .pill-row { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px,1fr)); gap: 8px; }
     .pill {
       border-radius: 12px;
@@ -86,15 +77,15 @@
 </head>
 <body>
   <main class="shell">
-    <h1>LKW Report Bot — GROO GmbH</h1>
-    <p class="muted">Генерация отчётов для водителей и машин</p>
+    <h1>LKW Report Bot</h1>
+    <p class="muted">GROO GmbH - Генерация отчётов</p>
 
     <details class="card" style="cursor:pointer">
-      <summary style="font-weight:600;color:var(--accent)">ℹ️ Как пользоваться</summary>
+      <summary style="font-weight:600;color:var(--accent)">Как пользоваться</summary>
       <ol style="margin:10px 0 0;padding-left:20px;color:var(--muted);font-size:13px">
         <li>Выберите тип отчёта</li>
         <li>Укажите год и номер недели</li>
-        <li>Нажмите «Запустить отчёт»</li>
+        <li>Нажмите кнопку внизу</li>
         <li>Дождитесь PDF-файла в чате</li>
       </ol>
     </details>
@@ -114,18 +105,37 @@
       <select id="week"></select>
     </div>
 
-    <button id="send">Запустить отчёт</button>
-    <div class="footer">После отправки окно закроется автоматически.</div>
+    <div class="footer">Кнопка отправки внизу экрана</div>
   </main>
 
   <script>
     const tg = window.Telegram?.WebApp;
-    tg?.ready();
 
-    // Report types (more can be added later)
+    // Initialize Telegram WebApp
+    if (tg) {
+      tg.ready();
+      tg.expand();
+
+      // Setup MainButton (native Telegram button at bottom)
+      tg.MainButton.setText("Запустить отчёт");
+      tg.MainButton.show();
+
+      tg.MainButton.onClick(() => {
+        const active = document.querySelector(".pill.active");
+        const action = active?.dataset.id || "report";
+        const payload = {
+          action,
+          year: parseInt(document.getElementById("year").value, 10),
+          week: parseInt(document.getElementById("week").value, 10),
+        };
+        tg.sendData(JSON.stringify(payload));
+      });
+    }
+
+    // Report types
     const reportTypes = [
-      { id: "report", title: "🚚 LKW Wochenreport", hint: "PDF + XLSX" },
-      { id: "report_new", title: "🧪 Новый отчёт (скоро)", hint: "Заглушка", disabled: true },
+      { id: "report", title: "LKW Wochenreport", hint: "PDF" },
+      { id: "report_new", title: "Новый отчёт (скоро)", hint: "В разработке", disabled: true },
     ];
 
     const typesRoot = document.getElementById("report-types");
@@ -134,7 +144,7 @@
       div.className = "pill" + (idx === 0 ? " active" : "");
       if (r.disabled) div.style.opacity = 0.55;
       div.dataset.id = r.id;
-      div.innerHTML = `${r.title}<small>${r.hint}</small>`;
+      div.innerHTML = r.title + "<small>" + r.hint + "</small>";
       if (!r.disabled) {
         div.onclick = () => {
           document.querySelectorAll(".pill").forEach(p => p.classList.remove("active"));
@@ -164,6 +174,8 @@
       opt.textContent = w.toString().padStart(2, "0");
       weekEl.appendChild(opt);
     }
+
+    // Calculate current ISO week
     const isoWeek = (() => {
       const d = new Date(Date.UTC(now.getFullYear(), now.getMonth(), now.getDate()));
       const dayNum = d.getUTCDay() || 7;
@@ -172,18 +184,6 @@
       return Math.ceil(((d - yearStart) / 86400000 + 1) / 7);
     })();
     if (isoWeek >= 1 && isoWeek <= 53) weekEl.value = String(isoWeek);
-
-    document.getElementById("send").onclick = () => {
-      const active = document.querySelector(".pill.active");
-      const action = active?.dataset.id || "report";
-      const payload = {
-        action,
-        year: parseInt(yearEl.value, 10),
-        week: parseInt(weekEl.value, 10),
-      };
-      tg?.sendData ? tg.sendData(JSON.stringify(payload)) : console.log(payload);
-      tg?.close?.();
-    };
   </script>
 </body>
 </html>
