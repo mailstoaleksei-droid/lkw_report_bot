@@ -7,10 +7,12 @@ import msvcrt
 import logging
 import pathlib
 import asyncio
+import signal
 
 from asyncio import Lock
 from datetime import date, timedelta
 from logging.handlers import RotatingFileHandler
+from functools import wraps
 
 from dotenv import load_dotenv
 
@@ -36,6 +38,9 @@ from telegram.ext import (
 from telegram.error import BadRequest
 
 from excel_service import run_report
+
+# Admin notifications
+ADMIN_CHAT_ID = int(os.getenv("ADMIN_CHAT_ID", "0") or 0)
 
 
 # =========================
@@ -68,6 +73,39 @@ for name in ("httpx", "telegram", "telegram.ext", "telegram.request", "telegram.
 logger = logging.getLogger("lkw_report_bot")
 
 EXCEL_LOCK = Lock()
+
+# Graceful shutdown flag
+_shutdown_event = asyncio.Event()
+
+
+# =========================
+# NETWORK RETRY DECORATOR
+# =========================
+def with_network_retry(max_retries: int = 3, base_delay: float = 1.0):
+    """Decorator for retrying operations on network errors with exponential backoff."""
+    def decorator(func):
+        @wraps(func)
+        async def wrapper(*args, **kwargs):
+            last_error = None
+            for attempt in range(max_retries):
+                try:
+                    return await func(*args, **kwargs)
+                except Exception as e:
+                    error_str = str(e).lower()
+                    is_network_error = any(x in error_str for x in [
+                        'network', 'timeout', 'connection', 'getaddrinfo',
+                        'connecterror', 'timed out', 'unreachable'
+                    ])
+                    if is_network_error and attempt < max_retries - 1:
+                        delay = base_delay * (2 ** attempt)
+                        logger.warning(f"Network error (attempt {attempt + 1}/{max_retries}): {e}. Retrying in {delay}s...")
+                        await asyncio.sleep(delay)
+                        last_error = e
+                        continue
+                    raise
+            raise last_error
+        return wrapper
+    return decorator
 
 
 # =========================
@@ -339,9 +377,14 @@ async def _post_init(app):
     await app.bot.set_my_commands([BotCommand("start", "Запустить бота")], language_code="ru")
 
     # Set Menu Button to open WebApp directly (like BotFather)
-    if WEBAPP_URL:
-        menu_button = MenuButtonWebApp(text="Open", web_app=WebAppInfo(WEBAPP_URL))
-        await app.bot.set_chat_menu_button(menu_button=menu_button)
+    try:
+        if WEBAPP_URL:
+            menu_button = MenuButtonWebApp(text="Open", web_app=WebAppInfo(WEBAPP_URL))
+            await app.bot.set_chat_menu_button(menu_button=menu_button)
+        else:
+            await app.bot.set_chat_menu_button()  # reset to default
+    except Exception:
+        logger.exception("Failed to set MenuButtonWebApp")
 
 
 # =========================
@@ -358,9 +401,13 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     name = update.effective_user.first_name if update.effective_user else "User"
     uid = update.effective_user.id if update.effective_user else "unknown"
 
+    kb = _kb(update)
+    if WEBAPP_URL:
+        kb = InlineKeyboardMarkup([[InlineKeyboardButton(T(update, "btn_panel"), web_app=WebAppInfo(WEBAPP_URL))]])
+
     await update.message.reply_text(
         f"{T(update, 'hello', name=name, uid=uid)}\n\n{T(update, 'info_text')}",
-        reply_markup=_kb(update),
+        reply_markup=kb,
     )
 
 
@@ -389,7 +436,8 @@ async def panel_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await update.message.reply_text(T(update, "panel_not_configured"), reply_markup=_kb(update))
         return
 
-    await update.message.reply_text(T(update, "panel_hint"), reply_markup=_kb(update))
+    open_btn = InlineKeyboardMarkup([[InlineKeyboardButton(T(update, "btn_panel"), web_app=WebAppInfo(WEBAPP_URL))]])
+    await update.message.reply_text(T(update, "panel_hint"), reply_markup=open_btn)
 
 
 async def on_text(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -640,6 +688,47 @@ async def on_webapp_data(update: Update, context: ContextTypes.DEFAULT_TYPE):
 async def on_error(update: object, context: ContextTypes.DEFAULT_TYPE) -> None:
     logger.exception("UNHANDLED ERROR", exc_info=context.error)
 
+    # Check if it's a network error - don't spam admin for transient issues
+    error_str = str(context.error).lower()
+    is_network_error = any(x in error_str for x in [
+        'network', 'timeout', 'connection', 'getaddrinfo',
+        'connecterror', 'timed out', 'unreachable'
+    ])
+
+    if is_network_error:
+        logger.warning("Network error detected, skipping admin notification")
+        return
+
+    # Notify admin with retry
+    for attempt in range(3):
+        try:
+            if ADMIN_CHAT_ID:
+                await context.bot.send_message(
+                    chat_id=ADMIN_CHAT_ID,
+                    text=f"⚠️ LKW Report Bot error: {context.error}"
+                )
+            break
+        except Exception as e:
+            if attempt < 2:
+                await asyncio.sleep(2 ** attempt)
+            else:
+                logger.exception("Failed to notify admin after 3 attempts")
+
+
+# =========================
+# GRACEFUL SHUTDOWN
+# =========================
+def _setup_signal_handlers(app):
+    """Setup signal handlers for graceful shutdown."""
+    def signal_handler(signum, frame):
+        signame = signal.Signals(signum).name
+        logger.info(f"Received {signame}, initiating graceful shutdown...")
+        _shutdown_event.set()
+
+    # Windows supports SIGINT and SIGTERM
+    signal.signal(signal.SIGINT, signal_handler)
+    signal.signal(signal.SIGTERM, signal_handler)
+
 
 # =========================
 # MAIN
@@ -658,8 +747,20 @@ def main():
     app.add_handler(CallbackQueryHandler(on_cb))
     app.add_error_handler(on_error)
 
+    _setup_signal_handlers(app)
+
     logger.info("Starting polling...")
-    app.run_polling()
+    logger.info(f"WEBAPP_URL: {WEBAPP_URL or 'not configured'}")
+    logger.info(f"Whitelist users: {len(WL)}")
+
+    try:
+        app.run_polling(drop_pending_updates=True)
+    except KeyboardInterrupt:
+        logger.info("Received KeyboardInterrupt, shutting down...")
+    except Exception as e:
+        logger.exception(f"Bot stopped with error: {e}")
+    finally:
+        logger.info("Bot shutdown complete.")
 
 
 if __name__ == "__main__":

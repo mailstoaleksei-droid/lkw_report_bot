@@ -1,0 +1,15 @@
+/*
+  # Security headers
+  X-Content-Type-Options: nosniff
+  X-Frame-Options: SAMEORIGIN
+  Referrer-Policy: strict-origin-when-cross-origin
+
+  # Allow Telegram to embed
+  Content-Security-Policy: frame-ancestors 'self' https://web.telegram.org https://t.me;
+
+  # Caching for static assets
+  Cache-Control: public, max-age=3600
+
+/index.html
+  # Don't cache HTML too aggressively
+  Cache-Control: public, max-age=300

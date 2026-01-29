@@ -2,274 +2,570 @@
 <html lang="ru">
 <head>
   <meta charset="utf-8" />
-  <meta name="viewport" content="width=device-width,initial-scale=1" />
-  <title>GROO Control Panel</title>
+  <meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no" />
+  <meta name="theme-color" content="#ffffff" />
+  <title>LKW Report</title>
   <script src="https://telegram.org/js/telegram-web-app.js"></script>
   <style>
     :root {
-      color-scheme: light dark;
-      --bg: radial-gradient(circle at 20% 20%, #1c92ff22, transparent 35%),
-            radial-gradient(circle at 80% 10%, #ffd76633, transparent 30%),
-            radial-gradient(circle at 50% 80%, #69f0ae33, transparent 30%),
-            #0f172a;
-      --card: #111827dd;
-      --text: #e5e7eb;
-      --accent: #38bdf8;
-      --muted: #94a3b8;
+      /* Telegram theme fallbacks */
+      --tg-theme-bg-color: #ffffff;
+      --tg-theme-text-color: #000000;
+      --tg-theme-hint-color: #999999;
+      --tg-theme-link-color: #2481cc;
+      --tg-theme-button-color: #2481cc;
+      --tg-theme-button-text-color: #ffffff;
+      --tg-theme-secondary-bg-color: #f0f0f0;
+
+      /* Custom colors */
+      --card-bg: var(--tg-theme-secondary-bg-color);
+      --border: rgba(0, 0, 0, 0.08);
+      --shadow: 0 2px 8px rgba(0, 0, 0, 0.08);
+      --success: #34c759;
+      --error: #ff3b30;
+      --warning: #ff9500;
+
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
     }
-    body {
+
+    * {
+      box-sizing: border-box;
       margin: 0;
-      font-family: "Segoe UI", "Helvetica Neue", sans-serif;
-      background: var(--bg);
-      color: var(--text);
+      padding: 0;
+      -webkit-tap-highlight-color: transparent;
+    }
+
+    body {
+      background: var(--tg-theme-bg-color);
+      color: var(--tg-theme-text-color);
       min-height: 100vh;
+      padding: 16px;
+      padding-bottom: 100px; /* Space for MainButton */
+    }
+
+    /* Header */
+    .header {
       display: flex;
-      justify-content: center;
-      padding: 24px;
-      padding-bottom: 80px;
+      align-items: center;
+      gap: 12px;
+      margin-bottom: 20px;
+      padding-bottom: 16px;
+      border-bottom: 1px solid var(--border);
     }
-    .shell {
-      width: 100%;
-      max-width: 520px;
-      background: var(--card);
-      border-radius: 18px;
-      box-shadow: 0 18px 48px #00000066;
-      padding: 20px 18px 18px;
-      backdrop-filter: blur(6px);
-    }
-    h1 { margin: 0 0 6px; font-size: 22px; }
-    .muted { color: var(--muted); margin: 0 0 16px; font-size: 14px; }
-    .card {
-      background: #0b1220;
-      border: 1px solid #1f2a44;
+
+    .logo {
+      width: 48px;
+      height: 48px;
       border-radius: 12px;
-      padding: 14px;
-      margin-bottom: 14px;
+      background: linear-gradient(135deg, var(--tg-theme-button-color), #0ea5e9);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      color: var(--tg-theme-button-text-color);
+      font-weight: 700;
+      font-size: 14px;
+      flex-shrink: 0;
     }
-    label { display: block; font-size: 14px; margin-bottom: 6px; color: var(--muted); }
+
+    .header-text h1 {
+      font-size: 20px;
+      font-weight: 600;
+      margin-bottom: 2px;
+    }
+
+    .header-text p {
+      font-size: 13px;
+      color: var(--tg-theme-hint-color);
+    }
+
+    /* Cards */
+    .card {
+      background: var(--card-bg);
+      border-radius: 12px;
+      padding: 16px;
+      margin-bottom: 12px;
+    }
+
+    .card-label {
+      font-size: 13px;
+      font-weight: 500;
+      color: var(--tg-theme-hint-color);
+      margin-bottom: 10px;
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+    }
+
+    /* Selects */
     select {
       width: 100%;
+      padding: 14px 16px;
       font-size: 16px;
+      border: none;
       border-radius: 10px;
-      border: 1px solid #1f2a44;
-      padding: 10px 12px;
-      background: #111d33;
-      color: var(--text);
-      box-sizing: border-box;
-    }
-    .pill-row { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px,1fr)); gap: 8px; }
-    .pill {
-      border-radius: 12px;
-      border: 1px solid #1f2a44;
-      padding: 10px 12px;
-      background: #0f172a;
+      background: var(--tg-theme-bg-color);
+      color: var(--tg-theme-text-color);
+      appearance: none;
+      background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='16' height='16' viewBox='0 0 24 24' fill='none' stroke='%23999' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpolyline points='6 9 12 15 18 9'%3E%3C/polyline%3E%3C/svg%3E");
+      background-repeat: no-repeat;
+      background-position: right 16px center;
       cursor: pointer;
     }
-    .pill.active { border-color: var(--accent); background: #0b182d; }
-    .pill small { display: block; color: var(--muted); }
-    .status {
-      text-align: center;
-      padding: 12px;
-      margin-top: 8px;
-      border-radius: 8px;
-      font-size: 14px;
+
+    select:focus {
+      outline: 2px solid var(--tg-theme-button-color);
+      outline-offset: -2px;
     }
-    .status.sending { background: #1e3a5f; color: #38bdf8; }
-    .status.success { background: #1a4d3e; color: #4ade80; }
-    .status.error { background: #4d1a1a; color: #f87171; }
-    .btn-submit {
+
+    /* Report Types */
+    .type-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 10px;
+    }
+
+    .type-btn {
+      padding: 14px 12px;
+      border: 2px solid transparent;
+      border-radius: 10px;
+      background: var(--tg-theme-bg-color);
+      cursor: pointer;
+      transition: all 0.2s ease;
+      text-align: left;
+    }
+
+    .type-btn:active {
+      transform: scale(0.98);
+    }
+
+    .type-btn.active {
+      border-color: var(--tg-theme-button-color);
+      background: rgba(36, 129, 204, 0.08);
+    }
+
+    .type-btn.disabled {
+      opacity: 0.5;
+      cursor: not-allowed;
+    }
+
+    .type-btn-title {
+      font-size: 14px;
+      font-weight: 600;
+      color: var(--tg-theme-text-color);
+      margin-bottom: 2px;
+    }
+
+    .type-btn-hint {
+      font-size: 12px;
+      color: var(--tg-theme-hint-color);
+    }
+
+    /* Info section */
+    .info-card {
+      background: rgba(36, 129, 204, 0.08);
+      border-left: 3px solid var(--tg-theme-button-color);
+    }
+
+    .info-card summary {
+      font-weight: 600;
+      color: var(--tg-theme-link-color);
+      cursor: pointer;
+      padding: 4px 0;
+    }
+
+    .info-card ol {
+      margin-top: 10px;
+      padding-left: 20px;
+      color: var(--tg-theme-hint-color);
+      font-size: 13px;
+      line-height: 1.6;
+    }
+
+    /* Status */
+    .status {
+      padding: 14px 16px;
+      border-radius: 10px;
+      font-size: 14px;
+      font-weight: 500;
+      text-align: center;
+      margin-top: 12px;
+      display: none;
+      animation: fadeIn 0.3s ease;
+    }
+
+    @keyframes fadeIn {
+      from { opacity: 0; transform: translateY(-4px); }
+      to { opacity: 1; transform: translateY(0); }
+    }
+
+    .status.sending {
+      background: rgba(36, 129, 204, 0.12);
+      color: var(--tg-theme-button-color);
+    }
+
+    .status.success {
+      background: rgba(52, 199, 89, 0.12);
+      color: var(--success);
+    }
+
+    .status.error {
+      background: rgba(255, 59, 48, 0.12);
+      color: var(--error);
+    }
+
+    /* Fallback button */
+    .btn-fallback {
       width: 100%;
-      padding: 14px;
+      padding: 16px;
       font-size: 16px;
       font-weight: 600;
       border: none;
-      border-radius: 12px;
-      background: var(--accent);
-      color: #0f172a;
+      border-radius: 10px;
+      background: var(--tg-theme-button-color);
+      color: var(--tg-theme-button-text-color);
       cursor: pointer;
-      margin-top: 10px;
+      margin-top: 16px;
+      display: none;
     }
-    .btn-submit:active { opacity: 0.8; }
-    .btn-submit:disabled { opacity: 0.5; cursor: not-allowed; }
+
+    .btn-fallback:active {
+      opacity: 0.8;
+    }
+
+    .btn-fallback:disabled {
+      opacity: 0.5;
+      cursor: not-allowed;
+    }
+
+    /* Loading skeleton */
+    .skeleton {
+      background: linear-gradient(90deg, var(--card-bg) 25%, var(--tg-theme-bg-color) 50%, var(--card-bg) 75%);
+      background-size: 200% 100%;
+      animation: shimmer 1.5s infinite;
+    }
+
+    @keyframes shimmer {
+      0% { background-position: 200% 0; }
+      100% { background-position: -200% 0; }
+    }
+
+    /* Offline indicator */
+    .offline-banner {
+      position: fixed;
+      top: 0;
+      left: 0;
+      right: 0;
+      background: var(--error);
+      color: white;
+      padding: 8px;
+      text-align: center;
+      font-size: 13px;
+      font-weight: 500;
+      z-index: 100;
+      display: none;
+    }
+
+    .offline-banner.visible {
+      display: block;
+    }
+
+    /* Version */
+    .version {
+      text-align: center;
+      font-size: 11px;
+      color: var(--tg-theme-hint-color);
+      margin-top: 20px;
+      opacity: 0.6;
+    }
   </style>
 </head>
 <body>
-  <main class="shell">
-    <h1>LKW Report Bot</h1>
-    <p class="muted">GROO GmbH - Генерация отчётов</p>
+  <div class="offline-banner" id="offline-banner">
+    Нет подключения к интернету
+  </div>
 
-    <details class="card" style="cursor:pointer">
-      <summary style="font-weight:600;color:var(--accent)">Как пользоваться</summary>
-      <ol style="margin:10px 0 0;padding-left:20px;color:var(--muted);font-size:13px">
-        <li>Выберите год и неделю</li>
-        <li>Нажмите кнопку внизу</li>
-        <li>Окно закроется, отчёт придёт в чат</li>
-      </ol>
-    </details>
-
-    <div class="card">
-      <label>Тип отчёта</label>
-      <div class="pill-row" id="report-types"></div>
+  <header class="header">
+    <div class="logo">LKW</div>
+    <div class="header-text">
+      <h1>LKW Report</h1>
+      <p>GROO GmbH</p>
     </div>
+  </header>
 
-    <div class="card">
-      <label>Год</label>
-      <select id="year"></select>
-    </div>
+  <details class="card info-card">
+    <summary>Как пользоваться</summary>
+    <ol>
+      <li>Выберите год и неделю</li>
+      <li>Нажмите кнопку внизу экрана</li>
+      <li>PDF придёт в чат автоматически</li>
+    </ol>
+  </details>
 
-    <div class="card">
-      <label>Номер недели</label>
-      <select id="week"></select>
-    </div>
+  <div class="card">
+    <div class="card-label">Тип отчёта</div>
+    <div class="type-grid" id="report-types"></div>
+  </div>
 
-    <div id="status" class="status" style="display:none"></div>
+  <div class="card">
+    <div class="card-label">Год</div>
+    <select id="year"></select>
+  </div>
 
-    <!-- Fallback button (shown if MainButton doesn't work) -->
-    <button id="fallback-btn" class="btn-submit" style="display:none">Запустить отчёт</button>
-  </main>
+  <div class="card">
+    <div class="card-label">Неделя</div>
+    <select id="week"></select>
+  </div>
+
+  <div class="status" id="status"></div>
+
+  <button class="btn-fallback" id="fallback-btn">Запустить отчёт</button>
+
+  <div class="version">v2.0</div>
 
   <script>
+    // Telegram WebApp instance
     const tg = window.Telegram?.WebApp;
     let dataSent = false;
     let mainButtonWorking = false;
 
-    function showStatus(text, type) {
-      const el = document.getElementById("status");
-      el.textContent = text;
-      el.className = "status " + type;
-      el.style.display = "block";
+    // Helper: Haptic feedback
+    function haptic(type = 'light') {
+      try {
+        if (tg?.HapticFeedback) {
+          if (type === 'success') tg.HapticFeedback.notificationOccurred('success');
+          else if (type === 'error') tg.HapticFeedback.notificationOccurred('error');
+          else if (type === 'warning') tg.HapticFeedback.notificationOccurred('warning');
+          else tg.HapticFeedback.impactOccurred(type);
+        }
+      } catch (e) {}
     }
 
+    // Helper: Show status message
+    function showStatus(text, type) {
+      const el = document.getElementById('status');
+      el.textContent = text;
+      el.className = 'status ' + type;
+      el.style.display = 'block';
+    }
+
+    // Helper: Hide status
+    function hideStatus() {
+      document.getElementById('status').style.display = 'none';
+    }
+
+    // Send report data
     function sendReport() {
       if (dataSent) {
-        showStatus("Данные уже отправлены. Закройте окно.", "error");
+        showStatus('Данные уже отправлены', 'error');
+        haptic('error');
         return;
       }
 
-      const year = parseInt(document.getElementById("year").value, 10);
-      const week = parseInt(document.getElementById("week").value, 10);
-      const active = document.querySelector(".pill.active");
-      const action = active?.dataset.id || "report";
+      const year = parseInt(document.getElementById('year').value, 10);
+      const week = parseInt(document.getElementById('week').value, 10);
+      const activeType = document.querySelector('.type-btn.active');
+      const action = activeType?.dataset.id || 'report';
 
-      showStatus("Отправка...", "sending");
+      haptic('medium');
+      showStatus('Отправка запроса...', 'sending');
 
+      // Show progress on MainButton
       if (tg && mainButtonWorking) {
-        try { tg.MainButton.showProgress(); } catch(e) {}
+        try {
+          tg.MainButton.showProgress(false);
+          tg.MainButton.disable();
+        } catch (e) {}
       }
 
-      const fallbackBtn = document.getElementById("fallback-btn");
+      // Disable fallback button
+      const fallbackBtn = document.getElementById('fallback-btn');
       if (fallbackBtn) fallbackBtn.disabled = true;
 
       try {
         const payload = JSON.stringify({ action, year, week });
 
-        if (tg && tg.sendData) {
+        if (tg?.sendData) {
           tg.sendData(payload);
           dataSent = true;
-          showStatus("Отправлено! Окно закроется автоматически.", "success");
+          haptic('success');
+          showStatus('Отправлено! Окно закроется...', 'success');
+
+          // Close after short delay
+          setTimeout(() => {
+            try { tg.close(); } catch (e) {}
+          }, 1500);
         } else {
-          showStatus("Telegram WebApp недоступен", "error");
-          if (fallbackBtn) fallbackBtn.disabled = false;
+          throw new Error('Telegram WebApp не доступен');
         }
       } catch (e) {
-        showStatus("Ошибка: " + e.message, "error");
+        haptic('error');
+        showStatus('Ошибка: ' + e.message, 'error');
+
+        // Reset button states
         if (tg && mainButtonWorking) {
-          try { tg.MainButton.hideProgress(); } catch(ex) {}
+          try {
+            tg.MainButton.hideProgress();
+            tg.MainButton.enable();
+          } catch (ex) {}
         }
         if (fallbackBtn) fallbackBtn.disabled = false;
       }
     }
 
     // Initialize Telegram WebApp
-    if (tg) {
+    function initTelegram() {
+      if (!tg) {
+        console.warn('Telegram WebApp not available');
+        document.getElementById('fallback-btn').style.display = 'block';
+        return;
+      }
+
       try {
+        // Basic setup
         tg.ready();
         tg.expand();
 
-        // Try MainButton
+        // Enable closing confirmation
+        try { tg.enableClosingConfirmation(); } catch (e) {}
+
+        // Set header color
+        try { tg.setHeaderColor('secondary_bg_color'); } catch (e) {}
+
+        // Setup MainButton
         if (tg.MainButton) {
-          tg.MainButton.setText("Запустить отчёт");
+          tg.MainButton.setText('Запустить отчёт');
+          tg.MainButton.color = tg.themeParams.button_color || '#2481cc';
+          tg.MainButton.textColor = tg.themeParams.button_text_color || '#ffffff';
           tg.MainButton.enable();
           tg.MainButton.show();
           tg.MainButton.onClick(sendReport);
           mainButtonWorking = true;
         }
+
+        // Setup BackButton (for navigation)
+        if (tg.BackButton) {
+          tg.BackButton.onClick(() => {
+            haptic('light');
+            // Could add navigation logic here
+          });
+        }
+
       } catch (e) {
-        console.error("MainButton error:", e);
+        console.error('Telegram init error:', e);
         mainButtonWorking = false;
       }
+
+      // Show fallback if MainButton doesn't work
+      setTimeout(() => {
+        if (!mainButtonWorking && !dataSent) {
+          document.getElementById('fallback-btn').style.display = 'block';
+        }
+      }, 800);
     }
 
-    // Show fallback button if MainButton doesn't work or not in Telegram
-    if (!mainButtonWorking) {
-      const fallbackBtn = document.getElementById("fallback-btn");
-      if (fallbackBtn) {
-        fallbackBtn.style.display = "block";
-        fallbackBtn.onclick = sendReport;
+    // Initialize report types
+    function initReportTypes() {
+      const types = [
+        { id: 'report', title: 'LKW Wochenreport', hint: 'PDF' },
+        { id: 'report_new', title: 'Новый формат', hint: 'Скоро', disabled: true }
+      ];
+
+      const container = document.getElementById('report-types');
+      types.forEach((type, idx) => {
+        const btn = document.createElement('div');
+        btn.className = 'type-btn' + (idx === 0 ? ' active' : '') + (type.disabled ? ' disabled' : '');
+        btn.dataset.id = type.id;
+        btn.innerHTML = `
+          <div class="type-btn-title">${type.title}</div>
+          <div class="type-btn-hint">${type.hint}</div>
+        `;
+
+        if (!type.disabled) {
+          btn.addEventListener('click', () => {
+            haptic('light');
+            document.querySelectorAll('.type-btn').forEach(b => b.classList.remove('active'));
+            btn.classList.add('active');
+          });
+        }
+
+        container.appendChild(btn);
+      });
+    }
+
+    // Initialize selects
+    function initSelects() {
+      const now = new Date();
+      const currentYear = now.getFullYear();
+
+      // Years
+      const yearSelect = document.getElementById('year');
+      [currentYear - 1, currentYear, currentYear + 1].forEach(y => {
+        const opt = document.createElement('option');
+        opt.value = y;
+        opt.textContent = y;
+        if (y === currentYear) opt.selected = true;
+        yearSelect.appendChild(opt);
+      });
+
+      yearSelect.addEventListener('change', () => haptic('light'));
+
+      // Weeks
+      const weekSelect = document.getElementById('week');
+      for (let w = 1; w <= 53; w++) {
+        const opt = document.createElement('option');
+        opt.value = w;
+        opt.textContent = `Неделя ${String(w).padStart(2, '0')}`;
+        weekSelect.appendChild(opt);
+      }
+
+      weekSelect.addEventListener('change', () => haptic('light'));
+
+      // Set current ISO week
+      const isoWeek = getISOWeek(now);
+      if (isoWeek >= 1 && isoWeek <= 53) {
+        weekSelect.value = isoWeek;
       }
     }
 
-    // Also show fallback after 2 seconds if MainButton might not have shown
-    setTimeout(() => {
-      const fallbackBtn = document.getElementById("fallback-btn");
-      if (fallbackBtn && !dataSent) {
-        fallbackBtn.style.display = "block";
-        fallbackBtn.onclick = sendReport;
-      }
-    }, 2000);
-
-    // Report types
-    const reportTypes = [
-      { id: "report", title: "LKW Wochenreport", hint: "PDF" },
-      { id: "report_new", title: "Новый отчёт (скоро)", hint: "В разработке", disabled: true },
-    ];
-
-    const typesRoot = document.getElementById("report-types");
-    reportTypes.forEach((r, idx) => {
-      const div = document.createElement("div");
-      div.className = "pill" + (idx === 0 ? " active" : "");
-      if (r.disabled) div.style.opacity = 0.55;
-      div.dataset.id = r.id;
-      div.innerHTML = r.title + "<small>" + r.hint + "</small>";
-      if (!r.disabled) {
-        div.onclick = () => {
-          document.querySelectorAll(".pill").forEach(p => p.classList.remove("active"));
-          div.classList.add("active");
-        };
-      }
-      typesRoot.appendChild(div);
-    });
-
-    // Years
-    const yearEl = document.getElementById("year");
-    const now = new Date();
-    const currentYear = now.getFullYear();
-    [currentYear - 1, currentYear, currentYear + 1].forEach(y => {
-      const opt = document.createElement("option");
-      opt.value = String(y);
-      opt.textContent = y;
-      if (y === currentYear) opt.selected = true;
-      yearEl.appendChild(opt);
-    });
-
-    // Weeks
-    const weekEl = document.getElementById("week");
-    for (let w = 1; w <= 53; w++) {
-      const opt = document.createElement("option");
-      opt.value = String(w);
-      opt.textContent = w.toString().padStart(2, "0");
-      weekEl.appendChild(opt);
-    }
-
-    // Current ISO week
-    const isoWeek = (() => {
-      const d = new Date(Date.UTC(now.getFullYear(), now.getMonth(), now.getDate()));
+    // Get ISO week number
+    function getISOWeek(date) {
+      const d = new Date(Date.UTC(date.getFullYear(), date.getMonth(), date.getDate()));
       const dayNum = d.getUTCDay() || 7;
       d.setUTCDate(d.getUTCDate() + 4 - dayNum);
       const yearStart = new Date(Date.UTC(d.getUTCFullYear(), 0, 1));
       return Math.ceil(((d - yearStart) / 86400000 + 1) / 7);
-    })();
-    if (isoWeek >= 1 && isoWeek <= 53) weekEl.value = String(isoWeek);
+    }
+
+    // Offline detection
+    function initOfflineDetection() {
+      const banner = document.getElementById('offline-banner');
+
+      function updateOnlineStatus() {
+        if (!navigator.onLine) {
+          banner.classList.add('visible');
+        } else {
+          banner.classList.remove('visible');
+        }
+      }
+
+      window.addEventListener('online', updateOnlineStatus);
+      window.addEventListener('offline', updateOnlineStatus);
+      updateOnlineStatus();
+    }
+
+    // Fallback button handler
+    function initFallbackButton() {
+      const btn = document.getElementById('fallback-btn');
+      btn.addEventListener('click', sendReport);
+    }
+
+    // Initialize everything
+    document.addEventListener('DOMContentLoaded', () => {
+      initTelegram();
+      initReportTypes();
+      initSelects();
+      initOfflineDetection();
+      initFallbackButton();
+    });
   </script>
 </body>
 </html>

@@ -4,10 +4,14 @@ import shutil
 import threading
 import contextlib
 import msvcrt
+import subprocess
+import logging
 
 import pythoncom
 import win32com.client as win32
 from dotenv import load_dotenv
+
+logger = logging.getLogger("lkw_report_bot.excel")
 
 load_dotenv(override=True)
 
@@ -21,6 +25,26 @@ LOCK_PATH = os.path.join(os.environ.get("TEMP", r"C:\Windows\Temp"), "lkw_report
 
 # Extra in-process lock (prevents parallel runs within the same Python process)
 _THREAD_LOCK = threading.Lock()
+
+# Track orphaned Excel processes
+_EXCEL_PIDS = set()
+
+
+def _kill_orphaned_excel():
+    """Kill Excel processes that might be stuck from previous runs."""
+    try:
+        # Use taskkill to terminate any Excel processes started by this bot
+        # This is a safety measure for stuck COM processes
+        result = subprocess.run(
+            ['taskkill', '/F', '/IM', 'EXCEL.EXE', '/FI', 'STATUS eq NOT RESPONDING'],
+            capture_output=True,
+            text=True,
+            timeout=10
+        )
+        if 'SUCCESS' in result.stdout:
+            logger.warning("Killed non-responding Excel process(es)")
+    except Exception as e:
+        logger.debug(f"Could not check for orphaned Excel: {e}")
 
 
 @contextlib.contextmanager
@@ -92,8 +116,15 @@ def _expand_and_copy_source_workbook(src_path: str) -> str:
     if dst_dir:
         os.makedirs(dst_dir, exist_ok=True)
 
-    shutil.copy2(src_path, bot_copy)
-    return bot_copy
+    try:
+        shutil.copy2(src_path, bot_copy)
+        return bot_copy
+    except PermissionError:
+        # Если исходный файл открыт и копирование заблокировано, работаем с оригиналом.
+        return src_path
+    except Exception:
+        # Любая другая ошибка — тоже fallback к оригиналу.
+        return src_path
 
 
 def _run_once(year: int, week: int) -> tuple[str, str]:
@@ -182,9 +213,17 @@ def run_report(year: int, week: int) -> tuple[str, str]:
             last = None
             for attempt in range(1, 4):  # 3 attempts
                 try:
+                    # Clean up stuck Excel processes before starting
+                    if attempt > 1:
+                        logger.warning(f"Attempt {attempt}/3 - killing orphaned Excel processes")
+                        _kill_orphaned_excel()
+                        time.sleep(1.0)
+
+                    logger.info(f"Running report: year={year}, week={week}, attempt={attempt}")
                     return _run_once(year, week)
                 except Exception as e:
                     last = e
+                    logger.warning(f"Report generation failed (attempt {attempt}): {e}")
                     if _is_transient_com_error(e):
                         time.sleep(1.0 * attempt)
                         continue
