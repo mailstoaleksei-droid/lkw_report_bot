@@ -17,7 +17,7 @@ def main() -> int:
         return 2
 
     try:
-        xlsx_path, pdf_path = run_report(year, week)
+        xlsx_path, pdf_path = run_report("bericht", year, week)
         print("XLSX:", xlsx_path)
         print("PDF :", pdf_path)
         return 0

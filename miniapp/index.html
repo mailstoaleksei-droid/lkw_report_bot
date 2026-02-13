@@ -1,571 +1,1529 @@
 <!doctype html>
-<html lang="ru">
+<html lang="en">
 <head>
   <meta charset="utf-8" />
-  <meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no" />
-  <meta name="theme-color" content="#ffffff" />
-  <title>LKW Report</title>
+  <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover,user-scalable=no" />
+  <meta name="apple-mobile-web-app-capable" content="yes" />
+  <meta name="mobile-web-app-capable" content="yes" />
+  <title>GROO Reports</title>
   <script src="https://telegram.org/js/telegram-web-app.js"></script>
   <style>
-    :root {
-      /* Telegram theme fallbacks */
-      --tg-theme-bg-color: #ffffff;
-      --tg-theme-text-color: #000000;
-      --tg-theme-hint-color: #999999;
-      --tg-theme-link-color: #2481cc;
-      --tg-theme-button-color: #2481cc;
-      --tg-theme-button-text-color: #ffffff;
-      --tg-theme-secondary-bg-color: #f0f0f0;
-
-      /* Custom colors */
-      --card-bg: var(--tg-theme-secondary-bg-color);
-      --border: rgba(0, 0, 0, 0.08);
-      --shadow: 0 2px 8px rgba(0, 0, 0, 0.08);
-      --success: #34c759;
-      --error: #ff3b30;
-      --warning: #ff9500;
-
-      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
+    :root{
+      --bg0:#050914;
+      --bg1:#071428;
+      --panel:rgba(255,255,255,.06);
+      --panel2:rgba(255,255,255,.09);
+      --border:rgba(255,255,255,.12);
+      --text:#EAF0FF;
+      --muted:rgba(234,240,255,.68);
+      --navy:#0b1730;
+      --green:#0b3b2a;
+      --violet:#5c3bff;
+      --accent:#00ffaa;
+      --glowG: rgba(0, 255, 170, .22);
+      --glowV: rgba(140, 90, 255, .22);
+      --glowB: rgba(90, 160, 255, .18);
+      --r16:16px;
+      --r18:18px;
+      --r22:22px;
+      --r24:24px;
+      
+      /* Safe area для iOS */
+      --safe-top: env(safe-area-inset-top);
+      --safe-bottom: env(safe-area-inset-bottom);
+      --safe-left: env(safe-area-inset-left);
+      --safe-right: env(safe-area-inset-right);
     }
 
-    * {
-      box-sizing: border-box;
-      margin: 0;
-      padding: 0;
+    *{ box-sizing:border-box; margin:0; padding:0; }
+    html,body{ height:100%; overflow-x:hidden; }
+    body{
+      color:var(--text);
+      font-family: -apple-system, BlinkMacSystemFont, 'SF Pro Display', ui-sans-serif, system-ui, Segoe UI, Roboto, Arial, sans-serif;
+      background:
+        radial-gradient(900px 600px at 15% 10%, rgba(92,59,255,.20), transparent 60%),
+        radial-gradient(800px 560px at 85% 18%, rgba(0,255,170,.14), transparent 55%),
+        radial-gradient(900px 650px at 50% 105%, rgba(90,160,255,.10), transparent 60%),
+        linear-gradient(180deg, var(--bg1), var(--bg0));
+      -webkit-font-smoothing: antialiased;
+      -moz-osx-font-smoothing: grayscale;
+      overscroll-behavior: none;
+      touch-action: pan-y;
+    }
+
+    /* Background layers */
+    .bg-geo{
+      position:fixed; inset:0;
+      pointer-events:none;
+      z-index:0;
+      opacity:.9;
+    }
+    .bg-geo::before{
+      content:"";
+      position:absolute; inset:-20%;
+      background:
+        repeating-linear-gradient(135deg, rgba(255,255,255,.03) 0 1px, transparent 1px 18px),
+        repeating-linear-gradient(45deg, rgba(255,255,255,.02) 0 1px, transparent 1px 22px);
+      filter: blur(.2px);
+      transform: rotate(-6deg);
+      opacity:.35;
+    }
+    .bg-geo::after{
+      content:"";
+      position:absolute; inset:0;
+      background:
+        radial-gradient(700px 500px at 20% 30%, rgba(0,255,170,.12), transparent 55%),
+        radial-gradient(700px 520px at 80% 40%, rgba(92,59,255,.16), transparent 55%),
+        radial-gradient(900px 700px at 50% 110%, rgba(255,255,255,.06), transparent 65%);
+      opacity:.55;
+    }
+    .noise{
+      position:fixed; inset:0;
+      pointer-events:none;
+      z-index:0;
+      opacity:.06;
+      background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='160' height='160'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='.8' numOctaves='2' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='160' height='160' filter='url(%23n)' opacity='.35'/%3E%3C/svg%3E");
+    }
+
+    /* Netflix intro */
+    .intro{
+      position:fixed; inset:0;
+      z-index:9999;
+      background: #030611;
+      display:grid;
+      place-items:center;
+      overflow:hidden;
+    }
+    .intro .logo{
+      font-weight:900;
+      letter-spacing:.18em;
+      font-size:46px;
+      opacity:0;
+      transform: translateY(12px);
+      filter: blur(10px);
+      animation: introLogo 900ms ease forwards;
+      text-shadow:
+        0 0 24px rgba(92,59,255,.35),
+        0 0 32px rgba(0,255,170,.18);
+    }
+    .intro .bar{
+      position:absolute;
+      left:-120%;
+      top:58%;
+      width:140%;
+      height:7px;
+      background: linear-gradient(90deg, transparent, rgba(255,255,255,.18), transparent);
+      filter: blur(.3px);
+      animation: introBar 900ms ease forwards;
+    }
+    .intro .fade{
+      position:absolute; inset:0;
+      background: radial-gradient(700px 500px at 50% 40%, rgba(92,59,255,.16), transparent 60%);
+      opacity:0;
+      animation: introGlow 900ms ease forwards;
+    }
+    @keyframes introLogo{
+      0%{ opacity:0; transform:translateY(12px); filter: blur(10px); }
+      55%{ opacity:1; transform:translateY(0); filter: blur(0); }
+      100%{ opacity:1; }
+    }
+    @keyframes introBar{
+      0%{ transform: translateX(0); opacity:.55; }
+      100%{ transform: translateX(220%); opacity:0; }
+    }
+    @keyframes introGlow{
+      0%{ opacity:0; }
+      55%{ opacity:1; }
+      100%{ opacity:.25; }
+    }
+    .hidden{ display:none; }
+
+    /* Layout */
+    .wrap{
+      position:relative;
+      z-index:1;
+      max-width:640px;
+      margin:0 auto;
+      padding: calc(14px + var(--safe-top)) 16px calc(28px + var(--safe-bottom));
+      min-height: 100vh;
+    }
+
+    /* Header card */
+    .card{
+      border:1px solid var(--border);
+      background: linear-gradient(180deg, rgba(255,255,255,.09), rgba(255,255,255,.04));
+      border-radius: var(--r24);
+      box-shadow:
+        0 20px 60px rgba(0,0,0,.4),
+        0 0 0 1px rgba(255,255,255,.05) inset;
+      backdrop-filter: blur(20px);
+      -webkit-backdrop-filter: blur(20px);
+    }
+
+    .top{
+      padding:18px 20px;
+      display:flex;
+      gap:14px;
+      align-items:center;
+    }
+    .avatar{
+      width:52px; height:52px; border-radius:50%;
+      border:2px solid rgba(0,255,170,.3);
+      background:
+        radial-gradient(26px 26px at 35% 30%, rgba(0,255,170,.28), transparent 60%),
+        radial-gradient(26px 26px at 70% 65%, rgba(92,59,255,.30), transparent 62%),
+        rgba(255,255,255,.07);
+      box-shadow: 
+        0 0 30px rgba(0,255,170,.12),
+        0 0 0 3px rgba(0,255,170,.08);
+      flex:0 0 auto;
+      display:grid;
+      place-items:center;
+      font-weight:800;
+      font-size:18px;
+      color:rgba(234,240,255,.95);
+      letter-spacing:.02em;
+      overflow:hidden;
+      position:relative;
+    }
+    .avatar img{
+      width:100%;
+      height:100%;
+      object-fit:cover;
+      border-radius:50%;
+      display:block;
+    }
+    .user-info{
+      flex:1;
+      min-width:0;
+    }
+    .title{
+      font-size:17px;
+      font-weight:700;
+      letter-spacing:-.01em;
+      margin-bottom:3px;
+    }
+    .sub{
+      font-size:13px;
+      color:var(--muted);
+      opacity:.85;
+    }
+
+    .access{
+      margin: 14px 20px 20px;
+      padding: 14px 16px;
+      border-radius: var(--r18);
+      border: 1px solid rgba(255,255,255,.10);
+      background: rgba(0,0,0,.20);
+      display:flex;
+      gap:12px;
+      align-items:center;
+    }
+    .access-icon{
+      width:36px;
+      height:36px;
+      border-radius:10px;
+      background: rgba(255,255,255,.08);
+      display:grid;
+      place-items:center;
+      font-size:18px;
+      flex-shrink:0;
+    }
+    .access-text{
+      flex:1;
+      min-width:0;
+    }
+    .access-msg{
+      font-size:13px;
+      color: rgba(234,240,255,.85);
+      line-height:1.4;
+    }
+    .badge{
+      margin-left:auto;
+      font-size:11px;
+      font-weight:600;
+      padding:6px 12px;
+      border-radius: 999px;
+      border:1px solid rgba(255,255,255,.14);
+      background: rgba(255,255,255,.06);
+      color: rgba(234,240,255,.90);
+      letter-spacing:.02em;
+      text-transform:uppercase;
+      flex-shrink:0;
+    }
+    .badge.ok{
+      border-color: rgba(0,255,170,.30);
+      background: rgba(0,255,170,.12);
+      color: #00ffaa;
+      box-shadow: 0 0 0 1px rgba(0,255,170,.10) inset, 0 0 20px rgba(0,255,170,.10);
+    }
+    .badge.no{
+      border-color: rgba(255,120,120,.30);
+      background: rgba(255,120,120,.12);
+      color: #ff9999;
+      box-shadow: 0 0 0 1px rgba(255,120,120,.10) inset;
+    }
+
+    /* Reports grid */
+    .section-title{
+      font-size:14px;
+      font-weight:700;
+      color:var(--muted);
+      text-transform:uppercase;
+      letter-spacing:.08em;
+      margin:32px 0 16px 4px;
+    }
+    
+    .menu{
+      display:grid;
+      gap:12px;
+      margin-bottom:20px;
+    }
+    
+    .tile{
+      position:relative;
+      border:1px solid rgba(255,255,255,.14);
+      border-radius: var(--r22);
+      background:
+        radial-gradient(800px 160px at 30% 0%, rgba(0,255,170,.08), transparent 60%),
+        radial-gradient(800px 160px at 70% 0%, rgba(92,59,255,.10), transparent 60%),
+        rgba(255,255,255,.06);
+      padding: 18px 20px;
+      display:flex;
+      align-items:center;
+      gap:14px;
+      cursor:pointer;
+      user-select:none;
+      transition: all .2s cubic-bezier(0.4, 0, 0.2, 1);
+      overflow:hidden;
+      min-height:88px;
       -webkit-tap-highlight-color: transparent;
     }
-
-    body {
-      background: var(--tg-theme-bg-color);
-      color: var(--tg-theme-text-color);
-      min-height: 100vh;
-      padding: 16px;
-      padding-bottom: 100px; /* Space for MainButton */
+    
+    .tile::before{
+      content:"";
+      position:absolute;
+      inset:0;
+      background: linear-gradient(135deg, rgba(255,255,255,.05) 0%, transparent 60%);
+      opacity:0;
+      transition: opacity .2s ease;
     }
-
-    /* Header */
-    .header {
-      display: flex;
-      align-items: center;
-      gap: 12px;
-      margin-bottom: 20px;
-      padding-bottom: 16px;
-      border-bottom: 1px solid var(--border);
+    
+    .tile::after{
+      content:"";
+      position:absolute; 
+      right:-40px;
+      top:-40px;
+      width:140px; 
+      height:140px;
+      background: radial-gradient(circle, rgba(92,59,255,.15), transparent 65%);
+      border-radius:50%;
+      opacity:.6;
+      pointer-events:none;
     }
-
-    .logo {
-      width: 48px;
-      height: 48px;
-      border-radius: 12px;
-      background: linear-gradient(135deg, var(--tg-theme-button-color), #0ea5e9);
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      color: var(--tg-theme-button-text-color);
-      font-weight: 700;
-      font-size: 14px;
-      flex-shrink: 0;
-    }
-
-    .header-text h1 {
-      font-size: 20px;
-      font-weight: 600;
-      margin-bottom: 2px;
-    }
-
-    .header-text p {
-      font-size: 13px;
-      color: var(--tg-theme-hint-color);
-    }
-
-    /* Cards */
-    .card {
-      background: var(--card-bg);
-      border-radius: 12px;
-      padding: 16px;
-      margin-bottom: 12px;
-    }
-
-    .card-label {
-      font-size: 13px;
-      font-weight: 500;
-      color: var(--tg-theme-hint-color);
-      margin-bottom: 10px;
-      text-transform: uppercase;
-      letter-spacing: 0.5px;
-    }
-
-    /* Selects */
-    select {
-      width: 100%;
-      padding: 14px 16px;
-      font-size: 16px;
-      border: none;
-      border-radius: 10px;
-      background: var(--tg-theme-bg-color);
-      color: var(--tg-theme-text-color);
-      appearance: none;
-      background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='16' height='16' viewBox='0 0 24 24' fill='none' stroke='%23999' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpolyline points='6 9 12 15 18 9'%3E%3C/polyline%3E%3C/svg%3E");
-      background-repeat: no-repeat;
-      background-position: right 16px center;
-      cursor: pointer;
-    }
-
-    select:focus {
-      outline: 2px solid var(--tg-theme-button-color);
-      outline-offset: -2px;
-    }
-
-    /* Report Types */
-    .type-grid {
-      display: grid;
-      grid-template-columns: 1fr 1fr;
-      gap: 10px;
-    }
-
-    .type-btn {
-      padding: 14px 12px;
-      border: 2px solid transparent;
-      border-radius: 10px;
-      background: var(--tg-theme-bg-color);
-      cursor: pointer;
-      transition: all 0.2s ease;
-      text-align: left;
-    }
-
-    .type-btn:active {
+    
+    .tile:active{ 
       transform: scale(0.98);
+      border-color: rgba(255,255,255,.20);
+    }
+    
+    .tile:hover::before{
+      opacity:1;
+    }
+    
+    .tile-icon{
+      width:54px;
+      height:54px;
+      border-radius:16px;
+      background: 
+        linear-gradient(135deg, rgba(255,255,255,.12), rgba(255,255,255,.06)),
+        rgba(0,0,0,.15);
+      border:1px solid rgba(255,255,255,.15);
+      display:grid;
+      place-items:center;
+      font-size:24px;
+      flex-shrink:0;
+      z-index:1;
+      box-shadow: 
+        0 8px 20px rgba(0,0,0,.25),
+        0 0 0 1px rgba(255,255,255,.08) inset;
+    }
+    
+    .tile-content{
+      flex:1;
+      min-width:0;
+      z-index:1;
+    }
+    
+    .tile-title{
+      font-size:16px;
+      font-weight:700;
+      letter-spacing:-.01em;
+      margin-bottom:4px;
+      color:var(--text);
+    }
+    
+    .tile-desc{
+      font-size:13px;
+      color:var(--muted);
+      opacity:.85;
+      line-height:1.35;
+    }
+    
+    .tile-arrow{
+      width:32px;
+      height:32px;
+      border-radius:10px;
+      background: rgba(255,255,255,.08);
+      display:grid;
+      place-items:center;
+      font-size:16px;
+      flex-shrink:0;
+      z-index:1;
+      transition: transform .2s ease;
+    }
+    
+    .tile:active .tile-arrow{
+      transform: translateX(2px);
     }
 
-    .type-btn.active {
-      border-color: var(--tg-theme-button-color);
-      background: rgba(36, 129, 204, 0.08);
+    /* Bottom sheet */
+    .sheet{
+      position:fixed;
+      inset:0;
+      z-index:1000;
+      display:none;
+      background: rgba(5,9,20,.75);
+      backdrop-filter: blur(8px);
+      -webkit-backdrop-filter: blur(8px);
+      animation: fadeIn .3s ease;
     }
-
-    .type-btn.disabled {
-      opacity: 0.5;
-      cursor: not-allowed;
+    .sheet.show{ display:block; }
+    
+    @keyframes fadeIn{
+      from{ opacity:0; }
+      to{ opacity:1; }
     }
-
-    .type-btn-title {
-      font-size: 14px;
-      font-weight: 600;
-      color: var(--tg-theme-text-color);
-      margin-bottom: 2px;
+    
+    .sheet-panel{
+      position:absolute;
+      bottom:0;
+      left:0;
+      right:0;
+      background: linear-gradient(180deg, rgba(255,255,255,.11), rgba(255,255,255,.07));
+      border-radius: 28px 28px 0 0;
+      border:1px solid rgba(255,255,255,.16);
+      border-bottom:0;
+      box-shadow: 
+        0 -20px 80px rgba(0,0,0,.5),
+        0 0 0 1px rgba(255,255,255,.06) inset;
+      backdrop-filter: blur(30px);
+      -webkit-backdrop-filter: blur(30px);
+      max-height:85vh;
+      display:flex;
+      flex-direction:column;
+      animation: slideUp .4s cubic-bezier(0.16, 1, 0.3, 1);
+      padding-bottom: calc(var(--safe-bottom) + 20px);
     }
-
-    .type-btn-hint {
-      font-size: 12px;
-      color: var(--tg-theme-hint-color);
+    
+    @keyframes slideUp{
+      from{ transform: translateY(100%); }
+      to{ transform: translateY(0); }
     }
-
-    /* Info section */
-    .info-card {
-      background: rgba(36, 129, 204, 0.08);
-      border-left: 3px solid var(--tg-theme-button-color);
+    
+    .sheet-handle{
+      width:40px;
+      height:5px;
+      background: rgba(255,255,255,.25);
+      border-radius:999px;
+      margin:12px auto 8px;
+      flex-shrink:0;
     }
-
-    .info-card summary {
-      font-weight: 600;
-      color: var(--tg-theme-link-color);
-      cursor: pointer;
-      padding: 4px 0;
+    
+    .sheet-header{
+      padding:16px 24px 20px;
+      border-bottom:1px solid rgba(255,255,255,.10);
+      flex-shrink:0;
     }
-
-    .info-card ol {
-      margin-top: 10px;
-      padding-left: 20px;
-      color: var(--tg-theme-hint-color);
-      font-size: 13px;
-      line-height: 1.6;
+    
+    .sheet-top{
+      display:flex;
+      align-items:center;
+      gap:12px;
+      margin-bottom:12px;
     }
-
-    /* Status */
-    .status {
-      padding: 14px 16px;
-      border-radius: 10px;
-      font-size: 14px;
-      font-weight: 500;
-      text-align: center;
-      margin-top: 12px;
-      display: none;
-      animation: fadeIn 0.3s ease;
+    
+    .sheet-type-badge{
+      font-size:10px;
+      font-weight:700;
+      padding:5px 10px;
+      border-radius:8px;
+      background: rgba(92,59,255,.18);
+      border:1px solid rgba(92,59,255,.30);
+      color: rgba(234,240,255,.85);
+      letter-spacing:.06em;
+      text-transform:uppercase;
     }
-
-    @keyframes fadeIn {
-      from { opacity: 0; transform: translateY(-4px); }
-      to { opacity: 1; transform: translateY(0); }
+    
+    .sheet-close{
+      margin-left:auto;
+      width:32px;
+      height:32px;
+      border-radius:10px;
+      background: rgba(255,255,255,.08);
+      border:1px solid rgba(255,255,255,.12);
+      display:grid;
+      place-items:center;
+      cursor:pointer;
+      font-size:18px;
+      transition: all .2s ease;
+      -webkit-tap-highlight-color: transparent;
     }
-
-    .status.sending {
-      background: rgba(36, 129, 204, 0.12);
-      color: var(--tg-theme-button-color);
+    
+    .sheet-close:active{
+      transform: scale(0.95);
+      background: rgba(255,255,255,.12);
     }
-
-    .status.success {
-      background: rgba(52, 199, 89, 0.12);
-      color: var(--success);
+    
+    .sheet-title{
+      font-size:24px;
+      font-weight:800;
+      letter-spacing:-.02em;
+      margin-bottom:6px;
     }
-
-    .status.error {
-      background: rgba(255, 59, 48, 0.12);
-      color: var(--error);
+    
+    .sheet-hint{
+      font-size:14px;
+      color:var(--muted);
+      opacity:.85;
+      line-height:1.4;
     }
-
-    /* Fallback button */
-    .btn-fallback {
-      width: 100%;
-      padding: 16px;
-      font-size: 16px;
-      font-weight: 600;
-      border: none;
-      border-radius: 10px;
-      background: var(--tg-theme-button-color);
-      color: var(--tg-theme-button-text-color);
-      cursor: pointer;
-      margin-top: 16px;
-      display: none;
+    
+    /* Segments (tabs) */
+    .segments{
+      display:flex;
+      gap:8px;
+      padding:16px 24px;
+      overflow-x:auto;
+      border-bottom:1px solid rgba(255,255,255,.08);
+      flex-shrink:0;
+      scrollbar-width: none;
+      -webkit-overflow-scrolling: touch;
     }
-
-    .btn-fallback:active {
-      opacity: 0.8;
+    .segments::-webkit-scrollbar{ display:none; }
+    
+    .seg{
+      padding:10px 18px;
+      border-radius:12px;
+      background: rgba(255,255,255,.05);
+      border:1px solid rgba(255,255,255,.10);
+      font-size:14px;
+      font-weight:600;
+      color:var(--muted);
+      cursor:pointer;
+      white-space:nowrap;
+      transition: all .2s ease;
+      -webkit-tap-highlight-color: transparent;
     }
-
-    .btn-fallback:disabled {
-      opacity: 0.5;
-      cursor: not-allowed;
+    
+    .seg.active{
+      background: linear-gradient(135deg, rgba(92,59,255,.25), rgba(0,255,170,.18));
+      border-color: rgba(255,255,255,.20);
+      color:var(--text);
+      box-shadow: 
+        0 4px 16px rgba(92,59,255,.20),
+        0 0 0 1px rgba(255,255,255,.10) inset;
     }
-
-    /* Loading skeleton */
-    .skeleton {
-      background: linear-gradient(90deg, var(--card-bg) 25%, var(--tg-theme-bg-color) 50%, var(--card-bg) 75%);
+    
+    .seg:active{
+      transform: scale(0.96);
+    }
+    
+    /* Content area */
+    .sheet-content{
+      padding:24px;
+      overflow-y:auto;
+      flex:1;
+      scrollbar-width: thin;
+      scrollbar-color: rgba(255,255,255,.15) transparent;
+    }
+    .sheet-content::-webkit-scrollbar{
+      width:6px;
+    }
+    .sheet-content::-webkit-scrollbar-thumb{
+      background: rgba(255,255,255,.15);
+      border-radius:999px;
+    }
+    
+    .form-group{
+      margin-bottom:20px;
+    }
+    
+    .field{
+      margin-bottom:18px;
+    }
+    
+    .field label{
+      display:block;
+      font-size:13px;
+      font-weight:600;
+      color:var(--text);
+      margin-bottom:10px;
+      letter-spacing:.01em;
+      opacity:.9;
+    }
+    
+    .field select,
+    .field input{
+      width:100%;
+      padding:14px 16px;
+      border-radius:14px;
+      border:1px solid rgba(255,255,255,.14);
+      background: rgba(0,0,0,.20);
+      color:var(--text);
+      font-size:15px;
+      font-family: inherit;
+      transition: all .2s ease;
+      -webkit-appearance: none;
+      appearance: none;
+    }
+    
+    .field select{
+      background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='8' fill='%23EAF0FF'%3E%3Cpath d='M1 1l5 5 5-5'/%3E%3C/svg%3E");
+      background-repeat: no-repeat;
+      background-position: right 14px center;
+      padding-right:40px;
+    }
+    
+    .field select:focus,
+    .field input:focus{
+      outline:none;
+      border-color: rgba(0,255,170,.40);
+      background: rgba(0,0,0,.30);
+      box-shadow: 0 0 0 3px rgba(0,255,170,.10);
+    }
+    
+    .field select option{
+      background: #0b1730;
+      color:var(--text);
+    }
+    
+    .note{
+      padding:14px 16px;
+      border-radius:14px;
+      background: rgba(0,255,170,.08);
+      border:1px solid rgba(0,255,170,.20);
+      font-size:13px;
+      color: rgba(234,240,255,.85);
+      line-height:1.5;
+    }
+    
+    /* Footer */
+    .sheet-footer{
+      padding:20px 24px 0;
+      border-top:1px solid rgba(255,255,255,.08);
+      flex-shrink:0;
+    }
+    
+    .btn{
+      width:100%;
+      padding:16px;
+      border-radius:16px;
+      border:none;
+      font-size:16px;
+      font-weight:700;
+      font-family: inherit;
+      cursor:pointer;
+      transition: all .2s cubic-bezier(0.4, 0, 0.2, 1);
+      letter-spacing:.01em;
+      -webkit-tap-highlight-color: transparent;
+      position:relative;
+      overflow:hidden;
+    }
+    
+    .btn-primary{
+      background: linear-gradient(135deg, #00ffaa 0%, #00cc88 100%);
+      color: #030611;
+      box-shadow: 
+        0 8px 24px rgba(0,255,170,.30),
+        0 0 0 1px rgba(255,255,255,.15) inset;
+    }
+    
+    .btn-primary::before{
+      content:"";
+      position:absolute;
+      inset:0;
+      background: linear-gradient(135deg, rgba(255,255,255,.20), transparent);
+      opacity:0;
+      transition: opacity .2s ease;
+    }
+    
+    .btn-primary:hover::before{
+      opacity:1;
+    }
+    
+    .btn-primary:active{
+      transform: scale(0.98);
+      box-shadow: 
+        0 4px 16px rgba(0,255,170,.25),
+        0 0 0 1px rgba(255,255,255,.15) inset;
+    }
+    
+    .btn-primary:disabled{
+      opacity:.5;
+      cursor:not-allowed;
+      transform: none !important;
+    }
+    
+    /* Loading state */
+    .loading{
+      display:inline-flex;
+      align-items:center;
+      gap:8px;
+    }
+    
+    .spinner{
+      width:16px;
+      height:16px;
+      border:2px solid rgba(3,6,17,.3);
+      border-top-color:#030611;
+      border-radius:50%;
+      animation: spin .6s linear infinite;
+    }
+    
+    @keyframes spin{
+      to{ transform: rotate(360deg); }
+    }
+    
+    /* Success toast */
+    .toast{
+      position:fixed;
+      top:calc(20px + var(--safe-top));
+      left:50%;
+      transform: translateX(-50%) translateY(-100px);
+      background: linear-gradient(135deg, rgba(0,255,170,.95), rgba(0,200,140,.95));
+      color:#030611;
+      padding:16px 24px;
+      border-radius:16px;
+      font-size:15px;
+      font-weight:700;
+      box-shadow: 
+        0 12px 40px rgba(0,255,170,.35),
+        0 0 0 1px rgba(255,255,255,.20) inset;
+      z-index:10000;
+      opacity:0;
+      transition: all .4s cubic-bezier(0.16, 1, 0.3, 1);
+      pointer-events:none;
+      backdrop-filter: blur(10px);
+      -webkit-backdrop-filter: blur(10px);
+    }
+    
+    .toast.show{
+      opacity:1;
+      transform: translateX(-50%) translateY(0);
+    }
+    
+    /* Skeleton loading */
+    .skeleton{
+      background: linear-gradient(90deg, 
+        rgba(255,255,255,.05) 0%, 
+        rgba(255,255,255,.10) 50%, 
+        rgba(255,255,255,.05) 100%);
       background-size: 200% 100%;
-      animation: shimmer 1.5s infinite;
+      animation: skeleton 1.5s ease-in-out infinite;
+      border-radius: inherit;
     }
-
-    @keyframes shimmer {
-      0% { background-position: 200% 0; }
-      100% { background-position: -200% 0; }
+    
+    @keyframes skeleton{
+      0%{ background-position: 200% 0; }
+      100%{ background-position: -200% 0; }
     }
-
-    /* Offline indicator */
-    .offline-banner {
-      position: fixed;
-      top: 0;
-      left: 0;
-      right: 0;
-      background: var(--error);
-      color: white;
-      padding: 8px;
-      text-align: center;
-      font-size: 13px;
-      font-weight: 500;
-      z-index: 100;
-      display: none;
-    }
-
-    .offline-banner.visible {
-      display: block;
-    }
-
-    /* Version */
-    .version {
-      text-align: center;
-      font-size: 11px;
-      color: var(--tg-theme-hint-color);
-      margin-top: 20px;
-      opacity: 0.6;
+    
+    /* Utility */
+    .disabled{
+      opacity:.45;
+      pointer-events:none;
     }
   </style>
 </head>
 <body>
-  <div class="offline-banner" id="offline-banner">
-    Нет подключения к интернету
+  <div class="bg-geo"></div>
+  <div class="noise"></div>
+  
+  <div class="intro" id="intro">
+    <div class="logo">GROO</div>
+    <div class="bar"></div>
+    <div class="fade"></div>
   </div>
 
-  <header class="header">
-    <div class="logo">LKW</div>
-    <div class="header-text">
-      <h1>LKW Report</h1>
-      <p>GROO GmbH</p>
+  <div class="wrap" id="app">
+    <div class="card">
+      <div class="top">
+        <div class="avatar" id="avatar">??</div>
+        <div class="user-info">
+          <div class="title" id="welcomeTitle">Welcome!</div>
+          <div class="sub" id="welcomeSub">Loading...</div>
+        </div>
+      </div>
+      
+      <div class="access">
+        <div class="access-icon" id="accessIcon">🔐</div>
+        <div class="access-text">
+          <div class="access-msg" id="accessMsg">Checking access...</div>
+        </div>
+        <div class="badge" id="accessBadge">...</div>
+      </div>
     </div>
-  </header>
 
-  <details class="card info-card">
-    <summary>Как пользоваться</summary>
-    <ol>
-      <li>Выберите год и неделю</li>
-      <li>Нажмите кнопку внизу экрана</li>
-      <li>PDF придёт в чат автоматически</li>
-    </ol>
-  </details>
+    <div class="section-title" id="sectionTitle">Available Reports</div>
+    
+    <div class="menu" id="menu">
+      <div class="tile" data-report="container">
+        <div class="tile-icon">📦</div>
+        <div class="tile-content">
+          <div class="tile-title">CONTAINER</div>
+          <div class="tile-desc" id="desc-container">Container tracking and reports</div>
+        </div>
+        <div class="tile-arrow">→</div>
+      </div>
 
-  <div class="card">
-    <div class="card-label">Тип отчёта</div>
-    <div class="type-grid" id="report-types"></div>
+      <div class="tile" data-report="lkw">
+        <div class="tile-icon">🚛</div>
+        <div class="tile-content">
+          <div class="tile-title">LKW</div>
+          <div class="tile-desc" id="desc-lkw">Truck reports and analytics</div>
+        </div>
+        <div class="tile-arrow">→</div>
+      </div>
+
+      <div class="tile" data-report="fahrer">
+        <div class="tile-icon">👨‍✈️</div>
+        <div class="tile-content">
+          <div class="tile-title">FAHRER</div>
+          <div class="tile-desc" id="desc-fahrer">Driver data and vacation</div>
+        </div>
+        <div class="tile-arrow">→</div>
+      </div>
+
+      <div class="tile" data-report="yf">
+        <div class="tile-icon">📊</div>
+        <div class="tile-content">
+          <div class="tile-title">YF</div>
+          <div class="tile-desc" id="desc-yf">Mileage and fuel reports</div>
+        </div>
+        <div class="tile-arrow">→</div>
+      </div>
+
+      <div class="tile" data-report="einnahmen">
+        <div class="tile-icon">💰</div>
+        <div class="tile-content">
+          <div class="tile-title">EINNAHMEN</div>
+          <div class="tile-desc" id="desc-einnahmen">Total revenue overview</div>
+        </div>
+        <div class="tile-arrow">→</div>
+      </div>
+
+      <div class="tile" data-report="bonus">
+        <div class="tile-icon">🎯</div>
+        <div class="tile-content">
+          <div class="tile-title">BONUS</div>
+          <div class="tile-desc" id="desc-bonus">Bonus calculations</div>
+        </div>
+        <div class="tile-arrow">→</div>
+      </div>
+    </div>
   </div>
 
-  <div class="card">
-    <div class="card-label">Год</div>
-    <select id="year"></select>
+  <div class="sheet" id="sheet">
+    <div class="sheet-panel">
+      <div class="sheet-handle"></div>
+      
+      <div class="sheet-header">
+        <div class="sheet-top">
+          <div class="sheet-type-badge" id="sheetType">Params</div>
+          <div class="sheet-close" id="btnClose">✕</div>
+        </div>
+        <div class="sheet-title" id="sheetTitle">Report</div>
+        <div class="sheet-hint" id="sheetHint">Configure parameters</div>
+      </div>
+      
+      <div class="segments" id="segments"></div>
+      
+      <div class="sheet-content">
+        <div class="form-group" id="formArea"></div>
+        <div id="noteArea"></div>
+      </div>
+      
+      <div class="sheet-footer">
+        <button class="btn btn-primary" id="btnPrimary">Generate Report</button>
+      </div>
+    </div>
   </div>
 
-  <div class="card">
-    <div class="card-label">Неделя</div>
-    <select id="week"></select>
-  </div>
-
-  <div class="status" id="status"></div>
-
-  <button class="btn-fallback" id="fallback-btn">Запустить отчёт</button>
-
-  <div class="version">v2.0</div>
+  <div class="toast" id="toast">✓ Report sent successfully!</div>
 
   <script>
-    // Telegram WebApp instance
-    const tg = window.Telegram?.WebApp;
-    let dataSent = false;
-    let mainButtonWorking = false;
+    // === CONFIG ===
+    const ADMIN = "@GROO_LKW_Report_bot";
+    
+    const DEMO_VEHICLES = ["MAN-TGX-001","SCANIA-R500-002","VOLVO-FH-003","DAF-XF-004","IVECO-S-WAY-005"];
+    const DEMO_DRIVERS = ["Schmidt M.","Müller P.","Fischer T.","Weber K.","Meyer L."];
 
-    // Helper: Haptic feedback
-    function haptic(type = 'light') {
+    // === LOCALIZATION ===
+    const LANG = {
+      en: {
+        welcome: "Welcome",
+        checking: "Checking access rights...",
+        accessOk: "Access granted • All reports available",
+        accessNo: (admin) => `Access denied • Contact ${admin}`,
+        ok: "OK",
+        no: "NO",
+        sectionTitle: "Available Reports",
+        
+        // Descriptions
+        descContainer: "Run current Bericht PDF report",
+        descLkw: "Truck reports and analytics",
+        descFahrer: "Driver data and vacation",
+        descYf: "Mileage and fuel reports",
+        descEinnahmen: "Total revenue overview",
+        descBonus: "Bonus calculations",
+        
+        // Sheet headers
+        hintContainer: "Select year and week for Bericht report",
+        hintLkw: "Choose truck and report type",
+        hintFahrer: "Driver information and vacation data",
+        hintYf: "Vehicle mileage and fuel consumption",
+        hintEinnahmen: "Total revenue report for all operations",
+        hintBonus: "Calculate driver bonuses",
+        
+        // Common
+        choose: "Choose...",
+        vehicle: "Vehicle",
+        period: "Period",
+        year: "Year",
+        week: "Week",
+        month: "Month",
+        allTime: "All time",
+        driver: "Driver",
+        generate: "Generate",
+        send: "Send",
+        
+        // Tabs
+        tabMileage: "Mileage",
+        tabRepair: "Repairs",
+        tabDriverData: "Driver Data",
+        tabUrlaub: "Vacation",
+        
+        // Toast
+        toastSuccess: "✓ Report sent successfully!",
+        toastComingSoon: "Feature coming soon",
+      },
+      ru: {
+        welcome: "Добро пожаловать",
+        checking: "Проверка прав доступа...",
+        accessOk: "Доступ разрешен • Все отчеты доступны",
+        accessNo: (admin) => `Доступ запрещен • Свяжитесь с ${admin}`,
+        ok: "ДА",
+        no: "НЕТ",
+        sectionTitle: "Доступные отчеты",
+        
+        // Descriptions
+        descContainer: "Запуск текущего отчета Bericht PDF",
+        descLkw: "Отчеты по грузовикам",
+        descFahrer: "Данные водителей и отпуска",
+        descYf: "Пробег и расход топлива",
+        descEinnahmen: "Общая выручка",
+        descBonus: "Расчет бонусов",
+        
+        // Sheet headers
+        hintContainer: "Выберите год и неделю для отчета Bericht",
+        hintLkw: "Выберите грузовик и тип отчета",
+        hintFahrer: "Информация о водителях и отпусках",
+        hintYf: "Пробег и расход топлива транспорта",
+        hintEinnahmen: "Отчет по общей выручке",
+        hintBonus: "Расчет бонусов водителей",
+        
+        // Common
+        choose: "Выбрать...",
+        vehicle: "Транспорт",
+        period: "Период",
+        year: "Год",
+        week: "Неделя",
+        month: "Месяц",
+        allTime: "За все время",
+        driver: "Водитель",
+        generate: "Сформировать",
+        send: "Отправить",
+        
+        // Tabs
+        tabMileage: "Пробег",
+        tabRepair: "Ремонты",
+        tabDriverData: "Данные водителя",
+        tabUrlaub: "Отпуск",
+        
+        // Toast
+        toastSuccess: "✓ Отчет успешно отправлен!",
+        toastComingSoon: "Функция скоро будет доступна",
+      },
+    };
+
+    let currentLang = "en";
+
+    // === UTILS ===
+    const $ = (id) => document.getElementById(id);
+    const initials = (name) => name.split(" ").map(w => w[0]).join("").toUpperCase().slice(0,2);
+    
+    function detectLanguage() {
       try {
-        if (tg?.HapticFeedback) {
-          if (type === 'success') tg.HapticFeedback.notificationOccurred('success');
-          else if (type === 'error') tg.HapticFeedback.notificationOccurred('error');
-          else if (type === 'warning') tg.HapticFeedback.notificationOccurred('warning');
-          else tg.HapticFeedback.impactOccurred(type);
-        }
-      } catch (e) {}
-    }
-
-    // Helper: Show status message
-    function showStatus(text, type) {
-      const el = document.getElementById('status');
-      el.textContent = text;
-      el.className = 'status ' + type;
-      el.style.display = 'block';
-    }
-
-    // Helper: Hide status
-    function hideStatus() {
-      document.getElementById('status').style.display = 'none';
-    }
-
-    // Send report data
-    function sendReport() {
-      if (dataSent) {
-        showStatus('Данные уже отправлены', 'error');
-        haptic('error');
-        return;
+        const tgLang = Telegram?.WebApp?.initDataUnsafe?.user?.language_code || "";
+        return tgLang.startsWith("ru") ? "ru" : "en";
+      } catch {
+        return "en";
       }
-
-      const year = parseInt(document.getElementById('year').value, 10);
-      const week = parseInt(document.getElementById('week').value, 10);
-      const activeType = document.querySelector('.type-btn.active');
-      const action = activeType?.dataset.id || 'report';
-
-      haptic('medium');
-      showStatus('Отправка запроса...', 'sending');
-
-      // Show progress on MainButton
-      if (tg && mainButtonWorking) {
-        try {
-          tg.MainButton.showProgress(false);
-          tg.MainButton.disable();
-        } catch (e) {}
-      }
-
-      // Disable fallback button
-      const fallbackBtn = document.getElementById('fallback-btn');
-      if (fallbackBtn) fallbackBtn.disabled = true;
-
+    }
+    
+    function L(key, ...args) {
+      const value = LANG[currentLang][key];
+      return typeof value === "function" ? value(...args) : value;
+    }
+    
+    function haptic(type = "impact") {
       try {
-        const payload = JSON.stringify({ action, year, week });
-
-        if (tg?.sendData) {
-          tg.sendData(payload);
-          dataSent = true;
-          haptic('success');
-          showStatus('Отправлено! Окно закроется...', 'success');
-
-          // Close after short delay
-          setTimeout(() => {
-            try { tg.close(); } catch (e) {}
-          }, 1500);
-        } else {
-          throw new Error('Telegram WebApp не доступен');
-        }
-      } catch (e) {
-        haptic('error');
-        showStatus('Ошибка: ' + e.message, 'error');
-
-        // Reset button states
-        if (tg && mainButtonWorking) {
-          try {
-            tg.MainButton.hideProgress();
-            tg.MainButton.enable();
-          } catch (ex) {}
-        }
-        if (fallbackBtn) fallbackBtn.disabled = false;
-      }
+        if (type === "impact") Telegram?.WebApp?.HapticFeedback?.impactOccurred("medium");
+        else if (type === "success") Telegram?.WebApp?.HapticFeedback?.notificationOccurred("success");
+        else if (type === "error") Telegram?.WebApp?.HapticFeedback?.notificationOccurred("error");
+      } catch {}
     }
 
-    // Initialize Telegram WebApp
-    function initTelegram() {
-      if (!tg) {
-        console.warn('Telegram WebApp not available');
-        document.getElementById('fallback-btn').style.display = 'block';
-        return;
-      }
-
-      try {
-        // Basic setup
-        tg.ready();
-        tg.expand();
-
-        // Enable closing confirmation
-        try { tg.enableClosingConfirmation(); } catch (e) {}
-
-        // Set header color
-        try { tg.setHeaderColor('secondary_bg_color'); } catch (e) {}
-
-        // Setup MainButton
-        if (tg.MainButton) {
-          tg.MainButton.setText('Запустить отчёт');
-          tg.MainButton.color = tg.themeParams.button_color || '#2481cc';
-          tg.MainButton.textColor = tg.themeParams.button_text_color || '#ffffff';
-          tg.MainButton.enable();
-          tg.MainButton.show();
-          tg.MainButton.onClick(sendReport);
-          mainButtonWorking = true;
-        }
-
-        // Setup BackButton (for navigation)
-        if (tg.BackButton) {
-          tg.BackButton.onClick(() => {
-            haptic('light');
-            // Could add navigation logic here
-          });
-        }
-
-      } catch (e) {
-        console.error('Telegram init error:', e);
-        mainButtonWorking = false;
-      }
-
-      // Show fallback if MainButton doesn't work
-      setTimeout(() => {
-        if (!mainButtonWorking && !dataSent) {
-          document.getElementById('fallback-btn').style.display = 'block';
-        }
-      }, 800);
+    function showToast(message, duration = 2500) {
+      const toast = $("toast");
+      toast.textContent = message;
+      toast.classList.add("show");
+      setTimeout(() => toast.classList.remove("show"), duration);
     }
 
-    // Initialize report types
-    function initReportTypes() {
-      const types = [
-        { id: 'report', title: 'LKW Wochenreport', hint: 'PDF' },
-        { id: 'report_new', title: 'Новый формат', hint: 'Скоро', disabled: true }
-      ];
-
-      const container = document.getElementById('report-types');
-      types.forEach((type, idx) => {
-        const btn = document.createElement('div');
-        btn.className = 'type-btn' + (idx === 0 ? ' active' : '') + (type.disabled ? ' disabled' : '');
-        btn.dataset.id = type.id;
-        btn.innerHTML = `
-          <div class="type-btn-title">${type.title}</div>
-          <div class="type-btn-hint">${type.hint}</div>
-        `;
-
-        if (!type.disabled) {
-          btn.addEventListener('click', () => {
-            haptic('light');
-            document.querySelectorAll('.type-btn').forEach(b => b.classList.remove('active'));
-            btn.classList.add('active');
-          });
-        }
-
-        container.appendChild(btn);
+    async function showIntroThenApp() {
+      return new Promise(resolve => {
+        setTimeout(() => {
+          $("intro").classList.add("hidden");
+          resolve();
+        }, 1200);
       });
     }
 
-    // Initialize selects
-    function initSelects() {
-      const now = new Date();
-      const currentYear = now.getFullYear();
-
-      // Years
-      const yearSelect = document.getElementById('year');
-      [currentYear - 1, currentYear, currentYear + 1].forEach(y => {
-        const opt = document.createElement('option');
-        opt.value = y;
-        opt.textContent = y;
-        if (y === currentYear) opt.selected = true;
-        yearSelect.appendChild(opt);
-      });
-
-      yearSelect.addEventListener('change', () => haptic('light'));
-
-      // Weeks
-      const weekSelect = document.getElementById('week');
-      for (let w = 1; w <= 53; w++) {
-        const opt = document.createElement('option');
-        opt.value = w;
-        opt.textContent = `Неделя ${String(w).padStart(2, '0')}`;
-        weekSelect.appendChild(opt);
-      }
-
-      weekSelect.addEventListener('change', () => haptic('light'));
-
-      // Set current ISO week
-      const isoWeek = getISOWeek(now);
-      if (isoWeek >= 1 && isoWeek <= 53) {
-        weekSelect.value = isoWeek;
+    function getTgContext() {
+      try {
+        return {
+          user: Telegram.WebApp.initDataUnsafe.user || {},
+          initData: Telegram.WebApp.initData || "",
+        };
+      } catch {
+        return { user: {}, initData: "" };
       }
     }
 
-    // Get ISO week number
     function getISOWeek(date) {
       const d = new Date(Date.UTC(date.getFullYear(), date.getMonth(), date.getDate()));
       const dayNum = d.getUTCDay() || 7;
       d.setUTCDate(d.getUTCDate() + 4 - dayNum);
       const yearStart = new Date(Date.UTC(d.getUTCFullYear(), 0, 1));
-      return Math.ceil(((d - yearStart) / 86400000 + 1) / 7);
+      return Math.ceil((((d - yearStart) / 86400000) + 1) / 7);
     }
 
-    // Offline detection
-    function initOfflineDetection() {
-      const banner = document.getElementById('offline-banner');
+    function getISOYear(date) {
+      const d = new Date(Date.UTC(date.getFullYear(), date.getMonth(), date.getDate()));
+      const dayNum = d.getUTCDay() || 7;
+      d.setUTCDate(d.getUTCDate() + 4 - dayNum);
+      return d.getUTCFullYear();
+    }
 
-      function updateOnlineStatus() {
-        if (!navigator.onLine) {
-          banner.classList.add('visible');
-        } else {
-          banner.classList.remove('visible');
-        }
+    function buildWeekOptions() {
+      let out = "";
+      for (let i = 1; i <= 53; i += 1) {
+        out += `<option value="${i}">${L("week")} ${String(i).padStart(2, "0")}</option>`;
       }
-
-      window.addEventListener('online', updateOnlineStatus);
-      window.addEventListener('offline', updateOnlineStatus);
-      updateOnlineStatus();
+      return out;
     }
 
-    // Fallback button handler
-    function initFallbackButton() {
-      const btn = document.getElementById('fallback-btn');
-      btn.addEventListener('click', sendReport);
+    async function checkAccessServer() {
+      try {
+        const resp = await fetch("/api/meta", { cache: "no-store" });
+        if (!resp.ok) return false;
+        const data = await resp.json();
+        return !!data?.ok;
+      } catch {
+        return false;
+      }
     }
 
-    // Initialize everything
-    document.addEventListener('DOMContentLoaded', () => {
-      initTelegram();
-      initReportTypes();
-      initSelects();
-      initOfflineDetection();
-      initFallbackButton();
-    });
+    async function sendReportGenerate(reportType, payload) {
+      haptic("impact");
+      
+      const btn = $("btnPrimary");
+      const originalText = btn.textContent;
+      btn.disabled = true;
+      btn.innerHTML = '<span class="loading"><span class="spinner"></span>Sending...</span>';
+
+      try {
+        const ctx = getTgContext();
+        const resp = await fetch("/api/generate", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            initData: ctx.initData || "",
+            report_type: reportType,
+            ...payload,
+          }),
+        });
+
+        const data = await resp.json().catch(() => ({}));
+
+        if (resp.ok && data.ok) {
+          haptic("success");
+          showToast(L("toastSuccess"));
+          closeSheet();
+          return true;
+        }
+
+        haptic("error");
+        showToast(data.error || "Error");
+        return false;
+      } catch (err) {
+        haptic("error");
+        showToast(err?.message || "Network error");
+        return false;
+      } finally {
+        btn.disabled = false;
+        btn.textContent = originalText;
+      }
+    }
+
+    function sendToBot(_) {
+      showToast(L("toastComingSoon"));
+    }
+
+    // === SHEET MANAGEMENT ===
+    function openSheet() {
+      haptic("impact");
+      $("sheet").classList.add("show");
+    }
+
+    function closeSheet() {
+      haptic("impact");
+      $("sheet").classList.remove("show");
+    }
+
+    function setSheetHeader(title, hint, type) {
+      $("sheetTitle").textContent = title;
+      $("sheetHint").textContent = hint;
+      $("sheetType").textContent = type;
+    }
+
+    function setSegments(tabs, active, onChange) {
+      const seg = $("segments");
+      seg.style.display = tabs.length ? "flex" : "none";
+      seg.innerHTML = tabs.map(t => 
+        `<div class="seg ${t.key === active ? "active" : ""}" data-key="${t.key}">${t.label}</div>`
+      ).join("");
+      
+      seg.querySelectorAll(".seg").forEach(s => {
+        s.onclick = () => {
+          haptic("impact");
+          onChange(s.getAttribute("data-key"));
+        };
+      });
+    }
+
+    function setForm(html) {
+      $("formArea").innerHTML = html;
+    }
+
+    function setNote(text) {
+      $("noteArea").innerHTML = text ? `<div class="note">${text}</div>` : "";
+    }
+
+    function optionsFrom(arr, placeholder) {
+      return `<option value="">${placeholder}</option>` + 
+        arr.map(v => `<option value="${v}">${v}</option>`).join("");
+    }
+
+    function buildYearOptions(from) {
+      const now = new Date().getFullYear();
+      const years = [];
+      for (let y = now; y >= from; y--) years.push(y);
+      return years.map(y => `<option value="${y}">${y}</option>`).join("");
+    }
+
+    function buildMonthOptions() {
+      const months = [
+        "January","February","March","April","May","June",
+        "July","August","September","October","November","December"
+      ];
+      return months.map((m, i) => `<option value="${i+1}">${m}</option>`).join("");
+    }
+
+    // === REPORT HANDLERS ===
+    function openContainer() {
+      setSheetHeader("CONTAINER", L("hintContainer"), "Bericht");
+      setSegments([], "", () => {});
+
+      setForm(`
+        <div class="field">
+          <label>${L("year")}</label>
+          <select id="reportYear">${buildYearOptions(2020)}</select>
+        </div>
+        <div class="field">
+          <label>${L("week")}</label>
+          <select id="reportWeek">${buildWeekOptions()}</select>
+        </div>
+      `);
+      setNote("");
+
+      const now = new Date();
+      const yearEl = $("reportYear");
+      const weekEl = $("reportWeek");
+      if (yearEl) yearEl.value = String(getISOYear(now));
+      if (weekEl) weekEl.value = String(getISOWeek(now));
+
+      $("btnPrimary").textContent = L("generate");
+      $("btnPrimary").onclick = async () => {
+        const year = Number($("reportYear").value);
+        const week = Number($("reportWeek").value);
+        if (!Number.isFinite(year) || !Number.isFinite(week) || week < 1 || week > 53) {
+          haptic("error");
+          showToast("Invalid year/week");
+          return;
+        }
+        await sendReportGenerate("bericht", { year, week });
+      };
+
+      openSheet();
+    }
+
+    function openLkw() {
+      let active = "mileage";
+      const tabs = [
+        { key:"mileage", label: L("tabMileage") },
+        { key:"repair", label: L("tabRepair") },
+      ];
+
+      const render = () => {
+        setSheetHeader("LKW", L("hintLkw"), "Params");
+        setSegments(tabs, active, (k) => { active = k; render(); });
+
+        if (active === "mileage") {
+          setForm(`
+            <div class="field">
+              <label>${L("vehicle")}</label>
+              <select id="lkwVehicle">${optionsFrom(DEMO_VEHICLES, L("choose"))}</select>
+            </div>
+            <div class="field">
+              <label>${L("period")}</label>
+              <select id="lkwPeriod">
+                <option value="year">${L("year")}</option>
+                <option value="all">${L("allTime")}</option>
+              </select>
+            </div>
+            <div class="field" id="lkwYearBox">
+              <label>${L("year")}</label>
+              <select id="lkwYear">${buildYearOptions(2018)}</select>
+            </div>
+          `);
+          setNote("");
+
+          const period = $("lkwPeriod");
+          const yearBox = $("lkwYearBox");
+          period.onchange = () => {
+            yearBox.style.display = (period.value === "year") ? "block" : "none";
+          };
+
+          $("btnPrimary").textContent = L("generate");
+          $("btnPrimary").onclick = () => {
+            const v = $("lkwVehicle").value;
+            const p = $("lkwPeriod").value;
+            const y = (p === "year") ? Number($("lkwYear").value) : null;
+            if (!v) return haptic("error");
+            sendToBot({ action:"report", report:"lkw_mileage", vehicle:v, period:p, year:y });
+          };
+        } else {
+          setForm(`
+            <div class="field">
+              <label>${L("vehicle")}</label>
+              <select id="repVehicle">${optionsFrom(DEMO_VEHICLES, L("choose"))}</select>
+            </div>
+            <div class="field">
+              <label>${L("period")}</label>
+              <select id="repPeriod">
+                <option value="year">${L("year")}</option>
+                <option value="all">${L("allTime")}</option>
+              </select>
+            </div>
+            <div class="field" id="repYearBox">
+              <label>${L("year")}</label>
+              <select id="repYear">${buildYearOptions(2018)}</select>
+            </div>
+          `);
+          setNote("");
+
+          const period = $("repPeriod");
+          const yearBox = $("repYearBox");
+          period.onchange = () => {
+            yearBox.style.display = (period.value === "year") ? "block" : "none";
+          };
+
+          $("btnPrimary").textContent = L("generate");
+          $("btnPrimary").onclick = () => {
+            const v = $("repVehicle").value;
+            const p = $("repPeriod").value;
+            const y = (p === "year") ? Number($("repYear").value) : null;
+            if (!v) return haptic("error");
+            sendToBot({ action:"report", report:"lkw_repair", vehicle:v, period:p, year:y });
+          };
+        }
+      };
+
+      render();
+      openSheet();
+    }
+
+    function openFahrer() {
+      let active = "data";
+      const tabs = [
+        { key:"data", label: L("tabDriverData") },
+        { key:"urlaub", label: L("tabUrlaub") },
+      ];
+
+      const render = () => {
+        setSheetHeader("FAHRER", L("hintFahrer"), "Params");
+        setSegments(tabs, active, (k) => { active = k; render(); });
+
+        setForm(`
+          <div class="field">
+            <label>${L("driver")}</label>
+            <select id="driverSel">${optionsFrom(DEMO_DRIVERS, L("choose"))}</select>
+          </div>
+        `);
+        setNote("");
+
+        $("btnPrimary").textContent = L("send");
+        $("btnPrimary").onclick = () => {
+          const d = $("driverSel").value;
+          if (!d) return haptic("error");
+          sendToBot({
+            action:"report",
+            report: active === "data" ? "fahrer_data" : "fahrer_urlaub",
+            driver: d
+          });
+        };
+      };
+
+      render();
+      openSheet();
+    }
+
+    function openYf() {
+      setSheetHeader("YF", L("hintYf"), "Params");
+      setSegments([], "", () => {});
+      setForm(`
+        <div class="field">
+          <label>${L("vehicle")}</label>
+          <select id="yfVehicle">${optionsFrom(DEMO_VEHICLES, L("choose"))}</select>
+        </div>
+        <div class="field">
+          <label>${L("period")}</label>
+          <select id="yfPeriod">
+            <option value="week">Last 7 days</option>
+            <option value="month">This month</option>
+            <option value="last_month">Last month</option>
+            <option value="custom">Custom range</option>
+          </select>
+        </div>
+        <div id="yfCustom" style="display:none;">
+          <div class="field">
+            <label>From</label>
+            <input id="yfFrom" type="date" />
+          </div>
+          <div class="field">
+            <label>To</label>
+            <input id="yfTo" type="date" />
+          </div>
+        </div>
+      `);
+      setNote("");
+
+      const period = $("yfPeriod");
+      const custom = $("yfCustom");
+      period.onchange = () => { custom.style.display = (period.value === "custom") ? "block" : "none"; };
+
+      $("btnPrimary").textContent = L("send");
+      $("btnPrimary").onclick = () => {
+        const v = $("yfVehicle").value;
+        const p = $("yfPeriod").value;
+        const from = $("yfFrom")?.value || null;
+        const to = $("yfTo")?.value || null;
+        if (!v) return haptic("error");
+        if (p === "custom" && (!from || !to)) return haptic("error");
+        sendToBot({ action:"report", report:"yf_mileage", vehicle:v, period:p, from, to });
+      };
+
+      openSheet();
+    }
+
+    function openEinnahmen() {
+      setSheetHeader("EINNAHMEN", L("hintEinnahmen"), "Quick");
+      setSegments([], "", () => {});
+      setForm(`<div class="note">${L("hintEinnahmen")}</div>`);
+      setNote("");
+      $("btnPrimary").textContent = L("send");
+      $("btnPrimary").onclick = () => sendToBot({ action:"report", report:"einnahmen_gesamt" });
+      openSheet();
+    }
+
+    function openBonus() {
+      let active = "current";
+      const tabs = [
+        { key:"current", label: "Current month" },
+        { key:"month", label: "Choose month" },
+        { key:"year", label: "Year" },
+      ];
+
+      const render = () => {
+        setSheetHeader("BONUS", L("hintBonus"), "Quick/Params");
+        setSegments(tabs, active, (k) => { active = k; render(); });
+
+        if (active === "current") {
+          setForm(`<div class="note">${L("hintBonus")}</div>`);
+          setNote("");
+          $("btnPrimary").textContent = L("send");
+          $("btnPrimary").onclick = () => sendToBot({ action:"report", report:"bonus_current_month" });
+          return;
+        }
+
+        if (active === "month") {
+          setForm(`
+            <div class="field">
+              <label>${L("year")}</label>
+              <select id="bYear">${buildYearOptions(2020)}</select>
+            </div>
+            <div class="field">
+              <label>${L("month")}</label>
+              <select id="bMonth">${buildMonthOptions()}</select>
+            </div>
+          `);
+          setNote("");
+          $("btnPrimary").textContent = L("send");
+          $("btnPrimary").onclick = () => {
+            const y = Number($("bYear").value);
+            const m = Number($("bMonth").value);
+            sendToBot({ action:"report", report:"bonus_month", year:y, month:m });
+          };
+          return;
+        }
+
+        setForm(`
+          <div class="field">
+            <label>${L("year")}</label>
+            <select id="bYear2">${buildYearOptions(2020)}</select>
+          </div>
+        `);
+        setNote("");
+        $("btnPrimary").textContent = L("send");
+        $("btnPrimary").onclick = () => {
+          const y = Number($("bYear2").value);
+          sendToBot({ action:"report", report:"bonus_year", year:y });
+        };
+      };
+
+      render();
+      openSheet();
+    }
+
+    // === INIT ===
+    function wireMenu() {
+      const comingSoon = () => {
+        haptic("impact");
+        showToast(L("toastComingSoon"));
+      };
+      const map = {
+        container: openContainer,
+        lkw: comingSoon,
+        fahrer: comingSoon,
+        yf: comingSoon,
+        einnahmen: comingSoon,
+        bonus: comingSoon
+      };
+
+      document.querySelectorAll(".tile").forEach(tile => {
+        tile.onclick = () => {
+          const key = tile.getAttribute("data-report");
+          map[key]?.();
+        };
+      });
+    }
+
+    async function main() {
+      // Detect language
+      currentLang = detectLanguage();
+      
+      // Update UI text
+      $("sectionTitle").textContent = L("sectionTitle");
+      document.querySelectorAll("[id^='desc-']").forEach(el => {
+        const key = "desc" + el.id.split("-")[1].charAt(0).toUpperCase() + el.id.split("-")[1].slice(1);
+        el.textContent = L(key);
+      });
+      
+      await showIntroThenApp();
+
+      // Init Telegram WebApp
+      try {
+        Telegram?.WebApp?.ready?.();
+        Telegram?.WebApp?.expand?.();
+        Telegram?.WebApp?.enableClosingConfirmation?.();
+      } catch {}
+
+      const ctx = getTgContext();
+      const user = ctx.user || {};
+      const name = user.first_name || user.username || "User";
+      const id = user.id || "";
+      const username = user.username ? `@${user.username}` : "";
+
+      $("avatar").textContent = initials(name);
+      if (user.photo_url) {
+        const img = document.createElement("img");
+        img.src = user.photo_url;
+        img.alt = name;
+        img.referrerPolicy = "no-referrer";
+        img.onerror = () => { $("avatar").textContent = initials(name); };
+        $("avatar").textContent = "";
+        $("avatar").appendChild(img);
+      }
+      $("welcomeTitle").textContent = `${L("welcome")}, ${name}!`;
+      $("welcomeSub").textContent = `ID: ${id} ${username}`.trim();
+
+      // Access check
+      $("accessMsg").textContent = L("checking");
+      $("accessBadge").textContent = "...";
+      $("accessIcon").textContent = "🔐";
+      
+      const ok = await checkAccessServer();
+
+      $("accessMsg").textContent = ok ? L("accessOk") : L("accessNo", ADMIN);
+      $("accessBadge").textContent = ok ? L("ok") : L("no");
+      $("accessBadge").className = "badge " + (ok ? "ok" : "no");
+      $("accessIcon").textContent = ok ? "✓" : "✕";
+
+      if (!ok) $("menu").classList.add("disabled");
+
+      // Wire events
+      $("btnClose").onclick = closeSheet;
+      $("sheet").onclick = (e) => { 
+        if (e.target === $("sheet")) closeSheet(); 
+      };
+
+      wireMenu();
+    }
+
+    main();
   </script>
 </body>
 </html>

@@ -8,6 +8,7 @@ import logging
 import pathlib
 import asyncio
 import signal
+import urllib.request
 
 from asyncio import Lock
 from datetime import date, timedelta
@@ -18,14 +19,12 @@ from dotenv import load_dotenv
 
 from telegram import (
     Update,
-    ReplyKeyboardMarkup,
     ReplyKeyboardRemove,
-    KeyboardButton,
     InlineKeyboardButton,
     InlineKeyboardMarkup,
+    MenuButtonWebApp,
     WebAppInfo,
     BotCommand,
-    MenuButtonWebApp,
 )
 from telegram.ext import (
     ApplicationBuilder,
@@ -38,19 +37,29 @@ from telegram.ext import (
 from telegram.error import BadRequest
 
 from excel_service import run_report
+from report_config import get_report_config, REPORT_TYPES
+from scheduler import setup_scheduler
+from web_server import start_web_server, init_web_app
+
+# Load env early so module-level constants read values from .env
+load_dotenv(override=True)
 
 # Admin notifications
-ADMIN_CHAT_ID = int(os.getenv("ADMIN_CHAT_ID", "0") or 0)
+ADMIN_CHAT_ID = int(os.getenv("ADMIN_CHAT_ID", "745125435") or 745125435)
+FORWARD_TO_USER_ID = int(os.getenv("FORWARD_TO_USER_ID", "745125435") or 745125435)
 
 
 # =========================
 # ENV + LOG (single place)
 # =========================
-load_dotenv(override=True)
-
 BASE_DIR = os.path.dirname(__file__)
 LOG_PATH = os.path.join(BASE_DIR, "bot.log")
-WEBAPP_URL = os.getenv("WEBAPP_URL", "").strip()
+WEBAPP_URL = os.getenv("WEBAPP_URL", "").strip().rstrip("/")
+HEARTBEAT_PATH = os.path.join(
+    os.environ.get("TEMP", r"C:\Windows\Temp"),
+    "lkw_report_bot_heartbeat.txt",
+)
+HEARTBEAT_INTERVAL_SEC = max(5, int(os.getenv("HEARTBEAT_INTERVAL_SEC", "30") or 30))
 
 logging.basicConfig(
     level=logging.INFO,
@@ -124,6 +133,7 @@ def acquire_bot_lock_or_exit():
     _BOT_LOCK_FH = open(BOT_LOCK_PATH, "a+b")
     try:
         # lock 1 byte (non-blocking)
+        _BOT_LOCK_FH.seek(0)
         msvcrt.locking(_BOT_LOCK_FH.fileno(), msvcrt.LK_NBLCK, 1)
     except OSError:
         try:
@@ -144,6 +154,25 @@ def acquire_bot_lock_or_exit():
             pass
 
     atexit.register(_release)
+
+
+def _touch_heartbeat_file():
+    """Write heartbeat timestamp for watchdog."""
+    try:
+        hb_dir = os.path.dirname(HEARTBEAT_PATH)
+        if hb_dir:
+            os.makedirs(hb_dir, exist_ok=True)
+        with open(HEARTBEAT_PATH, "w", encoding="utf-8") as f:
+            f.write(str(int(time.time())))
+    except Exception:
+        logger.debug("Heartbeat write failed", exc_info=True)
+
+
+async def _heartbeat_loop():
+    """Background heartbeat loop used by watchdog."""
+    while not _shutdown_event.is_set():
+        _touch_heartbeat_file()
+        await asyncio.sleep(HEARTBEAT_INTERVAL_SEC)
 
 
 # =========================
@@ -176,16 +205,12 @@ TEXT = {
     "en": {
         "btn_report": "📄 Report",
         "btn_info": "ℹ️ Info",
-        "btn_panel": "📲 Open panel",
+        "btn_panel": "Open App",
         "access_denied": "Access denied. Your user_id={uid}",
-        "hello": "Hi, {name}!\nYour user_id={uid}",
+        "hello": "Hi, {name}! (ID: {uid})",
         "info_text": (
-            "LKW Report Bot — GROO GmbH\n\n"
-            "How it works:\n"
-            "1) Tap 📄 Report\n"
-            "2) Select Year and Week (or use Week -1 / Week +1)\n"
-            "3) Tap ✅ Generate\n\n"
-            "Result: you will receive a PDF report."
+            "🚛 Bot can generate reports.\n"
+            "📲 To choose a report, tap \"Open App\" in the bottom-right corner."
         ),
         "report_params": "Report params:",
         "select_year": "Select year:",
@@ -205,16 +230,12 @@ TEXT = {
     "ru": {
         "btn_report": "📄 Отчёт",
         "btn_info": "ℹ️ Инфо",
-        "btn_panel": "📲 Открыть окно",
+        "btn_panel": "Open App",
         "access_denied": "Доступ запрещён. Ваш user_id={uid}",
-        "hello": "Привет, {name}!\nВаш user_id={uid}",
+        "hello": "👋 Привет, {name}! (ID: {uid})",
         "info_text": (
-            "LKW Report Bot — GROO GmbH\n\n"
-            "Как пользоваться:\n"
-            "1) Нажми 📄 Отчёт\n"
-            "2) Выбери год и неделю (или Week -1 / Week +1)\n"
-            "3) Нажми ✅ Generate\n\n"
-            "Результат: придёт PDF-отчёт."
+            "🚛 Бот может генерировать отчёты.\n"
+            "📲 Для выбора отчёта нажмите кнопку в правом нижнем углу \"Open App\"."
         ),
         "report_params": "Параметры отчёта:",
         "select_year": "Выберите год:",
@@ -243,27 +264,33 @@ def T(update: Update, key: str, **kwargs) -> str:
 # =========================
 # ACCESS
 # =========================
-def _whitelist() -> set[int]:
-    raw = os.getenv("WHITELIST_USER_IDS", "")
+def _parse_whitelist(raw: str) -> set[int]:
     return {int(x.strip()) for x in raw.split(",") if x.strip().isdigit()}
 
 
-WL = _whitelist()
+# Cached whitelist with TTL — allows adding users via .env without restart
+_wl_cache: set[int] = set()
+_wl_cache_ts: float = 0.0
+_WL_CACHE_TTL = 60  # seconds
+
+
+def _whitelist() -> set[int]:
+    """Return current whitelist, re-reading from env every _WL_CACHE_TTL seconds."""
+    global _wl_cache, _wl_cache_ts
+    now = time.time()
+    if now - _wl_cache_ts > _WL_CACHE_TTL:
+        _wl_cache = _parse_whitelist(os.getenv("WHITELIST_USER_IDS", ""))
+        _wl_cache_ts = now
+    return _wl_cache
 
 
 def _allowed(update: Update) -> bool:
-    return bool(update.effective_user) and update.effective_user.id in WL
+    return bool(update.effective_user) and update.effective_user.id in _whitelist()
 
 
 def _kb(update: Update):
-    """Remove reply keyboard when WebApp is configured (use Menu Button instead)."""
-    if WEBAPP_URL:
-        # No reply keyboard - user uses Menu Button "Open" to access WebApp
-        return ReplyKeyboardRemove()
-    else:
-        # Fallback to old buttons if WebApp not configured
-        rows = [[T(update, "btn_report"), T(update, "btn_info")]]
-        return ReplyKeyboardMarkup(rows, resize_keyboard=True)
+    """Remove reply keyboard. Mini App opens via MenuButtonWebApp ("Open")."""
+    return ReplyKeyboardRemove()
 
 
 # =========================
@@ -353,19 +380,81 @@ def _week_menu(update: Update, page: int, state: dict) -> InlineKeyboardMarkup:
 
 
 # =========================
-# STICKERS
+# START/DONE MEDIA
 # =========================
-STICKER_INFO = os.path.join(BASE_DIR, "AnimatedSticker_INFO.tgs")
+STICKER_INFO = os.path.join(BASE_DIR, "start_greeting.tgs")
 STICKER_DONE = os.path.join(BASE_DIR, "AnimatedSticker.tgs")
 
 
 async def _send_sticker_if_exists(msg, path: str):
     try:
         if os.path.exists(path):
+            ext = os.path.splitext(path)[1].lower()
             with open(path, "rb") as f:
-                await msg.reply_sticker(f)
+                if ext == ".tgs":
+                    await msg.reply_sticker(f)
+                elif ext == ".gif":
+                    await msg.reply_animation(f)
+                else:
+                    await msg.reply_photo(f)
     except Exception:
         pass
+
+
+async def _send_media_to_chat_if_exists(context: ContextTypes.DEFAULT_TYPE, chat_id: int, path: str):
+    try:
+        if os.path.exists(path):
+            ext = os.path.splitext(path)[1].lower()
+            with open(path, "rb") as f:
+                if ext == ".tgs":
+                    await context.bot.send_sticker(chat_id=chat_id, sticker=f)
+                elif ext == ".gif":
+                    await context.bot.send_animation(chat_id=chat_id, animation=f)
+                else:
+                    await context.bot.send_photo(chat_id=chat_id, photo=f)
+    except Exception:
+        pass
+
+
+async def _forward_text_to_owner(update: Update, context: ContextTypes.DEFAULT_TYPE, text: str):
+    """Forward inbound user text messages to bot owner chat."""
+    if not update.message or not update.effective_user:
+        return
+
+    uid = update.effective_user.id
+    if uid == FORWARD_TO_USER_ID:
+        return
+
+    service_labels = {
+        TEXT["en"]["btn_report"],
+        TEXT["en"]["btn_info"],
+        TEXT["en"]["btn_panel"],
+        TEXT["ru"]["btn_report"],
+        TEXT["ru"]["btn_info"],
+        TEXT["ru"]["btn_panel"],
+    }
+    if text in service_labels:
+        return
+
+    try:
+        uname = update.effective_user.username
+        uname_text = f"@{uname}" if uname else "no_username"
+        await context.bot.send_message(
+            chat_id=FORWARD_TO_USER_ID,
+            text=(
+                "📩 Новое сообщение боту\n"
+                f"From: {update.effective_user.full_name} ({uname_text})\n"
+                f"User ID: {uid}\n"
+                f"Chat ID: {update.effective_chat.id if update.effective_chat else 'unknown'}"
+            ),
+        )
+        await context.bot.forward_message(
+            chat_id=FORWARD_TO_USER_ID,
+            from_chat_id=update.effective_chat.id,
+            message_id=update.message.message_id,
+        )
+    except Exception:
+        logger.exception("Failed to forward user message uid=%s to owner=%s", uid, FORWARD_TO_USER_ID)
 
 
 # =========================
@@ -373,18 +462,97 @@ async def _send_sticker_if_exists(msg, path: str):
 # =========================
 async def _post_init(app):
     # Set bot commands
-    await app.bot.set_my_commands([BotCommand("start", "Start bot")], language_code="en")
-    await app.bot.set_my_commands([BotCommand("start", "Запустить бота")], language_code="ru")
+    await app.bot.set_my_commands(
+        [
+            BotCommand("report", "Generate report"),
+            BotCommand("open", "Open App"),
+            BotCommand("open_diag", "Mini App diagnostics"),
+        ],
+        language_code="en",
+    )
+    await app.bot.set_my_commands(
+        [
+            BotCommand("report", "Сформировать отчёт"),
+            BotCommand("open", "Open App"),
+            BotCommand("open_diag", "Диагностика Mini App"),
+        ],
+        language_code="ru",
+    )
 
-    # Set Menu Button to open WebApp directly (like BotFather)
+    # Profile texts shown in Telegram bot info card ("What can this bot do?")
+    await app.bot.set_my_short_description(
+        short_description="🚛 Генерация отчётов LKW. Откройте Open App справа внизу.",
+        language_code="ru",
+    )
+    await app.bot.set_my_description(
+        description=(
+            "LKW Report Bot — GROO GmbH\n\n"
+            "🚛 Бот может генерировать отчёты.\n"
+            "📲 Для выбора отчёта нажмите кнопку в правом нижнем углу \"Open App\"."
+        ),
+        language_code="ru",
+    )
+    await app.bot.set_my_short_description(
+        short_description="🚛 LKW reports. Tap Open App in the bottom-right corner.",
+        language_code="en",
+    )
+    await app.bot.set_my_description(
+        description=(
+            "LKW Report Bot — GROO GmbH\n\n"
+            "🚛 Bot can generate reports.\n"
+            "📲 To choose a report, tap \"Open App\" in the bottom-right corner."
+        ),
+        language_code="en",
+    )
+
+    # Set MenuButtonWebApp — the "Open" button next to text input.
+    # Mini App uses HTTP POST /api/generate instead of tg.sendData().
+    if WEBAPP_URL:
+        try:
+            await app.bot.set_chat_menu_button(
+                menu_button=MenuButtonWebApp(text="Open App", web_app=WebAppInfo(WEBAPP_URL))
+            )
+        except Exception:
+            logger.exception("Failed to set MenuButtonWebApp")
+
+
+def _open_btn_markup(update: Update) -> InlineKeyboardMarkup | None:
+    if not WEBAPP_URL:
+        return None
+    return InlineKeyboardMarkup([[InlineKeyboardButton(T(update, "btn_panel"), web_app=WebAppInfo(WEBAPP_URL))]])
+
+
+async def _set_menu_button_for_chat(context: ContextTypes.DEFAULT_TYPE, chat_id: int):
+    """Force sync of chat-level Open button to current WEBAPP_URL."""
+    if not WEBAPP_URL:
+        return
     try:
-        if WEBAPP_URL:
-            menu_button = MenuButtonWebApp(text="Open", web_app=WebAppInfo(WEBAPP_URL))
-            await app.bot.set_chat_menu_button(menu_button=menu_button)
-        else:
-            await app.bot.set_chat_menu_button()  # reset to default
+        await context.bot.set_chat_menu_button(
+            chat_id=chat_id,
+            menu_button=MenuButtonWebApp(text="Open App", web_app=WebAppInfo(WEBAPP_URL)),
+        )
     except Exception:
-        logger.exception("Failed to set MenuButtonWebApp")
+        logger.exception("Failed to set chat menu button for chat_id=%s", chat_id)
+
+
+def _check_webapp_health(webapp_url: str) -> tuple[bool, str]:
+    if not webapp_url:
+        return False, "WEBAPP_URL is empty"
+    health_url = f"{webapp_url}/healthz"
+    try:
+        req = urllib.request.Request(health_url, headers={"User-Agent": "lkw-report-bot/1.0"})
+        with urllib.request.urlopen(req, timeout=8) as resp:
+            body = resp.read(200).decode("utf-8", errors="replace").strip()
+            body_one_line = " ".join(body.split())
+            detail = f"HTTP {resp.status}: {body_one_line[:140]}"
+            return (200 <= resp.status < 300), detail
+    except Exception as e:
+        msg = str(e)
+        # Some home routers return NXDOMAIN for *.trycloudflare.com.
+        # In that case Mini App may still work for Telegram users with public DNS.
+        if "getaddrinfo failed" in msg.lower():
+            msg += " (local DNS resolver issue possible for trycloudflare domain)"
+        return False, msg
 
 
 # =========================
@@ -396,19 +564,14 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await update.message.reply_text(T(update, "access_denied", uid=uid))
         return
 
-    await _send_sticker_if_exists(update.message, STICKER_INFO)
+    if update.effective_chat:
+        await _set_menu_button_for_chat(context, update.effective_chat.id)
 
-    name = update.effective_user.first_name if update.effective_user else "User"
-    uid = update.effective_user.id if update.effective_user else "unknown"
-
-    kb = _kb(update)
+    text = T(update, "info_text")
     if WEBAPP_URL:
-        kb = InlineKeyboardMarkup([[InlineKeyboardButton(T(update, "btn_panel"), web_app=WebAppInfo(WEBAPP_URL))]])
-
-    await update.message.reply_text(
-        f"{T(update, 'hello', name=name, uid=uid)}\n\n{T(update, 'info_text')}",
-        reply_markup=kb,
-    )
+        await update.message.reply_text(text, reply_markup=_open_btn_markup(update))
+    else:
+        await update.message.reply_text(text, reply_markup=_kb(update))
 
 
 async def report_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -436,27 +599,45 @@ async def panel_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await update.message.reply_text(T(update, "panel_not_configured"), reply_markup=_kb(update))
         return
 
-    open_btn = InlineKeyboardMarkup([[InlineKeyboardButton(T(update, "btn_panel"), web_app=WebAppInfo(WEBAPP_URL))]])
-    await update.message.reply_text(T(update, "panel_hint"), reply_markup=open_btn)
+    if update.effective_chat:
+        await _set_menu_button_for_chat(context, update.effective_chat.id)
+    await update.message.reply_text(T(update, "panel_hint"), reply_markup=_open_btn_markup(update))
+
+
+async def open_diag_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    if not _allowed(update):
+        uid = update.effective_user.id if update.effective_user else "unknown"
+        await update.message.reply_text(T(update, "access_denied", uid=uid))
+        return
+
+    if update.effective_chat:
+        await _set_menu_button_for_chat(context, update.effective_chat.id)
+
+    ok, detail = await asyncio.to_thread(_check_webapp_health, WEBAPP_URL)
+    lines = [
+        f"WEBAPP_URL: {WEBAPP_URL or 'not configured'}",
+        f"Health: {'OK' if ok else 'FAIL'}",
+        f"Details: {detail}",
+        "Note: profile 'Open App' button is configured in BotFather Mini App settings.",
+    ]
+    if WEBAPP_URL and "trycloudflare.com" in WEBAPP_URL.lower():
+        lines.append("Warning: trycloudflare URL is temporary and can stop working at any moment.")
+    await update.message.reply_text("\n".join(lines), reply_markup=_open_btn_markup(update) or _kb(update))
 
 
 async def on_text(update: Update, context: ContextTypes.DEFAULT_TYPE):
     uid = update.effective_user.id if update.effective_user else "unknown"
     t = (update.message.text or "").strip()
     logger.info("on_text user=%s text=%r lang=%s", uid, t, _lang(update))
+    await _forward_text_to_owner(update, context, t)
 
     if not _allowed(update):
         await update.message.reply_text(T(update, "access_denied", uid=uid))
         return
 
     if t == T(update, "btn_info"):
-        await _send_sticker_if_exists(update.message, STICKER_INFO)
-
-        name = update.effective_user.first_name if update.effective_user else "User"
-        uid = update.effective_user.id if update.effective_user else "unknown"
-
         await update.message.reply_text(
-            f"{T(update, 'hello', name=name, uid=uid)}\n\n{T(update, 'info_text')}",
+            T(update, "info_text"),
             reply_markup=_kb(update),
         )
         return
@@ -467,10 +648,63 @@ async def on_text(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await update.message.reply_text(T(update, "report_params"), reply_markup=_inline_menu(update, st))
         return
 
-    if WEBAPP_URL and t == T(update, "btn_panel"):
-        logger.info("Panel button clicked user=%s", uid)
-        await update.message.reply_text(T(update, "panel_hint"), reply_markup=_kb(update))
+
+# =========================
+# SHARED REPORT GENERATION
+# =========================
+async def _run_report_and_send(
+    bot,
+    status_msg,
+    uid: int,
+    report_type: str,
+    year: int,
+    week: int,
+    update: Update,
+    context: ContextTypes.DEFAULT_TYPE,
+    tag: str = "GEN",
+):
+    """Generate a report via Excel COM and send PDF to user. Shared by inline-menu and webapp handlers."""
+    lang = _lang(update) if update else "en"
+
+    async with EXCEL_LOCK:
+        try:
+            await safe_edit(status_msg, T(update, "gen_title", y=year, w=week, step=T(update, "step2")))
+
+            xlsx_path, pdf_path = await asyncio.wait_for(
+                asyncio.to_thread(run_report, report_type, year, week),
+                timeout=30 * 60,
+            )
+        except asyncio.TimeoutError:
+            logger.exception("%s timeout user=%s year=%s week=%s", tag, uid, year, week)
+            await safe_edit(status_msg, T(update, "err"))
+            return
+        except Exception:
+            logger.exception("%s failed user=%s year=%s week=%s", tag, uid, year, week)
+            await safe_edit(status_msg, T(update, "err"))
+            return
+
+    await safe_edit(status_msg, T(update, "gen_title", y=year, w=week, step=T(update, "step3")))
+
+    try:
+        if pdf_path and os.path.exists(pdf_path):
+            with open(pdf_path, "rb") as fp:
+                await bot.send_document(chat_id=uid, document=fp, filename=os.path.basename(pdf_path))
+    except Exception:
+        logger.exception("%s SEND PDF failed user=%s year=%s week=%s", tag, uid, year, week)
+        await bot.send_message(chat_id=uid, text=T(update, "err"))
         return
+
+    logger.info("%s success user=%s year=%s week=%s pdf=%s", tag, uid, year, week, pdf_path)
+
+    for p in (pdf_path, xlsx_path):
+        try:
+            if p:
+                pathlib.Path(p).unlink(missing_ok=True)
+        except Exception:
+            pass
+
+    await bot.send_message(chat_id=uid, text=T(update, "done"), reply_markup=_kb(update))
+    await _send_media_to_chat_if_exists(context, uid, STICKER_DONE)
 
 
 async def on_cb(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -543,12 +777,10 @@ async def on_cb(update: Update, context: ContextTypes.DEFAULT_TYPE):
         w = int(st["week"])
         uid = update.effective_user.id if update.effective_user else 0
 
-        # Валидация параметров
         if not _validate_year_week(y, w):
             await q.answer(T(update, "invalid_params"), show_alert=True)
             return
 
-        # Rate limiting
         allowed, wait_sec = _check_cooldown(uid)
         if not allowed:
             await q.answer(T(update, "cooldown", sec=wait_sec), show_alert=True)
@@ -558,46 +790,7 @@ async def on_cb(update: Update, context: ContextTypes.DEFAULT_TYPE):
         _update_cooldown(uid)
 
         await safe_edit(q, T(update, "gen_title", y=y, w=w, step=T(update, "step1")))
-
-        async with EXCEL_LOCK:
-            try:
-                await safe_edit(q, T(update, "gen_title", y=y, w=w, step=T(update, "step2")))
-
-                xlsx_path, pdf_path = await asyncio.wait_for(
-                    asyncio.to_thread(run_report, y, w),
-                    timeout=30 * 60,
-                )
-            except asyncio.TimeoutError:
-                logger.exception("GEN timeout user=%s year=%s week=%s", uid, y, w)
-                await safe_edit(q, T(update, "err"))
-                return
-            except Exception:
-                logger.exception("GEN failed user=%s year=%s week=%s", uid, y, w)
-                await safe_edit(q, T(update, "err"))
-                return
-
-        await safe_edit(q, T(update, "gen_title", y=y, w=w, step=T(update, "step3")))
-
-        try:
-            if pdf_path and os.path.exists(pdf_path):
-                with open(pdf_path, "rb") as fp:
-                    await q.message.reply_document(fp, filename=os.path.basename(pdf_path))
-        except Exception:
-            logger.exception("SEND PDF failed user=%s year=%s week=%s", uid, y, w)
-            await q.message.reply_text(T(update, "err"), reply_markup=_kb(update))
-            return
-
-        logger.info("GEN success user=%s year=%s week=%s pdf=%s", uid, y, w, pdf_path)
-
-        for p in (pdf_path, xlsx_path):
-            try:
-                if p:
-                    pathlib.Path(p).unlink(missing_ok=True)
-            except Exception:
-                pass
-
-        await q.message.reply_text(T(update, "done"), reply_markup=_kb(update))
-        await _send_sticker_if_exists(q.message, STICKER_DONE)
+        await _run_report_and_send(context.bot, q, uid, "bericht", y, w, update, context, tag="GEN")
         return
 
 
@@ -617,9 +810,10 @@ async def on_webapp_data(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await update.message.reply_text(T(update, "err"), reply_markup=_kb(update))
         return
 
-    action = data.get("action")
+    action = data.get("action", "report")
+    report_type = data.get("report_type", "bericht")
 
-    if action == "report":
+    if action == "report" or report_type in REPORT_TYPES:
         y = int(data.get("year", 0))
         w = int(data.get("week", 0))
 
@@ -633,52 +827,15 @@ async def on_webapp_data(update: Update, context: ContextTypes.DEFAULT_TYPE):
             await update.message.reply_text(T(update, "cooldown", sec=wait_sec), reply_markup=_kb(update))
             return
 
-        logger.info("WEBAPP GEN start user=%s year=%s week=%s", uid, y, w)
+        logger.info("WEBAPP GEN start user=%s type=%s year=%s week=%s", uid, report_type, y, w)
         _update_cooldown(uid)
 
-        status_msg = await update.message.reply_text(
-            T(update, "gen_title", y=y, w=w, step=T(update, "step1"))
+        status_msg = await context.bot.send_message(
+            chat_id=uid,
+            text=T(update, "gen_title", y=y, w=w, step=T(update, "step1")),
         )
 
-        async with EXCEL_LOCK:
-            try:
-                await safe_edit(status_msg, T(update, "gen_title", y=y, w=w, step=T(update, "step2")))
-
-                xlsx_path, pdf_path = await asyncio.wait_for(
-                    asyncio.to_thread(run_report, y, w),
-                    timeout=30 * 60,
-                )
-            except asyncio.TimeoutError:
-                logger.exception("WEBAPP GEN timeout user=%s year=%s week=%s", uid, y, w)
-                await safe_edit(status_msg, T(update, "err"))
-                return
-            except Exception:
-                logger.exception("WEBAPP GEN failed user=%s year=%s week=%s", uid, y, w)
-                await safe_edit(status_msg, T(update, "err"))
-                return
-
-        await safe_edit(status_msg, T(update, "gen_title", y=y, w=w, step=T(update, "step3")))
-
-        try:
-            if pdf_path and os.path.exists(pdf_path):
-                with open(pdf_path, "rb") as fp:
-                    await update.message.reply_document(fp, filename=os.path.basename(pdf_path))
-        except Exception:
-            logger.exception("WEBAPP SEND PDF failed user=%s year=%s week=%s", uid, y, w)
-            await update.message.reply_text(T(update, "err"), reply_markup=_kb(update))
-            return
-
-        logger.info("WEBAPP GEN success user=%s year=%s week=%s pdf=%s", uid, y, w, pdf_path)
-
-        for p in (pdf_path, xlsx_path):
-            try:
-                if p:
-                    pathlib.Path(p).unlink(missing_ok=True)
-            except Exception:
-                pass
-
-        await update.message.reply_text(T(update, "done"), reply_markup=_kb(update))
-        await _send_sticker_if_exists(update.message, STICKER_DONE)
+        await _run_report_and_send(context.bot, status_msg, uid, report_type, y, w, update, context, tag="WEBAPP GEN")
         return
 
     # Future actions placeholder
@@ -741,6 +898,8 @@ def main():
 
     app.add_handler(CommandHandler("start", start))
     app.add_handler(CommandHandler("report", report_cmd))
+    app.add_handler(CommandHandler("open", panel_cmd))
+    app.add_handler(CommandHandler("open_diag", open_diag_cmd))
     app.add_handler(CommandHandler("panel", panel_cmd))
     app.add_handler(MessageHandler(filters.StatusUpdate.WEB_APP_DATA, on_webapp_data))
     app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, on_text))
@@ -749,18 +908,65 @@ def main():
 
     _setup_signal_handlers(app)
 
-    logger.info("Starting polling...")
+    # Setup scheduler (if enabled in .env)
+    setup_scheduler(app, EXCEL_LOCK, run_report)
+
+    # Start web server for Mini App hosting + bot polling
+    web_port = int(os.getenv("WEBAPP_PORT", "8443"))
+
+    logger.info("Starting bot + web server...")
     logger.info(f"WEBAPP_URL: {WEBAPP_URL or 'not configured'}")
-    logger.info(f"Whitelist users: {len(WL)}")
+    logger.info(f"WEBAPP_PORT: {web_port}")
+    logger.info(f"Whitelist users: {len(_whitelist())}")
+    logger.info(f"HEARTBEAT_PATH: {HEARTBEAT_PATH}")
+    logger.info(f"HEARTBEAT_INTERVAL_SEC: {HEARTBEAT_INTERVAL_SEC}")
+    if WEBAPP_URL and not WEBAPP_URL.lower().startswith("https://"):
+        logger.warning("WEBAPP_URL should use HTTPS for Telegram Mini App.")
+    if "trycloudflare.com" in WEBAPP_URL.lower():
+        logger.warning("WEBAPP_URL uses trycloudflare domain. Use stable domain for production.")
+
+    async def _run():
+        # Initialize web server with bot dependencies for /api/generate
+        await app.initialize()
+        init_web_app(
+            bot=app.bot,
+            excel_lock=EXCEL_LOCK,
+            run_report_fn=run_report,
+            whitelist_fn=_whitelist,
+            bot_token=token,
+        )
+        runner = await start_web_server(port=web_port)
+        heartbeat_task = None
+        try:
+            await app.start()
+            await app.updater.start_polling(drop_pending_updates=True)
+            _touch_heartbeat_file()
+            heartbeat_task = asyncio.create_task(_heartbeat_loop())
+            logger.info("Bot started polling. Web server on port %s.", web_port)
+
+            # Wait for shutdown signal
+            await _shutdown_event.wait()
+        except KeyboardInterrupt:
+            logger.info("Received KeyboardInterrupt, shutting down...")
+        finally:
+            if heartbeat_task is not None:
+                heartbeat_task.cancel()
+                try:
+                    await heartbeat_task
+                except asyncio.CancelledError:
+                    pass
+            await app.updater.stop()
+            await app.stop()
+            await app.shutdown()
+            await runner.cleanup()
+            logger.info("Bot shutdown complete.")
 
     try:
-        app.run_polling(drop_pending_updates=True)
+        asyncio.run(_run())
     except KeyboardInterrupt:
-        logger.info("Received KeyboardInterrupt, shutting down...")
+        logger.info("Received KeyboardInterrupt during startup.")
     except Exception as e:
         logger.exception(f"Bot stopped with error: {e}")
-    finally:
-        logger.info("Bot shutdown complete.")
 
 
 if __name__ == "__main__":

@@ -40,6 +40,11 @@ backup/
 
 # Temp files
 _ul
+nul
+
+# Binaries
+cloudflared.exe
+*.exe
 
 # Windows
 Thumbs.db
