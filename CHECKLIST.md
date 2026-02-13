@@ -57,10 +57,16 @@ Reports are generated from PostgreSQL data in milliseconds via SQL.
   - Design database schema (tables: lkw, fahrer, schedules, reports_log)
   - Result: empty database ready for data
 
-- [ ] **0.3** Custom domain for Mini App (optional)
-  - Buy cheap domain (~5 EUR/year) or use free `*.pages.dev` URL
-  - Connect to Cloudflare Pages
-  - Result: stable HTTPS URL for Telegram Mini App
+- [ ] **0.3** Custom domain `groo-webapp.app`
+  - Buy `groo-webapp.app` domain (~$12-14/year)
+  - Connect to Cloudflare Pages project
+  - Result: Mini App at `https://groo-webapp.app`
+
+- [ ] **0.3.1** Replace emoji icons with SVG duotone set
+  - Replace 6 tile emojis (📦🚛👨‍✈️📊💰🎯) + UI icons (🔐✓✕) with custom SVG
+  - Palette: Base #3BB3FF→#1B2B8F, Accent #35F0A0→#7B4DFF, Lines #0D1B5A
+  - Style: duotone, single light source, readable at small sizes, techno/volumetric
+  - Result: unified icon set matching app design
 
 - [ ] **0.4** UPS for PC
   - Buy UPS (APC Back-UPS 700VA, ~60 EUR)

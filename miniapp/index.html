@@ -335,7 +335,7 @@
       width:54px;
       height:54px;
       border-radius:16px;
-      background: 
+      background:
         linear-gradient(135deg, rgba(255,255,255,.12), rgba(255,255,255,.06)),
         rgba(0,0,0,.15);
       border:1px solid rgba(255,255,255,.15);
@@ -344,9 +344,14 @@
       font-size:24px;
       flex-shrink:0;
       z-index:1;
-      box-shadow: 
+      box-shadow:
         0 8px 20px rgba(0,0,0,.25),
         0 0 0 1px rgba(255,255,255,.08) inset;
+    }
+    .tile-icon img{
+      width:28px;
+      height:28px;
+      display:block;
     }
     
     .tile-content{
@@ -767,7 +772,7 @@
       </div>
       
       <div class="access">
-        <div class="access-icon" id="accessIcon">🔐</div>
+        <div class="access-icon" id="accessIcon"><img src="static/icons/lock.svg" alt="" width="20" height="20"></div>
         <div class="access-text">
           <div class="access-msg" id="accessMsg">Checking access...</div>
         </div>
@@ -779,7 +784,7 @@
     
     <div class="menu" id="menu">
       <div class="tile" data-report="container">
-        <div class="tile-icon">📦</div>
+        <div class="tile-icon"><img src="static/icons/container.svg" alt="" width="28" height="28"></div>
         <div class="tile-content">
           <div class="tile-title">CONTAINER</div>
           <div class="tile-desc" id="desc-container">Container tracking and reports</div>
@@ -788,7 +793,7 @@
       </div>
 
       <div class="tile" data-report="lkw">
-        <div class="tile-icon">🚛</div>
+        <div class="tile-icon"><img src="static/icons/truck.svg" alt="" width="28" height="28"></div>
         <div class="tile-content">
           <div class="tile-title">LKW</div>
           <div class="tile-desc" id="desc-lkw">Truck reports and analytics</div>
@@ -797,7 +802,7 @@
       </div>
 
       <div class="tile" data-report="fahrer">
-        <div class="tile-icon">👨‍✈️</div>
+        <div class="tile-icon"><img src="static/icons/driver.svg" alt="" width="28" height="28"></div>
         <div class="tile-content">
           <div class="tile-title">FAHRER</div>
           <div class="tile-desc" id="desc-fahrer">Driver data and vacation</div>
@@ -806,7 +811,7 @@
       </div>
 
       <div class="tile" data-report="yf">
-        <div class="tile-icon">📊</div>
+        <div class="tile-icon"><img src="static/icons/chart.svg" alt="" width="28" height="28"></div>
         <div class="tile-content">
           <div class="tile-title">YF</div>
           <div class="tile-desc" id="desc-yf">Mileage and fuel reports</div>
@@ -815,7 +820,7 @@
       </div>
 
       <div class="tile" data-report="einnahmen">
-        <div class="tile-icon">💰</div>
+        <div class="tile-icon"><img src="static/icons/money.svg" alt="" width="28" height="28"></div>
         <div class="tile-content">
           <div class="tile-title">EINNAHMEN</div>
           <div class="tile-desc" id="desc-einnahmen">Total revenue overview</div>
@@ -824,7 +829,7 @@
       </div>
 
       <div class="tile" data-report="bonus">
-        <div class="tile-icon">🎯</div>
+        <div class="tile-icon"><img src="static/icons/target.svg" alt="" width="28" height="28"></div>
         <div class="tile-content">
           <div class="tile-title">BONUS</div>
           <div class="tile-desc" id="desc-bonus">Bonus calculations</div>
@@ -1503,14 +1508,16 @@
       // Access check
       $("accessMsg").textContent = L("checking");
       $("accessBadge").textContent = "...";
-      $("accessIcon").textContent = "🔐";
-      
+      $("accessIcon").innerHTML = '<img src="static/icons/lock.svg" alt="" width="20" height="20">';
+
       const ok = await checkAccessServer();
 
       $("accessMsg").textContent = ok ? L("accessOk") : L("accessNo", ADMIN);
       $("accessBadge").textContent = ok ? L("ok") : L("no");
       $("accessBadge").className = "badge " + (ok ? "ok" : "no");
-      $("accessIcon").textContent = ok ? "✓" : "✕";
+      $("accessIcon").innerHTML = ok
+        ? '<img src="static/icons/check.svg" alt="" width="20" height="20">'
+        : '<img src="static/icons/close.svg" alt="" width="20" height="20">';
 
       if (!ok) $("menu").classList.add("disabled");
 

@@ -1,0 +1,25 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 48 48" fill="none">
+  <defs>
+    <linearGradient id="g1" x1="4" y1="4" x2="44" y2="44" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#3BB3FF"/>
+      <stop offset="1" stop-color="#1B2B8F"/>
+    </linearGradient>
+    <linearGradient id="g2" x1="4" y1="4" x2="44" y2="44" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#35F0A0"/>
+      <stop offset="1" stop-color="#7B4DFF"/>
+    </linearGradient>
+  </defs>
+  <!-- Trailer body -->
+  <rect x="2" y="14" width="28" height="18" rx="2" fill="url(#g1)" opacity=".85"/>
+  <!-- Cab -->
+  <path d="M30 20h10a4 4 0 0 1 4 4v8H30V20z" fill="url(#g2)" opacity=".9"/>
+  <!-- Windshield -->
+  <rect x="33" y="22" width="7" height="5" rx="1" fill="#fff" opacity=".2"/>
+  <!-- Wheels -->
+  <circle cx="12" cy="34" r="4" fill="#0D1B5A" opacity=".7"/>
+  <circle cx="12" cy="34" r="2" fill="url(#g2)" opacity=".5"/>
+  <circle cx="38" cy="34" r="4" fill="#0D1B5A" opacity=".7"/>
+  <circle cx="38" cy="34" r="2" fill="url(#g2)" opacity=".5"/>
+  <!-- Underline -->
+  <line x1="2" y1="38" x2="46" y2="38" stroke="#0D1B5A" stroke-width="1" opacity=".25"/>
+</svg>

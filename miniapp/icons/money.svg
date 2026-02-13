@@ -1,0 +1,22 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 48 48" fill="none">
+  <defs>
+    <linearGradient id="g1" x1="4" y1="4" x2="44" y2="44" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#3BB3FF"/>
+      <stop offset="1" stop-color="#1B2B8F"/>
+    </linearGradient>
+    <linearGradient id="g2" x1="4" y1="4" x2="44" y2="44" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#35F0A0"/>
+      <stop offset="1" stop-color="#7B4DFF"/>
+    </linearGradient>
+  </defs>
+  <!-- Coin back -->
+  <ellipse cx="26" cy="26" rx="16" ry="16" fill="url(#g1)" opacity=".5"/>
+  <!-- Coin front -->
+  <circle cx="22" cy="24" r="16" fill="url(#g1)" opacity=".85"/>
+  <!-- Inner ring -->
+  <circle cx="22" cy="24" r="12" fill="none" stroke="url(#g2)" stroke-width="1.5" opacity=".6"/>
+  <!-- Euro symbol -->
+  <text x="22" y="30" text-anchor="middle" font-family="system-ui,sans-serif" font-size="18" font-weight="700" fill="url(#g2)" opacity=".9">€</text>
+  <!-- Highlight -->
+  <ellipse cx="17" cy="18" rx="4" ry="3" fill="#fff" opacity=".12"/>
+</svg>
