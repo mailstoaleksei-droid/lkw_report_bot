@@ -1,5 +1,6 @@
 // Cloudflare Pages Worker (advanced mode) for API routes.
 // This file works with direct "Upload assets" deployments.
+import { PDFDocument, StandardFonts, rgb } from "pdf-lib";
 
 const REPORTS = [
   {
@@ -438,6 +439,181 @@ function formatBerichtLines(rows) {
   return lines;
 }
 
+function drawBerichtTableHeader({ page, boldFont, startX, y, colDefs }) {
+  const headerBg = rgb(0.92, 0.96, 1);
+  const borderColor = rgb(0.72, 0.82, 0.95);
+  const textColor = rgb(0.1, 0.2, 0.35);
+  const rowHeight = 18;
+  const tableWidth = colDefs.reduce((s, c) => s + c.width, 0);
+
+  page.drawRectangle({
+    x: startX,
+    y: y - rowHeight + 2,
+    width: tableWidth,
+    height: rowHeight,
+    color: headerBg,
+    borderColor,
+    borderWidth: 1,
+  });
+
+  let x = startX;
+  for (const col of colDefs) {
+    page.drawText(col.label, {
+      x: x + 4,
+      y: y - 12,
+      size: 9,
+      font: boldFont,
+      color: textColor,
+    });
+    x += col.width;
+    if (x < startX + tableWidth - 1) {
+      page.drawLine({
+        start: { x, y: y - rowHeight + 2 },
+        end: { x, y: y + 2 },
+        thickness: 1,
+        color: borderColor,
+      });
+    }
+  }
+  return { nextY: y - rowHeight };
+}
+
+async function buildBerichtPdfWithPdfLib({ year, week, userId, rows }) {
+  const pdfDoc = await PDFDocument.create();
+  const font = await pdfDoc.embedFont(StandardFonts.Helvetica);
+  const boldFont = await pdfDoc.embedFont(StandardFonts.HelveticaBold);
+
+  const pageSize = [595, 842]; // A4 portrait
+  const margin = 36;
+  const lineHeight = 14;
+  const startX = margin;
+  const colDefs = [
+    { key: "week", label: "Week", width: 65, align: "left" },
+    { key: "company", label: "Company", width: 270, align: "left" },
+    { key: "container", label: "Container", width: 70, align: "right" },
+    { key: "planen", label: "Planen", width: 65, align: "right" },
+    { key: "total", label: "Total", width: 65, align: "right" },
+  ];
+  const tableWidth = colDefs.reduce((s, c) => s + c.width, 0);
+  const tableBorder = rgb(0.78, 0.86, 0.96);
+  const textColor = rgb(0.08, 0.16, 0.28);
+
+  let page = pdfDoc.addPage(pageSize);
+  let y = page.getHeight() - margin;
+  let rowIndex = 0;
+
+  const drawPageHeader = () => {
+    page.drawText(`Bericht (Trucks by Company) ${year}/W${pad2(week)}`, {
+      x: margin,
+      y,
+      size: 14,
+      font: boldFont,
+      color: textColor,
+    });
+    y -= 18;
+    page.drawText(`Generated: ${new Date().toISOString()} UTC | User: ${userId}`, {
+      x: margin,
+      y,
+      size: 9,
+      font,
+      color: rgb(0.24, 0.32, 0.44),
+    });
+    y -= 16;
+    const header = drawBerichtTableHeader({ page, boldFont, startX, y, colDefs });
+    y = header.nextY - 4;
+  };
+
+  drawPageHeader();
+
+  const totals = { container: 0, planen: 0, total: 0 };
+
+  for (const row of rows) {
+    const wk = `${toIntSafe(row.iso_year)}-${pad2(toIntSafe(row.iso_week))}`;
+    const data = {
+      week: wk,
+      company: String(row.company_name || ""),
+      container: toIntSafe(row.container_count),
+      planen: toIntSafe(row.planen_count),
+      total: toIntSafe(row.total_count),
+    };
+    totals.container += data.container;
+    totals.planen += data.planen;
+    totals.total += data.total;
+
+    if (y < margin + lineHeight + 24) {
+      page = pdfDoc.addPage(pageSize);
+      y = page.getHeight() - margin;
+      drawPageHeader();
+    }
+
+    if (rowIndex % 2 === 1) {
+      page.drawRectangle({
+        x: startX,
+        y: y - lineHeight + 3,
+        width: tableWidth,
+        height: lineHeight,
+        color: rgb(0.97, 0.985, 1),
+      });
+    }
+
+    let x = startX;
+    for (const col of colDefs) {
+      const raw = data[col.key];
+      const value = col.align === "right" ? String(raw) : String(raw || "");
+      const size = 9;
+      const w = font.widthOfTextAtSize(value, size);
+      const tx = col.align === "right" ? x + col.width - 5 - w : x + 4;
+
+      page.drawText(value, {
+        x: tx,
+        y: y - 9,
+        size,
+        font,
+        color: textColor,
+      });
+      x += col.width;
+    }
+
+    page.drawLine({
+      start: { x: startX, y: y - lineHeight + 3 },
+      end: { x: startX + tableWidth, y: y - lineHeight + 3 },
+      thickness: 0.5,
+      color: tableBorder,
+    });
+
+    y -= lineHeight;
+    rowIndex += 1;
+  }
+
+  if (y < margin + 22) {
+    page = pdfDoc.addPage(pageSize);
+    y = page.getHeight() - margin;
+    drawPageHeader();
+  }
+
+  page.drawRectangle({
+    x: startX,
+    y: y - 14,
+    width: tableWidth,
+    height: 16,
+    color: rgb(0.9, 0.95, 1),
+    borderColor: tableBorder,
+    borderWidth: 1,
+  });
+  page.drawText(
+    `TOTALS: Container ${totals.container} | Planen ${totals.planen} | Total ${totals.total}`,
+    {
+      x: startX + 4,
+      y: y - 4,
+      size: 9,
+      font: boldFont,
+      color: textColor,
+    },
+  );
+
+  return pdfDoc.save();
+}
+
 async function fetchImageByUrl(url) {
   if (!url) return null;
   try {
@@ -694,12 +870,29 @@ async function handleGenerate(request, env) {
 
   const generatedAt = new Date().toISOString();
   const filename = `bericht_${valid.year}_w${pad2(valid.week)}.pdf`;
-  const lines = formatBerichtLines(rows);
-  const pdfBytes = buildSimplePdf({
-    title: `Bericht (Trucks by Company) - ${valid.year}/W${pad2(valid.week)}`,
-    subtitle: `Generated at ${generatedAt} UTC, user ${auth.userId}`,
-    lines,
-  });
+  let pdfBytes;
+  let pdfEngine = "pdf-lib";
+  try {
+    pdfBytes = await buildBerichtPdfWithPdfLib({
+      year: valid.year,
+      week: valid.week,
+      userId: auth.userId,
+      rows,
+    });
+  } catch (err) {
+    // Keep generation available even if pdf-lib fails on edge runtime.
+    pdfEngine = "legacy-fallback";
+    const lines = formatBerichtLines(rows);
+    pdfBytes = buildSimplePdf({
+      title: `Bericht (Trucks by Company) - ${valid.year}/W${pad2(valid.week)}`,
+      subtitle: `Generated at ${generatedAt} UTC, user ${auth.userId}`,
+      lines: [
+        `PDF engine fallback activated (${String(err?.message || "unknown")})`,
+        "",
+        ...lines,
+      ],
+    });
+  }
 
   return new Response(pdfBytes, {
     status: 200,
@@ -709,6 +902,7 @@ async function handleGenerate(request, env) {
       "Cache-Control": "no-store",
       "X-Report-Type": "bericht",
       "X-Source": "sql-neon",
+      "X-PDF-Engine": pdfEngine,
     },
   });
 }
