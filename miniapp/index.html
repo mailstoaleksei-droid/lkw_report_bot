@@ -23,6 +23,7 @@
       --glowG: rgba(53, 240, 210, .28);
       --glowV: rgba(142, 114, 255, .24);
       --glowB: rgba(96, 190, 255, .28);
+      --tile-icon-tone: rgba(236,249,255,.86);
       --r16:16px;
       --r18:18px;
       --r22:22px;
@@ -351,7 +352,7 @@
       background:
         linear-gradient(145deg, rgba(246,253,255,.72), rgba(212,236,255,.52)),
         rgba(194,229,255,.30);
-      border:1px solid rgba(236,249,255,.86);
+      border:1px solid var(--tile-icon-tone);
       display:grid;
       place-items:center;
       font-size:24px;
@@ -390,47 +391,30 @@
     }
     
     .tile-arrow{
-      width:32px;
-      height:32px;
-      border-radius:10px;
-      background: linear-gradient(145deg, rgba(225,244,255,.45), rgba(171,220,255,.24));
-      border:1px solid rgba(214,240,255,.60);
-      display:grid;
-      place-items:center;
+      width:14px;
+      height:14px;
+      border-radius:0;
+      background:none;
+      border:0;
+      display:block;
       font-size:0;
       flex-shrink:0;
       z-index:1;
       transition: transform .2s ease;
       position:relative;
-      box-shadow: 0 6px 14px rgba(15,42,92,.18);
+      box-shadow:none;
     }
 
     .tile-arrow::before{
       content:"";
       position:absolute;
-      left:50%;
-      top:50%;
-      width:11px;
-      height:11px;
-      margin-left:-2px;
-      margin-top:-6px;
-      border-top:2.6px solid rgba(239,249,255,.98);
-      border-right:2.6px solid rgba(239,249,255,.98);
-      transform: rotate(45deg);
-      border-radius:1px;
+      inset:0;
+      clip-path: polygon(0 0, 100% 50%, 0 100%);
+      background: var(--tile-icon-tone);
     }
 
     .tile-arrow::after{
-      content:"";
-      position:absolute;
-      left:50%;
-      top:50%;
-      width:14px;
-      height:2.8px;
-      margin-left:-8px;
-      margin-top:-1.4px;
-      background: rgba(239,249,255,.98);
-      border-radius:2px;
+      content:none;
     }
     
     .tile:active .tile-arrow{
