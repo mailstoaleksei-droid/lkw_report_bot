@@ -240,7 +240,7 @@ Reports are generated from PostgreSQL data in milliseconds via SQL.
   - Verified on live: `https://groo-lkw-miniapp.pages.dev/api/meta` returns JSON (HTTP 200)
   - Result: Mini App shows data freshness
 
-- [~] **2.4** POST /api/generate
+- [x] **2.4** POST /api/generate
   - Validate Telegram initData (HMAC-SHA256)
   - Run SQL query based on report_type + params
   - Generate PDF (pdf-lib or Browser Rendering API)
@@ -248,9 +248,8 @@ Reports are generated from PostgreSQL data in milliseconds via SQL.
   - Implemented in `miniapp/_worker.js` for `bericht`: SQL query to Neon HTTP endpoint + PDF response (`application/pdf`)
   - Mini App updated in `miniapp/index.html` to handle PDF response from `/api/generate`
   - Security path enforced (valid Telegram `initData` + whitelist + rate limit)
-  - Current blocker: Cloudflare Production secret `DATABASE_URL` is not set on project `groo-lkw-miniapp-git`
-  - Live current response without secret: `500 DB_NOT_CONFIGURED`
-  - Pending: add `DATABASE_URL` secret in Cloudflare and run one redeploy to finalize this step
+  - `DATABASE_URL` secret added in Cloudflare Production + deployment re-run
+  - Live verification (2026-02-17): `POST /api/generate` returns `200 application/pdf`, filename `bericht_2026_w08.pdf`
   - Result: reports generated in seconds from SQL, no Excel
 
 - [x] **2.5** Telegram initData validation in Worker
@@ -268,7 +267,7 @@ Reports are generated from PostgreSQL data in milliseconds via SQL.
   - Implemented in `miniapp/_worker.js`: in-memory per-user cooldown with `429 RATE_LIMITED`
   - Supports env override: `API_COOLDOWN_SEC` (default 5)
   - Verified on live endpoint:
-    - 1st valid request -> `501 NOT_IMPLEMENTED`
+    - 1st valid request -> `200 application/pdf`
     - 2nd immediate request -> `429 RATE_LIMITED`, `retry_after_sec=5`
   - Result: protection from spam
 
