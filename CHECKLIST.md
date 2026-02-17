@@ -245,10 +245,12 @@ Reports are generated from PostgreSQL data in milliseconds via SQL.
   - Run SQL query based on report_type + params
   - Generate PDF (pdf-lib or Browser Rendering API)
   - Return PDF file or download URL
-  - Implemented endpoint in `miniapp/_worker.js` with payload validation (`report_type`, `year/week`)
-  - Current behavior: returns controlled JSON with `501 NOT_IMPLEMENTED` (instead of 404)
-  - Security path now enforced by step 2.5 (valid Telegram `initData` required)
-  - Pending: real SQL execution + PDF generation + delivery contract
+  - Implemented in `miniapp/_worker.js` for `bericht`: SQL query to Neon HTTP endpoint + PDF response (`application/pdf`)
+  - Mini App updated in `miniapp/index.html` to handle PDF response from `/api/generate`
+  - Security path enforced (valid Telegram `initData` + whitelist + rate limit)
+  - Current blocker: Cloudflare Production secret `DATABASE_URL` is not set on project `groo-lkw-miniapp-git`
+  - Live current response without secret: `500 DB_NOT_CONFIGURED`
+  - Pending: add `DATABASE_URL` secret in Cloudflare and run one redeploy to finalize this step
   - Result: reports generated in seconds from SQL, no Excel
 
 - [x] **2.5** Telegram initData validation in Worker
