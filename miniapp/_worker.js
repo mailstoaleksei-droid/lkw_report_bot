@@ -61,6 +61,36 @@ const REPORTS = [
 const REPORT_MAP = new Map(REPORTS.map((r) => [r.id, r]));
 const USER_COOLDOWNS = new Map();
 let LAST_COOLDOWN_CLEANUP_MS = 0;
+const BERICHT_SQL = `
+WITH ref AS (
+  SELECT to_date($1::text || '-W' || lpad($2::text, 2, '0') || '-1', 'IYYY-"W"IW-ID')::date AS week_monday
+), weeks AS (
+  SELECT
+    extract(isoyear FROM (week_monday - (g.n * interval '7 day')))::int AS iso_year,
+    extract(week FROM (week_monday - (g.n * interval '7 day')))::int AS iso_week,
+    (week_monday - (g.n * interval '7 day'))::date AS week_start
+  FROM ref
+  CROSS JOIN generate_series(4,0,-1) AS g(n)
+), base AS (
+  SELECT
+    w.iso_year,
+    w.iso_week,
+    w.week_start,
+    coalesce(c.name, 'Unknown') AS company_name,
+    COUNT(DISTINCT CASE WHEN s.assignment_type='assignment' AND t.truck_type='Container' THEN s.truck_id END)::int AS container_count,
+    COUNT(DISTINCT CASE WHEN s.assignment_type='assignment' AND t.truck_type='Planen' THEN s.truck_id END)::int AS planen_count,
+    COUNT(DISTINCT CASE WHEN s.assignment_type='assignment' THEN s.truck_id END)::int AS total_count
+  FROM weeks w
+  LEFT JOIN schedules s ON s.iso_year = w.iso_year AND s.iso_week = w.iso_week
+  LEFT JOIN trucks t ON t.id = s.truck_id
+  LEFT JOIN companies c ON c.id = coalesce(s.company_id, t.company_id)
+  GROUP BY w.iso_year, w.iso_week, w.week_start, coalesce(c.name, 'Unknown')
+)
+SELECT iso_year, iso_week, week_start, company_name, container_count, planen_count, total_count
+FROM base
+WHERE company_name <> 'Unknown'
+ORDER BY week_start, company_name;
+`;
 
 function toBool(value, defaultValue = false) {
   if (typeof value !== "string") return defaultValue;
@@ -227,6 +257,178 @@ function parseTelegramUserFromInitData(initDataRaw) {
   } catch {
     return null;
   }
+}
+
+function getDbConnectionString(env) {
+  const hd = env?.HYPERDRIVE;
+  if (hd && typeof hd.connectionString === "string" && hd.connectionString.trim()) {
+    return hd.connectionString.trim();
+  }
+  const fallback = String(env.DATABASE_URL || "").trim();
+  return fallback || "";
+}
+
+function getNeonSqlEndpoint(connectionString) {
+  const u = new URL(connectionString);
+  const host = String(u.hostname || "");
+  const dot = host.indexOf(".");
+  if (dot <= 0 || dot >= host.length - 1) {
+    throw new Error("Invalid database host in connection string");
+  }
+  // Neon serverless HTTP endpoint is hosted on api.<rest_of_hostname>/sql
+  const apiHost = `api.${host.slice(dot + 1)}`;
+  return `https://${apiHost}/sql`;
+}
+
+async function queryNeon(connectionString, query, params = []) {
+  const endpoint = getNeonSqlEndpoint(connectionString);
+  const payload = { query, params };
+  const resp = await fetch(endpoint, {
+    method: "POST",
+    headers: {
+      "Neon-Connection-String": connectionString,
+      "Neon-Raw-Text-Output": "true",
+      "Neon-Array-Mode": "true",
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify(payload),
+  });
+
+  if (!resp.ok) {
+    let message = `SQL request failed with status ${resp.status}`;
+    try {
+      const maybeJson = await resp.json();
+      if (maybeJson?.message) message = maybeJson.message;
+    } catch {
+      const text = await resp.text().catch(() => "");
+      if (text) message = text.slice(0, 500);
+    }
+    throw new Error(message);
+  }
+
+  const data = await resp.json();
+  const fields = Array.isArray(data?.fields) ? data.fields : [];
+  const names = fields.map((f) => String(f?.name || ""));
+  const rowsRaw = Array.isArray(data?.rows) ? data.rows : [];
+  const rows = rowsRaw.map((row) => {
+    if (!Array.isArray(row)) return {};
+    const obj = {};
+    for (let i = 0; i < names.length; i += 1) {
+      obj[names[i]] = row[i] ?? null;
+    }
+    return obj;
+  });
+  return { rows, rowCount: Number.parseInt(String(data?.rowCount ?? rows.length), 10) || rows.length };
+}
+
+function toIntSafe(value, fallback = 0) {
+  const n = Number.parseInt(String(value ?? ""), 10);
+  return Number.isFinite(n) ? n : fallback;
+}
+
+function pad2(value) {
+  return String(value).padStart(2, "0");
+}
+
+function normalizeAscii(text) {
+  return String(text || "")
+    .replaceAll("ä", "ae")
+    .replaceAll("ö", "oe")
+    .replaceAll("ü", "ue")
+    .replaceAll("Ä", "Ae")
+    .replaceAll("Ö", "Oe")
+    .replaceAll("Ü", "Ue")
+    .replaceAll("ß", "ss")
+    .replace(/[^\x20-\x7E]/g, "?");
+}
+
+function escapePdfText(text) {
+  return normalizeAscii(text)
+    .replaceAll("\\", "\\\\")
+    .replaceAll("(", "\\(")
+    .replaceAll(")", "\\)");
+}
+
+function buildSimplePdf({ title, subtitle, lines }) {
+  const commands = [];
+  let y = 810;
+
+  commands.push("BT");
+  commands.push("/F1 16 Tf");
+  commands.push(`40 ${y} Td`);
+  commands.push(`(${escapePdfText(title)}) Tj`);
+  commands.push("ET");
+  y -= 22;
+
+  commands.push("BT");
+  commands.push("/F1 10 Tf");
+  commands.push(`40 ${y} Td`);
+  commands.push(`(${escapePdfText(subtitle)}) Tj`);
+  commands.push("ET");
+  y -= 20;
+
+  for (const line of lines) {
+    if (y < 40) break;
+    commands.push("BT");
+    commands.push("/F1 9 Tf");
+    commands.push(`40 ${y} Td`);
+    commands.push(`(${escapePdfText(line)}) Tj`);
+    commands.push("ET");
+    y -= 13;
+  }
+
+  const content = `${commands.join("\n")}\n`;
+  const objects = [
+    "<< /Type /Catalog /Pages 2 0 R >>",
+    "<< /Type /Pages /Kids [3 0 R] /Count 1 >>",
+    "<< /Type /Page /Parent 2 0 R /MediaBox [0 0 595 842] /Resources << /Font << /F1 4 0 R >> >> /Contents 5 0 R >>",
+    "<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>",
+    `<< /Length ${content.length} >>\nstream\n${content}endstream`,
+  ];
+
+  let pdf = "%PDF-1.4\n";
+  const offsets = [0];
+  for (let i = 0; i < objects.length; i += 1) {
+    offsets.push(pdf.length);
+    pdf += `${i + 1} 0 obj\n${objects[i]}\nendobj\n`;
+  }
+
+  const xrefOffset = pdf.length;
+  pdf += `xref\n0 ${objects.length + 1}\n`;
+  pdf += "0000000000 65535 f \n";
+  for (let i = 1; i <= objects.length; i += 1) {
+    pdf += `${String(offsets[i]).padStart(10, "0")} 00000 n \n`;
+  }
+  pdf += `trailer\n<< /Size ${objects.length + 1} /Root 1 0 R >>\nstartxref\n${xrefOffset}\n%%EOF`;
+
+  return new TextEncoder().encode(pdf);
+}
+
+function formatBerichtLines(rows) {
+  const lines = [];
+  lines.push("WEEK   | COMPANY                       | CONT | PLAN | TOTAL");
+  lines.push("-------+-------------------------------+------+------+------");
+  for (const row of rows) {
+    const week = `${toIntSafe(row.iso_year)}-${pad2(toIntSafe(row.iso_week))}`;
+    const company = String(row.company_name || "").slice(0, 29).padEnd(29, " ");
+    const cont = String(toIntSafe(row.container_count)).padStart(4, " ");
+    const plan = String(toIntSafe(row.planen_count)).padStart(4, " ");
+    const total = String(toIntSafe(row.total_count)).padStart(5, " ");
+    lines.push(`${week} | ${company} | ${cont} | ${plan} | ${total}`);
+  }
+
+  const totals = rows.reduce(
+    (acc, row) => {
+      acc.cont += toIntSafe(row.container_count);
+      acc.plan += toIntSafe(row.planen_count);
+      acc.total += toIntSafe(row.total_count);
+      return acc;
+    },
+    { cont: 0, plan: 0, total: 0 },
+  );
+  lines.push("");
+  lines.push(`TOTALS: container=${totals.cont}, planen=${totals.plan}, total=${totals.total}`);
+  return lines;
 }
 
 async function fetchImageByUrl(url) {
@@ -441,20 +643,67 @@ async function handleGenerate(request, env) {
     );
   }
 
-  // Phase 2.4 MVP: endpoint exists with strict validation and stable JSON contract.
-  // Real SQL->PDF generation is implemented in follow-up steps (2.5+3.x).
-  return json(
-    {
-      ok: false,
-      error: "Cloud SQL report generation is not enabled yet",
-      code: "NOT_IMPLEMENTED",
-      report_type: valid.reportType,
-      user_id: auth.userId,
-      request_id: crypto.randomUUID(),
+  if (valid.reportType !== "bericht") {
+    return json(
+      {
+        ok: false,
+        error: `Report ${valid.reportType} is not implemented yet`,
+        code: "NOT_IMPLEMENTED",
+      },
+      501,
+      { "Cache-Control": "no-store" },
+    );
+  }
+
+  const dbConnectionString = getDbConnectionString(env);
+  if (!dbConnectionString) {
+    return json(
+      {
+        ok: false,
+        error: "Database connection is not configured",
+        code: "DB_NOT_CONFIGURED",
+      },
+      500,
+      { "Cache-Control": "no-store" },
+    );
+  }
+
+  let rows;
+  try {
+    const result = await queryNeon(dbConnectionString, BERICHT_SQL, [valid.year, valid.week]);
+    rows = result.rows;
+  } catch (err) {
+    return json(
+      {
+        ok: false,
+        error: "Failed to execute SQL query",
+        code: "SQL_ERROR",
+        details: String(err?.message || err || "unknown error"),
+      },
+      500,
+      { "Cache-Control": "no-store" },
+    );
+  }
+
+  const generatedAt = new Date().toISOString();
+  const filename = `bericht_${valid.year}_w${pad2(valid.week)}.pdf`;
+  const lines = formatBerichtLines(rows);
+  const pdfBytes = buildSimplePdf({
+    title: `Bericht (Trucks by Company) - ${valid.year}/W${pad2(valid.week)}`,
+    subtitle: `Generated at ${generatedAt} UTC, user ${auth.userId}`,
+    lines,
+  });
+
+  return new Response(pdfBytes, {
+    status: 200,
+    headers: {
+      "Content-Type": "application/pdf",
+      "Content-Disposition": `attachment; filename=\"${filename}\"`,
+      "Cache-Control": "no-store",
+      "X-Report-Type": "bericht",
+      "X-Source": "sql-neon",
     },
-    501,
-    { "Cache-Control": "no-store" },
-  );
+  });
 }
 
 export default {

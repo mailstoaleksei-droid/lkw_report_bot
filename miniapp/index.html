@@ -1222,9 +1222,30 @@
             ...payload,
           }),
         });
+        const ct = (resp.headers.get("content-type") || "").toLowerCase();
+        if (resp.ok && ct.includes("application/pdf")) {
+          const blob = await resp.blob();
+          const disposition = String(resp.headers.get("content-disposition") || "");
+          const filenameMatch = disposition.match(/filename=\"?([^\";]+)\"?/i);
+          const filename = filenameMatch?.[1] || `${reportType}.pdf`;
+
+          const href = URL.createObjectURL(blob);
+          const a = document.createElement("a");
+          a.href = href;
+          a.download = filename;
+          a.style.display = "none";
+          document.body.appendChild(a);
+          a.click();
+          a.remove();
+          URL.revokeObjectURL(href);
+
+          haptic("success");
+          showToast(L("toastSuccess"));
+          closeSheet();
+          return true;
+        }
 
         const data = await resp.json().catch(() => ({}));
-
         if (resp.ok && data.ok) {
           haptic("success");
           showToast(L("toastSuccess"));
@@ -1232,7 +1253,6 @@
           return true;
         }
 
-        const ct = (resp.headers.get("content-type") || "").toLowerCase();
         const backendNotReady = ct.includes("text/html");
         haptic("error");
         showToast(data.error || (backendNotReady ? L("backendNotReady") : "Error"));
