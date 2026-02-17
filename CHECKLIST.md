@@ -84,11 +84,12 @@ Reports are generated from PostgreSQL data in milliseconds via SQL.
 
 - [x] **0.3.2** UI contrast + navigation polish
   - Removed violet glow near right arrows in report tiles
-  - Reworked tile arrows to bold modern style
+  - Reworked tile arrows to minimal right-pointing triangles (no box)
+  - Arrow color aligned with icon-tile tone for consistent visual language
   - Lightened icon containers for stronger icon contrast
   - Added bottom button "Open full screen"
   - Added avatar proxy endpoint (`GET /api/avatar`) in `miniapp/_worker.js` to improve Telegram avatar loading without exposing bot token
-  - Deployed via Git auto-deploy (`main`, commit `b275bb8`)
+  - Deployed via Git auto-deploy (`main`, commits `b275bb8`, `a910d5f`)
   - Result: cleaner cards, better readability, fullscreen action, improved avatar fallback path
 
 - [-] **0.4** UPS for PC (deferred)
