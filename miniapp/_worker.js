@@ -1,6 +1,6 @@
 // Cloudflare Pages Worker (advanced mode) for API routes.
 // This file works with direct "Upload assets" deployments.
-import { PDFDocument, StandardFonts, rgb } from "pdf-lib";
+import { PDFDocument, StandardFonts, rgb } from "./vendor/pdf-lib.esm.js";
 
 const REPORTS = [
   {

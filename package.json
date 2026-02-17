@@ -1,9 +1,0 @@
-{
-  "name": "lkw-report-bot-pages-functions",
-  "private": true,
-  "version": "1.0.0",
-  "description": "Cloudflare Pages Functions dependencies for miniapp worker",
-  "dependencies": {
-    "pdf-lib": "^1.17.1"
-  }
-}
