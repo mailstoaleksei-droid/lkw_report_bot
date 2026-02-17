@@ -260,12 +260,16 @@ function parseTelegramUserFromInitData(initDataRaw) {
 }
 
 function getDbConnectionString(env) {
+  const fallback = String(env.DATABASE_URL || "").trim();
+  if (fallback) return fallback;
+
   const hd = env?.HYPERDRIVE;
   if (hd && typeof hd.connectionString === "string" && hd.connectionString.trim()) {
-    return hd.connectionString.trim();
+    const fromHyperdrive = hd.connectionString.trim();
+    // Neon HTTP SQL endpoint requires original Neon host.
+    if (fromHyperdrive.includes(".neon.tech")) return fromHyperdrive;
   }
-  const fallback = String(env.DATABASE_URL || "").trim();
-  return fallback || "";
+  return "";
 }
 
 function getNeonSqlEndpoint(connectionString) {
@@ -302,6 +306,9 @@ async function queryNeon(connectionString, query, params = []) {
     } catch {
       const text = await resp.text().catch(() => "");
       if (text) message = text.slice(0, 500);
+    }
+    if (resp.status === 530) {
+      message = "Neon HTTP endpoint is unreachable. Set DATABASE_URL secret with original Neon connection string.";
     }
     throw new Error(message);
   }
