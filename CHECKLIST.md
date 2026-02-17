@@ -275,9 +275,12 @@ Reports are generated from PostgreSQL data in milliseconds via SQL.
 
 ## Phase 3 — PDF Generation
 
-- [ ] **3.1** Prototype with pdf-lib (JavaScript)
+- [x] **3.1** Prototype with pdf-lib (JavaScript)
   - Build one report (Bericht) as PDF using pdf-lib in Worker
   - Test: tables, headers, formatting, German characters
+  - Implemented in `miniapp/_worker.js` using local vendored `miniapp/vendor/pdf-lib.esm.js`
+  - `POST /api/generate` now returns PDF with header `X-PDF-Engine: pdf-lib` (live verified 2026-02-17)
+  - Added safe fallback to legacy generator if pdf-lib runtime fails
   - Result: evaluate if quality is sufficient
 
 - [ ] **3.2** Fallback: Cloudflare Browser Rendering API
