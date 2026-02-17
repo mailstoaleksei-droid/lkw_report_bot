@@ -9,20 +9,20 @@
   <script src="https://telegram.org/js/telegram-web-app.js"></script>
   <style>
     :root{
-      --bg0:#050914;
-      --bg1:#071428;
-      --panel:rgba(255,255,255,.06);
-      --panel2:rgba(255,255,255,.09);
-      --border:rgba(255,255,255,.12);
-      --text:#EAF0FF;
-      --muted:rgba(234,240,255,.68);
+      --bg0:#0d2550;
+      --bg1:#153971;
+      --panel:rgba(255,255,255,.12);
+      --panel2:rgba(255,255,255,.18);
+      --border:rgba(170,220,255,.28);
+      --text:#F4F8FF;
+      --muted:rgba(232,243,255,.78);
       --navy:#0b1730;
       --green:#0b3b2a;
-      --violet:#5c3bff;
-      --accent:#00ffaa;
-      --glowG: rgba(0, 255, 170, .22);
-      --glowV: rgba(140, 90, 255, .22);
-      --glowB: rgba(90, 160, 255, .18);
+      --violet:#6a63ff;
+      --accent:#35f0d2;
+      --glowG: rgba(53, 240, 210, .28);
+      --glowV: rgba(142, 114, 255, .24);
+      --glowB: rgba(96, 190, 255, .28);
       --r16:16px;
       --r18:18px;
       --r22:22px;
@@ -41,9 +41,9 @@
       color:var(--text);
       font-family: -apple-system, BlinkMacSystemFont, 'SF Pro Display', ui-sans-serif, system-ui, Segoe UI, Roboto, Arial, sans-serif;
       background:
-        radial-gradient(900px 600px at 15% 10%, rgba(92,59,255,.20), transparent 60%),
-        radial-gradient(800px 560px at 85% 18%, rgba(0,255,170,.14), transparent 55%),
-        radial-gradient(900px 650px at 50% 105%, rgba(90,160,255,.10), transparent 60%),
+        radial-gradient(1100px 700px at 12% 8%, rgba(130,110,255,.30), transparent 62%),
+        radial-gradient(980px 660px at 88% 16%, rgba(53,240,210,.24), transparent 58%),
+        radial-gradient(1050px 760px at 50% 108%, rgba(124,205,255,.24), transparent 65%),
         linear-gradient(180deg, var(--bg1), var(--bg0));
       -webkit-font-smoothing: antialiased;
       -moz-osx-font-smoothing: grayscale;
@@ -62,20 +62,20 @@
       content:"";
       position:absolute; inset:-20%;
       background:
-        repeating-linear-gradient(135deg, rgba(255,255,255,.03) 0 1px, transparent 1px 18px),
-        repeating-linear-gradient(45deg, rgba(255,255,255,.02) 0 1px, transparent 1px 22px);
+        repeating-linear-gradient(135deg, rgba(215,238,255,.08) 0 1px, transparent 1px 18px),
+        repeating-linear-gradient(45deg, rgba(170,223,255,.05) 0 1px, transparent 1px 22px);
       filter: blur(.2px);
       transform: rotate(-6deg);
-      opacity:.35;
+      opacity:.42;
     }
     .bg-geo::after{
       content:"";
       position:absolute; inset:0;
       background:
-        radial-gradient(700px 500px at 20% 30%, rgba(0,255,170,.12), transparent 55%),
-        radial-gradient(700px 520px at 80% 40%, rgba(92,59,255,.16), transparent 55%),
-        radial-gradient(900px 700px at 50% 110%, rgba(255,255,255,.06), transparent 65%);
-      opacity:.55;
+        radial-gradient(900px 560px at 20% 30%, rgba(53,240,210,.20), transparent 60%),
+        radial-gradient(860px 620px at 80% 40%, rgba(130,110,255,.22), transparent 60%),
+        radial-gradient(1100px 760px at 50% 110%, rgba(216,240,255,.14), transparent 70%);
+      opacity:.7;
     }
     .noise{
       position:fixed; inset:0;
@@ -151,11 +151,11 @@
     /* Header card */
     .card{
       border:1px solid var(--border);
-      background: linear-gradient(180deg, rgba(255,255,255,.09), rgba(255,255,255,.04));
+      background: linear-gradient(180deg, rgba(234,247,255,.22), rgba(196,232,255,.10));
       border-radius: var(--r24);
       box-shadow:
-        0 20px 60px rgba(0,0,0,.4),
-        0 0 0 1px rgba(255,255,255,.05) inset;
+        0 24px 60px rgba(3,18,44,.36),
+        0 0 0 1px rgba(255,255,255,.08) inset;
       backdrop-filter: blur(20px);
       -webkit-backdrop-filter: blur(20px);
     }
@@ -213,8 +213,8 @@
       margin: 14px 20px 20px;
       padding: 14px 16px;
       border-radius: var(--r18);
-      border: 1px solid rgba(255,255,255,.10);
-      background: rgba(0,0,0,.20);
+      border: 1px solid rgba(180,225,255,.26);
+      background: linear-gradient(135deg, rgba(255,255,255,.10), rgba(171,230,255,.08));
       display:flex;
       gap:12px;
       align-items:center;
@@ -282,12 +282,12 @@
     
     .tile{
       position:relative;
-      border:1px solid rgba(255,255,255,.14);
+      border:1px solid rgba(177,224,255,.34);
       border-radius: var(--r22);
       background:
-        radial-gradient(800px 160px at 30% 0%, rgba(0,255,170,.08), transparent 60%),
-        radial-gradient(800px 160px at 70% 0%, rgba(92,59,255,.10), transparent 60%),
-        rgba(255,255,255,.06);
+        radial-gradient(900px 220px at 30% -20%, rgba(53,240,210,.18), transparent 65%),
+        radial-gradient(900px 220px at 70% -10%, rgba(130,110,255,.20), transparent 65%),
+        linear-gradient(140deg, rgba(232,246,255,.20), rgba(176,219,255,.11));
       padding: 18px 20px;
       display:flex;
       align-items:center;
@@ -298,13 +298,18 @@
       overflow:hidden;
       min-height:88px;
       -webkit-tap-highlight-color: transparent;
+      box-shadow:
+        0 16px 26px rgba(9,28,70,.22),
+        0 0 0 1px rgba(255,255,255,.08) inset;
     }
     
     .tile::before{
       content:"";
       position:absolute;
       inset:0;
-      background: linear-gradient(135deg, rgba(255,255,255,.05) 0%, transparent 60%);
+      background:
+        linear-gradient(135deg, rgba(255,255,255,.30) 0%, transparent 55%),
+        repeating-linear-gradient(145deg, rgba(167,228,255,.12) 0 1px, transparent 1px 14px);
       opacity:0;
       transition: opacity .2s ease;
     }
@@ -312,23 +317,33 @@
     .tile::after{
       content:"";
       position:absolute; 
-      right:-40px;
-      top:-40px;
-      width:140px; 
-      height:140px;
-      background: radial-gradient(circle, rgba(92,59,255,.15), transparent 65%);
+      right:-34px;
+      top:-34px;
+      width:148px; 
+      height:148px;
+      background:
+        radial-gradient(circle at 40% 40%, rgba(130,110,255,.42), rgba(85,120,255,.06) 62%, transparent 72%),
+        radial-gradient(circle at 65% 62%, rgba(53,240,210,.22), transparent 70%);
       border-radius:50%;
-      opacity:.6;
+      opacity:.75;
       pointer-events:none;
     }
     
     .tile:active{ 
       transform: scale(0.98);
-      border-color: rgba(255,255,255,.20);
+      border-color: rgba(206,238,255,.68);
+      box-shadow:
+        0 8px 16px rgba(9,28,70,.22),
+        0 0 0 1px rgba(214,244,255,.14) inset;
     }
     
     .tile:hover::before{
       opacity:1;
+    }
+
+    .tile:hover{
+      border-color: rgba(200,238,255,.72);
+      transform: translateY(-1px);
     }
     
     .tile-icon{
@@ -336,17 +351,18 @@
       height:54px;
       border-radius:16px;
       background:
-        linear-gradient(135deg, rgba(255,255,255,.12), rgba(255,255,255,.06)),
-        rgba(0,0,0,.15);
-      border:1px solid rgba(255,255,255,.15);
+        linear-gradient(145deg, rgba(210,242,255,.34), rgba(157,209,255,.16)),
+        rgba(9,29,68,.24);
+      border:1px solid rgba(209,238,255,.46);
       display:grid;
       place-items:center;
       font-size:24px;
       flex-shrink:0;
       z-index:1;
       box-shadow:
-        0 8px 20px rgba(0,0,0,.25),
-        0 0 0 1px rgba(255,255,255,.08) inset;
+        0 8px 18px rgba(10,36,84,.25),
+        0 0 0 1px rgba(230,247,255,.20) inset,
+        0 0 22px rgba(76,189,255,.24);
     }
     .tile-icon img{
       width:28px;
@@ -379,7 +395,8 @@
       width:32px;
       height:32px;
       border-radius:10px;
-      background: rgba(255,255,255,.08);
+      background: linear-gradient(145deg, rgba(201,238,255,.30), rgba(154,214,255,.14));
+      border:1px solid rgba(190,232,255,.40);
       display:grid;
       place-items:center;
       font-size:16px;
@@ -398,7 +415,7 @@
       inset:0;
       z-index:1000;
       display:none;
-      background: rgba(5,9,20,.75);
+      background: rgba(12,30,64,.54);
       backdrop-filter: blur(8px);
       -webkit-backdrop-filter: blur(8px);
       animation: fadeIn .3s ease;
@@ -415,13 +432,13 @@
       bottom:0;
       left:0;
       right:0;
-      background: linear-gradient(180deg, rgba(255,255,255,.11), rgba(255,255,255,.07));
+      background: linear-gradient(180deg, rgba(236,248,255,.28), rgba(177,222,255,.16));
       border-radius: 28px 28px 0 0;
-      border:1px solid rgba(255,255,255,.16);
+      border:1px solid rgba(173,224,255,.44);
       border-bottom:0;
       box-shadow: 
-        0 -20px 80px rgba(0,0,0,.5),
-        0 0 0 1px rgba(255,255,255,.06) inset;
+        0 -20px 80px rgba(8,22,58,.44),
+        0 0 0 1px rgba(233,247,255,.18) inset;
       backdrop-filter: blur(30px);
       -webkit-backdrop-filter: blur(30px);
       max-height:85vh;
@@ -484,6 +501,12 @@
       transition: all .2s ease;
       -webkit-tap-highlight-color: transparent;
     }
+
+    .sheet-close img{
+      width:14px;
+      height:14px;
+      display:block;
+    }
     
     .sheet-close:active{
       transform: scale(0.95);
@@ -520,11 +543,12 @@
     .seg{
       padding:10px 18px;
       border-radius:12px;
-      background: rgba(255,255,255,.05);
-      border:1px solid rgba(255,255,255,.10);
+      background:
+        linear-gradient(145deg, rgba(238,250,255,.24), rgba(154,205,255,.10));
+      border:1px solid rgba(183,228,255,.36);
       font-size:14px;
       font-weight:600;
-      color:var(--muted);
+      color:rgba(243,249,255,.88);
       cursor:pointer;
       white-space:nowrap;
       transition: all .2s ease;
@@ -532,12 +556,12 @@
     }
     
     .seg.active{
-      background: linear-gradient(135deg, rgba(92,59,255,.25), rgba(0,255,170,.18));
-      border-color: rgba(255,255,255,.20);
+      background: linear-gradient(135deg, rgba(104,116,255,.34), rgba(53,240,210,.28));
+      border-color: rgba(212,243,255,.60);
       color:var(--text);
       box-shadow: 
-        0 4px 16px rgba(92,59,255,.20),
-        0 0 0 1px rgba(255,255,255,.10) inset;
+        0 6px 18px rgba(84,111,255,.22),
+        0 0 0 1px rgba(233,248,255,.16) inset;
     }
     
     .seg:active{
@@ -566,6 +590,40 @@
     
     .field{
       margin-bottom:18px;
+      position:relative;
+      border-radius:16px;
+      padding:12px 12px 10px;
+      background:
+        linear-gradient(160deg, rgba(236,248,255,.18), rgba(171,220,255,.08));
+      border:1px solid rgba(177,226,255,.32);
+      box-shadow:
+        0 8px 18px rgba(8,28,66,.16),
+        0 0 0 1px rgba(224,246,255,.10) inset;
+      overflow:hidden;
+    }
+
+    .field::before{
+      content:"";
+      position:absolute;
+      top:0;
+      right:0;
+      width:78px;
+      height:78px;
+      background:
+        linear-gradient(135deg, rgba(90,118,255,.32), rgba(53,240,210,.12) 60%, transparent 70%);
+      clip-path: polygon(100% 0, 0 0, 100% 100%);
+      pointer-events:none;
+    }
+
+    .field::after{
+      content:"";
+      position:absolute;
+      left:12px;
+      right:12px;
+      bottom:8px;
+      height:1px;
+      background: linear-gradient(90deg, rgba(53,240,210,.65), rgba(130,110,255,.0));
+      pointer-events:none;
     }
     
     .field label{
@@ -576,6 +634,8 @@
       margin-bottom:10px;
       letter-spacing:.01em;
       opacity:.9;
+      position:relative;
+      z-index:1;
     }
     
     .field select,
@@ -583,33 +643,52 @@
       width:100%;
       padding:14px 16px;
       border-radius:14px;
-      border:1px solid rgba(255,255,255,.14);
-      background: rgba(0,0,0,.20);
+      border:1px solid transparent;
+      background:
+        linear-gradient(135deg, rgba(241,251,255,.28), rgba(172,221,255,.14)) padding-box,
+        linear-gradient(130deg, rgba(203,239,255,.72), rgba(104,117,255,.56)) border-box;
       color:var(--text);
       font-size:15px;
       font-family: inherit;
       transition: all .2s ease;
       -webkit-appearance: none;
       appearance: none;
+      position:relative;
+      z-index:1;
+      box-shadow:
+        0 6px 16px rgba(10,31,74,.20),
+        0 0 0 1px rgba(240,251,255,.10) inset;
     }
     
     .field select{
-      background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='8' fill='%23EAF0FF'%3E%3Cpath d='M1 1l5 5 5-5'/%3E%3C/svg%3E");
-      background-repeat: no-repeat;
-      background-position: right 14px center;
+      background:
+        url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='8' fill='%23EAF0FF'%3E%3Cpath d='M1 1l5 5 5-5'/%3E%3C/svg%3E") no-repeat right 14px center,
+        linear-gradient(135deg, rgba(241,251,255,.28), rgba(172,221,255,.14)) padding-box,
+        linear-gradient(130deg, rgba(203,239,255,.72), rgba(104,117,255,.56)) border-box;
       padding-right:40px;
     }
     
     .field select:focus,
     .field input:focus{
       outline:none;
-      border-color: rgba(0,255,170,.40);
-      background: rgba(0,0,0,.30);
-      box-shadow: 0 0 0 3px rgba(0,255,170,.10);
+      border:1px solid transparent;
+      background:
+        linear-gradient(135deg, rgba(245,252,255,.36), rgba(191,236,255,.20)) padding-box,
+        linear-gradient(130deg, rgba(53,240,210,.95), rgba(130,110,255,.85)) border-box;
+      box-shadow:
+        0 0 0 3px rgba(53,240,210,.18),
+        0 8px 18px rgba(10,31,74,.26);
+    }
+
+    .field select:focus{
+      background:
+        url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='8' fill='%23EAF0FF'%3E%3Cpath d='M1 1l5 5 5-5'/%3E%3C/svg%3E") no-repeat right 14px center,
+        linear-gradient(135deg, rgba(245,252,255,.36), rgba(191,236,255,.20)) padding-box,
+        linear-gradient(130deg, rgba(53,240,210,.95), rgba(130,110,255,.85)) border-box;
     }
     
     .field select option{
-      background: #0b1730;
+      background: #123165;
       color:var(--text);
     }
     
@@ -647,10 +726,10 @@
     }
     
     .btn-primary{
-      background: linear-gradient(135deg, #00ffaa 0%, #00cc88 100%);
-      color: #030611;
+      background: linear-gradient(135deg, #35f0d2 0%, #45b8ff 100%);
+      color: #062041;
       box-shadow: 
-        0 8px 24px rgba(0,255,170,.30),
+        0 8px 24px rgba(69,184,255,.34),
         0 0 0 1px rgba(255,255,255,.15) inset;
     }
     
@@ -721,6 +800,18 @@
       pointer-events:none;
       backdrop-filter: blur(10px);
       -webkit-backdrop-filter: blur(10px);
+      display:flex;
+      align-items:center;
+      gap:10px;
+      white-space: nowrap;
+    }
+
+    .toast::before{
+      content:"";
+      width:16px;
+      height:16px;
+      flex:0 0 16px;
+      background: url("icons/check.svg") no-repeat center / contain;
     }
     
     .toast.show{
@@ -772,7 +863,7 @@
       </div>
       
       <div class="access">
-        <div class="access-icon" id="accessIcon"><img src="static/icons/lock.svg" alt="" width="20" height="20"></div>
+        <div class="access-icon" id="accessIcon"><img src="icons/lock.svg" alt="" width="20" height="20"></div>
         <div class="access-text">
           <div class="access-msg" id="accessMsg">Checking access...</div>
         </div>
@@ -784,7 +875,7 @@
     
     <div class="menu" id="menu">
       <div class="tile" data-report="container">
-        <div class="tile-icon"><img src="static/icons/container.svg" alt="" width="28" height="28"></div>
+        <div class="tile-icon"><img src="icons/container.svg" alt="" width="28" height="28"></div>
         <div class="tile-content">
           <div class="tile-title">CONTAINER</div>
           <div class="tile-desc" id="desc-container">Container tracking and reports</div>
@@ -793,7 +884,7 @@
       </div>
 
       <div class="tile" data-report="lkw">
-        <div class="tile-icon"><img src="static/icons/truck.svg" alt="" width="28" height="28"></div>
+        <div class="tile-icon"><img src="icons/truck.svg" alt="" width="28" height="28"></div>
         <div class="tile-content">
           <div class="tile-title">LKW</div>
           <div class="tile-desc" id="desc-lkw">Truck reports and analytics</div>
@@ -802,7 +893,7 @@
       </div>
 
       <div class="tile" data-report="fahrer">
-        <div class="tile-icon"><img src="static/icons/driver.svg" alt="" width="28" height="28"></div>
+        <div class="tile-icon"><img src="icons/driver.svg" alt="" width="28" height="28"></div>
         <div class="tile-content">
           <div class="tile-title">FAHRER</div>
           <div class="tile-desc" id="desc-fahrer">Driver data and vacation</div>
@@ -811,7 +902,7 @@
       </div>
 
       <div class="tile" data-report="yf">
-        <div class="tile-icon"><img src="static/icons/chart.svg" alt="" width="28" height="28"></div>
+        <div class="tile-icon"><img src="icons/chart.svg" alt="" width="28" height="28"></div>
         <div class="tile-content">
           <div class="tile-title">YF</div>
           <div class="tile-desc" id="desc-yf">Mileage and fuel reports</div>
@@ -820,7 +911,7 @@
       </div>
 
       <div class="tile" data-report="einnahmen">
-        <div class="tile-icon"><img src="static/icons/money.svg" alt="" width="28" height="28"></div>
+        <div class="tile-icon"><img src="icons/money.svg" alt="" width="28" height="28"></div>
         <div class="tile-content">
           <div class="tile-title">EINNAHMEN</div>
           <div class="tile-desc" id="desc-einnahmen">Total revenue overview</div>
@@ -829,7 +920,7 @@
       </div>
 
       <div class="tile" data-report="bonus">
-        <div class="tile-icon"><img src="static/icons/target.svg" alt="" width="28" height="28"></div>
+        <div class="tile-icon"><img src="icons/target.svg" alt="" width="28" height="28"></div>
         <div class="tile-content">
           <div class="tile-title">BONUS</div>
           <div class="tile-desc" id="desc-bonus">Bonus calculations</div>
@@ -846,7 +937,7 @@
       <div class="sheet-header">
         <div class="sheet-top">
           <div class="sheet-type-badge" id="sheetType">Params</div>
-          <div class="sheet-close" id="btnClose">✕</div>
+          <div class="sheet-close" id="btnClose"><img src="icons/close.svg" alt="Close" width="14" height="14"></div>
         </div>
         <div class="sheet-title" id="sheetTitle">Report</div>
         <div class="sheet-hint" id="sheetHint">Configure parameters</div>
@@ -865,7 +956,7 @@
     </div>
   </div>
 
-  <div class="toast" id="toast">✓ Report sent successfully!</div>
+  <div class="toast" id="toast">Report sent successfully!</div>
 
   <script>
     // === CONFIG ===
@@ -881,8 +972,10 @@
         checking: "Checking access rights...",
         accessOk: "Access granted • All reports available",
         accessNo: (admin) => `Access denied • Contact ${admin}`,
+        accessApiPending: "API is not connected yet • UI preview mode",
         ok: "OK",
         no: "NO",
+        pending: "INFO",
         sectionTitle: "Available Reports",
         
         // Descriptions
@@ -920,16 +1013,19 @@
         tabUrlaub: "Vacation",
         
         // Toast
-        toastSuccess: "✓ Report sent successfully!",
+        toastSuccess: "Report sent successfully!",
         toastComingSoon: "Feature coming soon",
+        backendNotReady: "Backend is not connected yet",
       },
       ru: {
         welcome: "Добро пожаловать",
         checking: "Проверка прав доступа...",
         accessOk: "Доступ разрешен • Все отчеты доступны",
         accessNo: (admin) => `Доступ запрещен • Свяжитесь с ${admin}`,
+        accessApiPending: "API пока не подключен • режим предпросмотра UI",
         ok: "ДА",
         no: "НЕТ",
+        pending: "ИНФО",
         sectionTitle: "Доступные отчеты",
         
         // Descriptions
@@ -967,8 +1063,9 @@
         tabUrlaub: "Отпуск",
         
         // Toast
-        toastSuccess: "✓ Отчет успешно отправлен!",
+        toastSuccess: "Отчет успешно отправлен!",
         toastComingSoon: "Функция скоро будет доступна",
+        backendNotReady: "Backend пока не подключен",
       },
     };
 
@@ -1052,12 +1149,20 @@
 
     async function checkAccessServer() {
       try {
-        const resp = await fetch("/api/meta", { cache: "no-store" });
-        if (!resp.ok) return false;
-        const data = await resp.json();
-        return !!data?.ok;
+        const resp = await fetch("/api/meta", {
+          cache: "no-store",
+          headers: { "Accept": "application/json" },
+        });
+        if (!resp.ok) return { state: "pending" };
+
+        const ct = (resp.headers.get("content-type") || "").toLowerCase();
+        if (!ct.includes("application/json")) return { state: "pending" };
+
+        const data = await resp.json().catch(() => null);
+        if (!data || typeof data.ok !== "boolean") return { state: "pending" };
+        return { state: data.ok ? "ok" : "denied" };
       } catch {
-        return false;
+        return { state: "pending" };
       }
     }
 
@@ -1090,8 +1195,10 @@
           return true;
         }
 
+        const ct = (resp.headers.get("content-type") || "").toLowerCase();
+        const backendNotReady = ct.includes("text/html");
         haptic("error");
-        showToast(data.error || "Error");
+        showToast(data.error || (backendNotReady ? L("backendNotReady") : "Error"));
         return false;
       } catch (err) {
         haptic("error");
@@ -1105,6 +1212,44 @@
 
     function sendToBot(_) {
       showToast(L("toastComingSoon"));
+    }
+
+    function setAvatarFromTelegram(user, name) {
+      const avatar = $("avatar");
+      const fallbackText = () => {
+        avatar.textContent = initials(name);
+      };
+
+      const candidates = [];
+      if (user.photo_url) candidates.push(user.photo_url);
+      if (user.username) candidates.push(`https://t.me/i/userpic/320/${encodeURIComponent(user.username)}.jpg`);
+
+      if (!candidates.length) {
+        fallbackText();
+        return;
+      }
+
+      const img = document.createElement("img");
+      img.alt = name;
+      img.referrerPolicy = "no-referrer";
+
+      let idx = 0;
+      img.onload = () => {
+        avatar.textContent = "";
+        if (!avatar.contains(img)) avatar.appendChild(img);
+      };
+      img.onerror = () => {
+        idx += 1;
+        if (idx < candidates.length) {
+          img.src = candidates[idx];
+        } else {
+          fallbackText();
+        }
+      };
+
+      avatar.textContent = "";
+      avatar.appendChild(img);
+      img.src = candidates[idx];
     }
 
     // === SHEET MANAGEMENT ===
@@ -1492,34 +1637,35 @@
       const id = user.id || "";
       const username = user.username ? `@${user.username}` : "";
 
-      $("avatar").textContent = initials(name);
-      if (user.photo_url) {
-        const img = document.createElement("img");
-        img.src = user.photo_url;
-        img.alt = name;
-        img.referrerPolicy = "no-referrer";
-        img.onerror = () => { $("avatar").textContent = initials(name); };
-        $("avatar").textContent = "";
-        $("avatar").appendChild(img);
-      }
+      setAvatarFromTelegram(user, name);
       $("welcomeTitle").textContent = `${L("welcome")}, ${name}!`;
       $("welcomeSub").textContent = `ID: ${id} ${username}`.trim();
 
       // Access check
       $("accessMsg").textContent = L("checking");
       $("accessBadge").textContent = "...";
-      $("accessIcon").innerHTML = '<img src="static/icons/lock.svg" alt="" width="20" height="20">';
+      $("accessIcon").innerHTML = '<img src="icons/lock.svg" alt="" width="20" height="20">';
 
-      const ok = await checkAccessServer();
-
-      $("accessMsg").textContent = ok ? L("accessOk") : L("accessNo", ADMIN);
-      $("accessBadge").textContent = ok ? L("ok") : L("no");
-      $("accessBadge").className = "badge " + (ok ? "ok" : "no");
-      $("accessIcon").innerHTML = ok
-        ? '<img src="static/icons/check.svg" alt="" width="20" height="20">'
-        : '<img src="static/icons/close.svg" alt="" width="20" height="20">';
-
-      if (!ok) $("menu").classList.add("disabled");
+      const access = await checkAccessServer();
+      if (access.state === "ok") {
+        $("accessMsg").textContent = L("accessOk");
+        $("accessBadge").textContent = L("ok");
+        $("accessBadge").className = "badge ok";
+        $("accessIcon").innerHTML = '<img src="icons/check.svg" alt="" width="20" height="20">';
+        $("menu").classList.remove("disabled");
+      } else if (access.state === "denied") {
+        $("accessMsg").textContent = L("accessNo", ADMIN);
+        $("accessBadge").textContent = L("no");
+        $("accessBadge").className = "badge no";
+        $("accessIcon").innerHTML = '<img src="icons/close.svg" alt="" width="20" height="20">';
+        $("menu").classList.add("disabled");
+      } else {
+        $("accessMsg").textContent = L("accessApiPending");
+        $("accessBadge").textContent = L("pending");
+        $("accessBadge").className = "badge";
+        $("accessIcon").innerHTML = '<img src="icons/lock.svg" alt="" width="20" height="20">';
+        $("menu").classList.remove("disabled");
+      }
 
       // Wire events
       $("btnClose").onclick = closeSheet;
