@@ -217,6 +217,66 @@ function getBotToken(env) {
   return String(env.TELEGRAM_BOT_TOKEN || env.BOT_TOKEN || "").trim();
 }
 
+function parseTelegramUserFromInitData(initDataRaw) {
+  try {
+    const params = new URLSearchParams(String(initDataRaw || ""));
+    const rawUser = params.get("user");
+    if (!rawUser) return null;
+    const user = JSON.parse(rawUser);
+    return user && typeof user === "object" ? user : null;
+  } catch {
+    return null;
+  }
+}
+
+async function fetchImageByUrl(url) {
+  if (!url) return null;
+  try {
+    const resp = await fetch(url, { redirect: "follow" });
+    if (!resp.ok) return null;
+    const contentType = (resp.headers.get("content-type") || "").toLowerCase();
+    if (!contentType.startsWith("image/")) return null;
+    const buf = await resp.arrayBuffer();
+    return new Response(buf, {
+      status: 200,
+      headers: {
+        "Content-Type": contentType,
+        "Cache-Control": "private, max-age=300",
+      },
+    });
+  } catch {
+    return null;
+  }
+}
+
+async function fetchTelegramAvatarViaBotApi(userId, env) {
+  const botToken = getBotToken(env);
+  if (!botToken || !userId) return null;
+
+  try {
+    const apiBase = `https://api.telegram.org/bot${botToken}`;
+    const photosResp = await fetch(
+      `${apiBase}/getUserProfilePhotos?user_id=${encodeURIComponent(String(userId))}&limit=1`,
+    );
+    if (!photosResp.ok) return null;
+
+    const photosData = await photosResp.json().catch(() => null);
+    const fileId = photosData?.result?.photos?.[0]?.[0]?.file_id;
+    if (!fileId) return null;
+
+    const fileResp = await fetch(`${apiBase}/getFile?file_id=${encodeURIComponent(fileId)}`);
+    if (!fileResp.ok) return null;
+    const fileData = await fileResp.json().catch(() => null);
+    const filePath = fileData?.result?.file_path;
+    if (!filePath) return null;
+
+    const imageUrl = `https://api.telegram.org/file/bot${botToken}/${filePath}`;
+    return fetchImageByUrl(imageUrl);
+  } catch {
+    return null;
+  }
+}
+
 async function validateTelegramInitData(initDataRaw, env) {
   const raw = String(initDataRaw || "").trim();
   if (!raw) {
@@ -275,6 +335,44 @@ async function validateTelegramInitData(initDataRaw, env) {
   }
 
   return { ok: true, userId };
+}
+
+async function handleAvatar(request, env) {
+  const url = new URL(request.url);
+  const initDataRaw = url.searchParams.get("initData") || "";
+  const auth = await validateTelegramInitData(initDataRaw, env);
+  if (!auth.ok) {
+    return new Response("Forbidden", {
+      status: 403,
+      headers: { "Cache-Control": "no-store" },
+    });
+  }
+
+  const user = parseTelegramUserFromInitData(initDataRaw);
+  const candidates = [];
+
+  const photoUrl = String(user?.photo_url || "").trim();
+  if (photoUrl) candidates.push(photoUrl);
+
+  const username = String(user?.username || "").replace(/^@+/, "").trim();
+  if (username) {
+    candidates.push(`https://t.me/i/userpic/320/${encodeURIComponent(username)}.jpg`);
+    candidates.push(`https://t.me/i/userpic/160/${encodeURIComponent(username.toLowerCase())}.jpg`);
+  }
+
+  for (const src of candidates) {
+    // eslint-disable-next-line no-await-in-loop
+    const img = await fetchImageByUrl(src);
+    if (img) return img;
+  }
+
+  const botAvatar = await fetchTelegramAvatarViaBotApi(auth.userId, env);
+  if (botAvatar) return botAvatar;
+
+  return new Response("", {
+    status: 404,
+    headers: { "Cache-Control": "no-store" },
+  });
 }
 
 function validateGeneratePayload(body) {
@@ -377,6 +475,10 @@ export default {
 
     if (request.method === "POST" && url.pathname === "/api/generate") {
       return handleGenerate(request, env);
+    }
+
+    if (request.method === "GET" && url.pathname === "/api/avatar") {
+      return handleAvatar(request, env);
     }
 
     // Keep /api paths explicit while endpoints are implemented step-by-step.

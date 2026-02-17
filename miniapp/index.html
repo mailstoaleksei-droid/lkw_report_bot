@@ -321,11 +321,9 @@
       top:-34px;
       width:148px; 
       height:148px;
-      background:
-        radial-gradient(circle at 40% 40%, rgba(130,110,255,.42), rgba(85,120,255,.06) 62%, transparent 72%),
-        radial-gradient(circle at 65% 62%, rgba(53,240,210,.22), transparent 70%);
+      background: radial-gradient(circle at 45% 45%, rgba(167,226,255,.18), transparent 72%);
       border-radius:50%;
-      opacity:.75;
+      opacity:.0;
       pointer-events:none;
     }
     
@@ -351,23 +349,23 @@
       height:54px;
       border-radius:16px;
       background:
-        linear-gradient(145deg, rgba(210,242,255,.34), rgba(157,209,255,.16)),
-        rgba(9,29,68,.24);
-      border:1px solid rgba(209,238,255,.46);
+        linear-gradient(145deg, rgba(246,253,255,.72), rgba(212,236,255,.52)),
+        rgba(194,229,255,.30);
+      border:1px solid rgba(236,249,255,.86);
       display:grid;
       place-items:center;
       font-size:24px;
       flex-shrink:0;
       z-index:1;
       box-shadow:
-        0 8px 18px rgba(10,36,84,.25),
-        0 0 0 1px rgba(230,247,255,.20) inset,
-        0 0 22px rgba(76,189,255,.24);
+        0 8px 18px rgba(10,36,84,.18),
+        0 0 0 1px rgba(255,255,255,.30) inset;
     }
     .tile-icon img{
       width:28px;
       height:28px;
       display:block;
+      filter: saturate(1.15) contrast(1.1) brightness(1.04);
     }
     
     .tile-content{
@@ -395,18 +393,52 @@
       width:32px;
       height:32px;
       border-radius:10px;
-      background: linear-gradient(145deg, rgba(201,238,255,.30), rgba(154,214,255,.14));
-      border:1px solid rgba(190,232,255,.40);
+      background: linear-gradient(145deg, rgba(225,244,255,.45), rgba(171,220,255,.24));
+      border:1px solid rgba(214,240,255,.60);
       display:grid;
       place-items:center;
-      font-size:16px;
+      font-size:0;
       flex-shrink:0;
       z-index:1;
       transition: transform .2s ease;
+      position:relative;
+      box-shadow: 0 6px 14px rgba(15,42,92,.18);
+    }
+
+    .tile-arrow::before{
+      content:"";
+      position:absolute;
+      left:50%;
+      top:50%;
+      width:11px;
+      height:11px;
+      margin-left:-2px;
+      margin-top:-6px;
+      border-top:2.6px solid rgba(239,249,255,.98);
+      border-right:2.6px solid rgba(239,249,255,.98);
+      transform: rotate(45deg);
+      border-radius:1px;
+    }
+
+    .tile-arrow::after{
+      content:"";
+      position:absolute;
+      left:50%;
+      top:50%;
+      width:14px;
+      height:2.8px;
+      margin-left:-8px;
+      margin-top:-1.4px;
+      background: rgba(239,249,255,.98);
+      border-radius:2px;
     }
     
     .tile:active .tile-arrow{
-      transform: translateX(2px);
+      transform: translateX(2px) scale(0.98);
+    }
+
+    .fullscreen-wrap{
+      margin: 4px 0 6px;
     }
 
     /* Bottom sheet */
@@ -758,6 +790,19 @@
       cursor:not-allowed;
       transform: none !important;
     }
+
+    .btn-secondary{
+      background: linear-gradient(135deg, rgba(231,247,255,.40), rgba(176,222,255,.26));
+      color: rgba(245,251,255,.95);
+      border:1px solid rgba(203,235,255,.45);
+      box-shadow:
+        0 8px 20px rgba(10,36,84,.22),
+        0 0 0 1px rgba(236,249,255,.16) inset;
+    }
+
+    .btn-secondary:active{
+      transform: scale(0.98);
+    }
     
     /* Loading state */
     .loading{
@@ -880,7 +925,7 @@
           <div class="tile-title">CONTAINER</div>
           <div class="tile-desc" id="desc-container">Container tracking and reports</div>
         </div>
-        <div class="tile-arrow">→</div>
+        <div class="tile-arrow" aria-hidden="true"></div>
       </div>
 
       <div class="tile" data-report="lkw">
@@ -889,7 +934,7 @@
           <div class="tile-title">LKW</div>
           <div class="tile-desc" id="desc-lkw">Truck reports and analytics</div>
         </div>
-        <div class="tile-arrow">→</div>
+        <div class="tile-arrow" aria-hidden="true"></div>
       </div>
 
       <div class="tile" data-report="fahrer">
@@ -898,7 +943,7 @@
           <div class="tile-title">FAHRER</div>
           <div class="tile-desc" id="desc-fahrer">Driver data and vacation</div>
         </div>
-        <div class="tile-arrow">→</div>
+        <div class="tile-arrow" aria-hidden="true"></div>
       </div>
 
       <div class="tile" data-report="yf">
@@ -907,7 +952,7 @@
           <div class="tile-title">YF</div>
           <div class="tile-desc" id="desc-yf">Mileage and fuel reports</div>
         </div>
-        <div class="tile-arrow">→</div>
+        <div class="tile-arrow" aria-hidden="true"></div>
       </div>
 
       <div class="tile" data-report="einnahmen">
@@ -916,7 +961,7 @@
           <div class="tile-title">EINNAHMEN</div>
           <div class="tile-desc" id="desc-einnahmen">Total revenue overview</div>
         </div>
-        <div class="tile-arrow">→</div>
+        <div class="tile-arrow" aria-hidden="true"></div>
       </div>
 
       <div class="tile" data-report="bonus">
@@ -925,8 +970,12 @@
           <div class="tile-title">BONUS</div>
           <div class="tile-desc" id="desc-bonus">Bonus calculations</div>
         </div>
-        <div class="tile-arrow">→</div>
+        <div class="tile-arrow" aria-hidden="true"></div>
       </div>
+    </div>
+
+    <div class="fullscreen-wrap">
+      <button class="btn btn-secondary" id="btnFullscreen">Open full screen</button>
     </div>
   </div>
 
@@ -1005,6 +1054,7 @@
         driver: "Driver",
         generate: "Generate",
         send: "Send",
+        openFullscreen: "Open full screen",
         
         // Tabs
         tabMileage: "Mileage",
@@ -1016,6 +1066,7 @@
         toastSuccess: "Report sent successfully!",
         toastComingSoon: "Feature coming soon",
         backendNotReady: "Backend is not connected yet",
+        fullscreenRequested: "Switched to full screen",
       },
       ru: {
         welcome: "Добро пожаловать",
@@ -1055,6 +1106,7 @@
         driver: "Водитель",
         generate: "Сформировать",
         send: "Отправить",
+        openFullscreen: "Открыть на весь экран",
         
         // Tabs
         tabMileage: "Пробег",
@@ -1066,6 +1118,7 @@
         toastSuccess: "Отчет успешно отправлен!",
         toastComingSoon: "Функция скоро будет доступна",
         backendNotReady: "Backend пока не подключен",
+        fullscreenRequested: "Открываю на весь экран",
       },
     };
 
@@ -1214,7 +1267,24 @@
       showToast(L("toastComingSoon"));
     }
 
-    function setAvatarFromTelegram(user, name) {
+    async function tryAttachAvatarFromSrc(avatar, name, src) {
+      if (!src) return false;
+      return new Promise((resolve) => {
+        const img = document.createElement("img");
+        img.alt = name;
+        img.referrerPolicy = "no-referrer";
+        img.onload = () => {
+          avatar.textContent = "";
+          avatar.innerHTML = "";
+          avatar.appendChild(img);
+          resolve(true);
+        };
+        img.onerror = () => resolve(false);
+        img.src = src;
+      });
+    }
+
+    async function setAvatarFromTelegram(user, name, initData) {
       const avatar = $("avatar");
       const fallbackText = () => {
         avatar.textContent = initials(name);
@@ -1222,34 +1292,46 @@
 
       const candidates = [];
       if (user.photo_url) candidates.push(user.photo_url);
-      if (user.username) candidates.push(`https://t.me/i/userpic/320/${encodeURIComponent(user.username)}.jpg`);
-
-      if (!candidates.length) {
-        fallbackText();
-        return;
+      if (user.username) {
+        const uname = String(user.username).replace(/^@+/, "");
+        candidates.push(`https://t.me/i/userpic/320/${encodeURIComponent(uname)}.jpg`);
+        candidates.push(`https://t.me/i/userpic/160/${encodeURIComponent(uname.toLowerCase())}.jpg`);
       }
 
-      const img = document.createElement("img");
-      img.alt = name;
-      img.referrerPolicy = "no-referrer";
-
-      let idx = 0;
-      img.onload = () => {
-        avatar.textContent = "";
-        if (!avatar.contains(img)) avatar.appendChild(img);
-      };
-      img.onerror = () => {
-        idx += 1;
-        if (idx < candidates.length) {
-          img.src = candidates[idx];
-        } else {
+      if (!candidates.length) {
+        // Fallback to Worker proxy that resolves avatar via Bot API without exposing token.
+        if (!initData) {
           fallbackText();
+          return;
         }
-      };
+      }
 
-      avatar.textContent = "";
-      avatar.appendChild(img);
-      img.src = candidates[idx];
+      for (const src of candidates) {
+        // eslint-disable-next-line no-await-in-loop
+        const ok = await tryAttachAvatarFromSrc(avatar, name, src);
+        if (ok) return;
+      }
+
+      if (initData) {
+        const proxyAvatar = `/api/avatar?initData=${encodeURIComponent(initData)}`;
+        const ok = await tryAttachAvatarFromSrc(avatar, name, proxyAvatar);
+        if (ok) return;
+      }
+
+      fallbackText();
+    }
+
+    function openFullscreenMode() {
+      try {
+        Telegram?.WebApp?.expand?.();
+      } catch {}
+      try {
+        const el = document.documentElement;
+        if (el.requestFullscreen && !document.fullscreenElement) {
+          el.requestFullscreen().catch(() => {});
+        }
+      } catch {}
+      showToast(L("fullscreenRequested"), 1800);
     }
 
     // === SHEET MANAGEMENT ===
@@ -1617,6 +1699,7 @@
       
       // Update UI text
       $("sectionTitle").textContent = L("sectionTitle");
+      $("btnFullscreen").textContent = L("openFullscreen");
       document.querySelectorAll("[id^='desc-']").forEach(el => {
         const key = "desc" + el.id.split("-")[1].charAt(0).toUpperCase() + el.id.split("-")[1].slice(1);
         el.textContent = L(key);
@@ -1637,7 +1720,7 @@
       const id = user.id || "";
       const username = user.username ? `@${user.username}` : "";
 
-      setAvatarFromTelegram(user, name);
+      await setAvatarFromTelegram(user, name, ctx.initData);
       $("welcomeTitle").textContent = `${L("welcome")}, ${name}!`;
       $("welcomeSub").textContent = `ID: ${id} ${username}`.trim();
 
@@ -1672,6 +1755,7 @@
       $("sheet").onclick = (e) => { 
         if (e.target === $("sheet")) closeSheet(); 
       };
+      $("btnFullscreen").onclick = openFullscreenMode;
 
       wireMenu();
     }
