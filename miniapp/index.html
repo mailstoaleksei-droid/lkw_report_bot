@@ -1383,10 +1383,11 @@
         arr.map(v => `<option value="${v}">${v}</option>`).join("");
     }
 
-    function buildYearOptions(from) {
+    function buildYearOptions(from, to) {
       const now = new Date().getFullYear();
+      const maxYear = Number.isFinite(Number(to)) ? Number(to) : now;
       const years = [];
-      for (let y = now; y >= from; y--) years.push(y);
+      for (let y = maxYear; y >= from; y--) years.push(y);
       return years.map(y => `<option value="${y}">${y}</option>`).join("");
     }
 
@@ -1406,7 +1407,7 @@
       setForm(`
         <div class="field">
           <label>${L("year")}</label>
-          <select id="reportYear">${buildYearOptions(2020)}</select>
+          <select id="reportYear">${buildYearOptions(2025, 2030)}</select>
         </div>
         <div class="field">
           <label>${L("week")}</label>
@@ -1418,14 +1419,18 @@
       const now = new Date();
       const yearEl = $("reportYear");
       const weekEl = $("reportWeek");
-      if (yearEl) yearEl.value = String(getISOYear(now));
+      if (yearEl) {
+        const currentIsoYear = getISOYear(now);
+        const clampedYear = Math.max(2025, Math.min(2030, currentIsoYear));
+        yearEl.value = String(clampedYear);
+      }
       if (weekEl) weekEl.value = String(getISOWeek(now));
 
       $("btnPrimary").textContent = L("generate");
       $("btnPrimary").onclick = async () => {
         const year = Number($("reportYear").value);
         const week = Number($("reportWeek").value);
-        if (!Number.isFinite(year) || !Number.isFinite(week) || week < 1 || week > 53) {
+        if (!Number.isFinite(year) || !Number.isFinite(week) || year < 2025 || year > 2030 || week < 1 || week > 53) {
           haptic("error");
           showToast("Invalid year/week");
           return;

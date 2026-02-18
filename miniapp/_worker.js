@@ -22,7 +22,7 @@ const REPORTS = [
         id: "year",
         type: "year",
         label: { en: "Year", ru: "Год" },
-        min: 2024,
+        min: 2025,
         max: 2030,
       },
       {
@@ -62,16 +62,16 @@ const REPORTS = [
 const REPORT_MAP = new Map(REPORTS.map((r) => [r.id, r]));
 const USER_COOLDOWNS = new Map();
 let LAST_COOLDOWN_CLEANUP_MS = 0;
-const BERICHT_SQL = `
+const BERICHT_COMPANY_SQL = `
 WITH ref AS (
   SELECT to_date($1::text || '-W' || lpad($2::text, 2, '0') || '-1', 'IYYY-"W"IW-ID')::date AS week_monday
 ), weeks AS (
   SELECT
-    extract(isoyear FROM (week_monday - (g.n * interval '7 day')))::int AS iso_year,
-    extract(week FROM (week_monday - (g.n * interval '7 day')))::int AS iso_week,
-    (week_monday - (g.n * interval '7 day'))::date AS week_start
+    extract(isoyear FROM (week_monday + (g.n * interval '7 day')))::int AS iso_year,
+    extract(week FROM (week_monday + (g.n * interval '7 day')))::int AS iso_week,
+    (week_monday + (g.n * interval '7 day'))::date AS week_start
   FROM ref
-  CROSS JOIN generate_series(4,0,-1) AS g(n)
+  CROSS JOIN generate_series(0,3) AS g(n)
 ), base AS (
   SELECT
     w.iso_year,
@@ -91,6 +91,69 @@ SELECT iso_year, iso_week, week_start, company_name, container_count, planen_cou
 FROM base
 WHERE company_name <> 'Unknown'
 ORDER BY week_start, company_name;
+`;
+
+const BERICHT_WEEK_SUMMARY_SQL = `
+WITH ref AS (
+  SELECT to_date($1::text || '-W' || lpad($2::text, 2, '0') || '-1', 'IYYY-"W"IW-ID')::date AS week_monday
+), weeks AS (
+  SELECT
+    extract(isoyear FROM (week_monday + (g.n * interval '7 day')))::int AS iso_year,
+    extract(week FROM (week_monday + (g.n * interval '7 day')))::int AS iso_week,
+    (week_monday + (g.n * interval '7 day'))::date AS week_start
+  FROM ref
+  CROSS JOIN generate_series(0,3) AS g(n)
+), occupied AS (
+  SELECT
+    w.iso_year,
+    w.iso_week,
+    w.week_start,
+    COUNT(DISTINCT CASE WHEN s.assignment_type='assignment' AND t.truck_type='Container' THEN s.truck_id END)::int AS occupied_container,
+    COUNT(DISTINCT CASE WHEN s.assignment_type='assignment' AND t.truck_type='Planen' THEN s.truck_id END)::int AS occupied_planen,
+    COUNT(DISTINCT CASE WHEN s.assignment_type='assignment' THEN s.truck_id END)::int AS occupied_total
+  FROM weeks w
+  LEFT JOIN schedules s ON s.iso_year = w.iso_year AND s.iso_week = w.iso_week
+  LEFT JOIN trucks t ON t.id = s.truck_id
+  GROUP BY w.iso_year, w.iso_week, w.week_start
+), soll AS (
+  SELECT
+    w.iso_year,
+    w.iso_week,
+    w.week_start,
+    COUNT(*) FILTER (
+      WHERE t.truck_type='Container'
+        AND (
+          (t.status_since IS NULL AND t.is_active = true)
+          OR
+          (t.status_since IS NOT NULL AND w.week_start < t.status_since)
+        )
+    )::int AS soll_container,
+    COUNT(*) FILTER (
+      WHERE t.truck_type='Planen'
+        AND (
+          (t.status_since IS NULL AND t.is_active = true)
+          OR
+          (t.status_since IS NOT NULL AND w.week_start < t.status_since)
+        )
+    )::int AS soll_planen
+  FROM weeks w
+  CROSS JOIN trucks t
+  GROUP BY w.iso_year, w.iso_week, w.week_start
+)
+SELECT
+  w.iso_year,
+  w.iso_week,
+  w.week_start,
+  COALESCE(o.occupied_container, 0) AS occupied_container,
+  COALESCE(o.occupied_planen, 0) AS occupied_planen,
+  COALESCE(o.occupied_total, 0) AS occupied_total,
+  COALESCE(s.soll_container, 0) AS soll_container,
+  COALESCE(s.soll_planen, 0) AS soll_planen,
+  COALESCE(s.soll_container, 0) + COALESCE(s.soll_planen, 0) AS soll_total
+FROM weeks w
+LEFT JOIN occupied o ON o.iso_year = w.iso_year AND o.iso_week = w.iso_week
+LEFT JOIN soll s ON s.iso_year = w.iso_year AND s.iso_week = w.iso_week
+ORDER BY w.week_start;
 `;
 
 function toBool(value, defaultValue = false) {
@@ -412,30 +475,66 @@ function buildSimplePdf({ title, subtitle, lines }) {
   return new TextEncoder().encode(pdf);
 }
 
-function formatBerichtLines(rows) {
+function weekKey(isoYear, isoWeek) {
+  return `${toIntSafe(isoYear)}-${pad2(toIntSafe(isoWeek))}`;
+}
+
+function sortWeekKeysAsc(a, b) {
+  const [ya, wa] = String(a).split("-");
+  const [yb, wb] = String(b).split("-");
+  const yearDiff = toIntSafe(ya) - toIntSafe(yb);
+  if (yearDiff !== 0) return yearDiff;
+  return toIntSafe(wa) - toIntSafe(wb);
+}
+
+function formatBerichtLines(rows, weekSummaries = []) {
   const lines = [];
-  lines.push("WEEK   | COMPANY                       | CONT | PLAN | TOTAL");
-  lines.push("-------+-------------------------------+------+------+------");
-  for (const row of rows) {
-    const week = `${toIntSafe(row.iso_year)}-${pad2(toIntSafe(row.iso_week))}`;
-    const company = String(row.company_name || "").slice(0, 29).padEnd(29, " ");
-    const cont = String(toIntSafe(row.container_count)).padStart(4, " ");
-    const plan = String(toIntSafe(row.planen_count)).padStart(4, " ");
-    const total = String(toIntSafe(row.total_count)).padStart(5, " ");
-    lines.push(`${week} | ${company} | ${cont} | ${plan} | ${total}`);
+  const groupedRows = new Map();
+  for (const row of rows || []) {
+    const key = weekKey(row.iso_year, row.iso_week);
+    if (!groupedRows.has(key)) groupedRows.set(key, []);
+    groupedRows.get(key).push(row);
   }
 
-  const totals = rows.reduce(
-    (acc, row) => {
-      acc.cont += toIntSafe(row.container_count);
-      acc.plan += toIntSafe(row.planen_count);
-      acc.total += toIntSafe(row.total_count);
-      return acc;
-    },
-    { cont: 0, plan: 0, total: 0 },
-  );
-  lines.push("");
-  lines.push(`TOTALS: container=${totals.cont}, planen=${totals.plan}, total=${totals.total}`);
+  const summaryByWeek = new Map();
+  for (const s of weekSummaries || []) {
+    summaryByWeek.set(weekKey(s.iso_year, s.iso_week), s);
+  }
+
+  const orderedWeeks = summaryByWeek.size
+    ? Array.from(summaryByWeek.keys())
+    : Array.from(groupedRows.keys()).sort(sortWeekKeysAsc);
+
+  if (orderedWeeks.length === 0) {
+    return ["No data for selected period."];
+  }
+
+  lines.push("WEEK  | COMPANY                       | CONT | PLAN | TOTAL");
+  lines.push("------+-------------------------------+------+------+------");
+
+  for (const key of orderedWeeks) {
+    const items = groupedRows.get(key) || [];
+    for (const row of items) {
+      const company = String(row.company_name || "").slice(0, 29).padEnd(29, " ");
+      const cont = String(toIntSafe(row.container_count)).padStart(4, " ");
+      const plan = String(toIntSafe(row.planen_count)).padStart(4, " ");
+      const total = String(toIntSafe(row.total_count)).padStart(5, " ");
+      lines.push(`${key} | ${company} | ${cont} | ${plan} | ${total}`);
+    }
+    if (items.length === 0) {
+      lines.push(`${key} | (no companies)                |    0 |    0 |    0`);
+    }
+
+    const s = summaryByWeek.get(key) || {};
+    lines.push(
+      `      | Besetzte LKW                  | ${String(toIntSafe(s.occupied_container)).padStart(4, " ")} | ${String(toIntSafe(s.occupied_planen)).padStart(4, " ")} | ${String(toIntSafe(s.occupied_total)).padStart(5, " ")}`,
+    );
+    lines.push(
+      `      | Soll                          | ${String(toIntSafe(s.soll_container)).padStart(4, " ")} | ${String(toIntSafe(s.soll_planen)).padStart(4, " ")} | ${String(toIntSafe(s.soll_total)).padStart(5, " ")}`,
+    );
+    lines.push("------+-------------------------------+------+------+------");
+  }
+
   return lines;
 }
 
@@ -478,7 +577,7 @@ function drawBerichtTableHeader({ page, boldFont, startX, y, colDefs }) {
   return { nextY: y - rowHeight };
 }
 
-async function buildBerichtPdfWithPdfLib({ year, week, userId, rows }) {
+async function buildBerichtPdfWithPdfLib({ year, week, userId, rows, weekSummaries = [] }) {
   const pdfDoc = await PDFDocument.create();
   const font = await pdfDoc.embedFont(StandardFonts.Helvetica);
   const boldFont = await pdfDoc.embedFont(StandardFonts.HelveticaBold);
@@ -488,8 +587,7 @@ async function buildBerichtPdfWithPdfLib({ year, week, userId, rows }) {
   const lineHeight = 14;
   const startX = margin;
   const colDefs = [
-    { key: "week", label: "Week", width: 65, align: "left" },
-    { key: "company", label: "Company", width: 270, align: "left" },
+    { key: "company", label: "Company", width: 330, align: "left" },
     { key: "container", label: "Container", width: 70, align: "right" },
     { key: "planen", label: "Planen", width: 65, align: "right" },
     { key: "total", label: "Total", width: 65, align: "right" },
@@ -498,12 +596,37 @@ async function buildBerichtPdfWithPdfLib({ year, week, userId, rows }) {
   const tableBorder = rgb(0.78, 0.86, 0.96);
   const textColor = rgb(0.08, 0.16, 0.28);
 
+  const groupedRows = new Map();
+  for (const row of rows || []) {
+    const key = weekKey(row.iso_year, row.iso_week);
+    if (!groupedRows.has(key)) groupedRows.set(key, []);
+    groupedRows.get(key).push(row);
+  }
+
+  const summaryByWeek = new Map();
+  for (const s of weekSummaries || []) {
+    summaryByWeek.set(weekKey(s.iso_year, s.iso_week), s);
+  }
+
+  const orderedWeeks = summaryByWeek.size
+    ? Array.from(summaryByWeek.keys())
+    : Array.from(groupedRows.keys()).sort(sortWeekKeysAsc);
+
+  const firstSummary = weekSummaries?.[0] || null;
+  const lastSummary = weekSummaries?.[weekSummaries.length - 1] || null;
+  const periodStart = firstSummary
+    ? `${toIntSafe(firstSummary.iso_year)}/W${pad2(toIntSafe(firstSummary.iso_week))}`
+    : `${year}/W${pad2(week)}`;
+  const periodEnd = lastSummary
+    ? `${toIntSafe(lastSummary.iso_year)}/W${pad2(toIntSafe(lastSummary.iso_week))}`
+    : periodStart;
+  const periodLabel = periodStart === periodEnd ? periodStart : `${periodStart} - ${periodEnd}`;
+
   let page = pdfDoc.addPage(pageSize);
   let y = page.getHeight() - margin;
-  let rowIndex = 0;
 
   const drawPageHeader = () => {
-    page.drawText(`Bericht (Trucks by Company) ${year}/W${pad2(week)}`, {
+    page.drawText(`Bericht (Trucks by Company) ${periodLabel}`, {
       x: margin,
       y,
       size: 14,
@@ -518,41 +641,24 @@ async function buildBerichtPdfWithPdfLib({ year, week, userId, rows }) {
       font,
       color: rgb(0.24, 0.32, 0.44),
     });
-    y -= 16;
-    const header = drawBerichtTableHeader({ page, boldFont, startX, y, colDefs });
-    y = header.nextY - 4;
+    y -= 14;
   };
 
-  drawPageHeader();
+  const ensureSpace = (neededHeight) => {
+    if (y - neededHeight >= margin) return;
+    page = pdfDoc.addPage(pageSize);
+    y = page.getHeight() - margin;
+    drawPageHeader();
+  };
 
-  const totals = { container: 0, planen: 0, total: 0 };
-
-  for (const row of rows) {
-    const wk = `${toIntSafe(row.iso_year)}-${pad2(toIntSafe(row.iso_week))}`;
-    const data = {
-      week: wk,
-      company: String(row.company_name || ""),
-      container: toIntSafe(row.container_count),
-      planen: toIntSafe(row.planen_count),
-      total: toIntSafe(row.total_count),
-    };
-    totals.container += data.container;
-    totals.planen += data.planen;
-    totals.total += data.total;
-
-    if (y < margin + lineHeight + 24) {
-      page = pdfDoc.addPage(pageSize);
-      y = page.getHeight() - margin;
-      drawPageHeader();
-    }
-
-    if (rowIndex % 2 === 1) {
+  const drawDataRow = (data, rowY, rowBg) => {
+    if (rowBg) {
       page.drawRectangle({
         x: startX,
-        y: y - lineHeight + 3,
+        y: rowY - lineHeight + 3,
         width: tableWidth,
         height: lineHeight,
-        color: rgb(0.97, 0.985, 1),
+        color: rowBg,
       });
     }
 
@@ -566,7 +672,7 @@ async function buildBerichtPdfWithPdfLib({ year, week, userId, rows }) {
 
       page.drawText(value, {
         x: tx,
-        y: y - 9,
+        y: rowY - 9,
         size,
         font,
         color: textColor,
@@ -575,41 +681,117 @@ async function buildBerichtPdfWithPdfLib({ year, week, userId, rows }) {
     }
 
     page.drawLine({
-      start: { x: startX, y: y - lineHeight + 3 },
-      end: { x: startX + tableWidth, y: y - lineHeight + 3 },
+      start: { x: startX, y: rowY - lineHeight + 3 },
+      end: { x: startX + tableWidth, y: rowY - lineHeight + 3 },
       thickness: 0.5,
       color: tableBorder,
     });
+  };
 
-    y -= lineHeight;
-    rowIndex += 1;
-  }
+  drawPageHeader();
 
-  if (y < margin + 22) {
-    page = pdfDoc.addPage(pageSize);
-    y = page.getHeight() - margin;
-    drawPageHeader();
-  }
+  for (const key of orderedWeeks) {
+    const items = groupedRows.get(key) || [];
+    const summary = summaryByWeek.get(key) || {};
+    const rowCount = Math.max(1, items.length) + 2; // + Besetzte + Soll
+    const neededHeight = 18 + 18 + rowCount * lineHeight + 10;
+    ensureSpace(neededHeight);
 
-  page.drawRectangle({
-    x: startX,
-    y: y - 14,
-    width: tableWidth,
-    height: 16,
-    color: rgb(0.9, 0.95, 1),
-    borderColor: tableBorder,
-    borderWidth: 1,
-  });
-  page.drawText(
-    `TOTALS: Container ${totals.container} | Planen ${totals.planen} | Total ${totals.total}`,
-    {
-      x: startX + 4,
-      y: y - 4,
+    const blockTopY = y;
+    page.drawRectangle({
+      x: startX,
+      y: y - 16,
+      width: tableWidth,
+      height: 16,
+      color: rgb(0.9, 0.95, 1),
+      borderColor: tableBorder,
+      borderWidth: 1,
+    });
+    page.drawText(`Week ${key}`, {
+      x: startX + 5,
+      y: y - 10,
       size: 9,
       font: boldFont,
       color: textColor,
-    },
-  );
+    });
+    y -= 20;
+
+    const header = drawBerichtTableHeader({ page, boldFont, startX, y, colDefs });
+    y = header.nextY - 2;
+
+    if (items.length === 0) {
+      drawDataRow(
+        { company: "-", container: 0, planen: 0, total: 0 },
+        y,
+        rgb(0.97, 0.985, 1),
+      );
+      y -= lineHeight;
+    } else {
+      let idx = 0;
+      for (const row of items) {
+        drawDataRow(
+          {
+            company: String(row.company_name || ""),
+            container: toIntSafe(row.container_count),
+            planen: toIntSafe(row.planen_count),
+            total: toIntSafe(row.total_count),
+          },
+          y,
+          idx % 2 === 1 ? rgb(0.97, 0.985, 1) : null,
+        );
+        y -= lineHeight;
+        idx += 1;
+      }
+    }
+
+    drawDataRow(
+      {
+        company: "Besetzte LKW",
+        container: toIntSafe(summary.occupied_container),
+        planen: toIntSafe(summary.occupied_planen),
+        total: toIntSafe(summary.occupied_total),
+      },
+      y,
+      rgb(0.93, 0.98, 0.93),
+    );
+    y -= lineHeight;
+
+    drawDataRow(
+      {
+        company: "Soll",
+        container: toIntSafe(summary.soll_container),
+        planen: toIntSafe(summary.soll_planen),
+        total: toIntSafe(summary.soll_total),
+      },
+      y,
+      rgb(1, 0.96, 0.96),
+    );
+    y -= lineHeight;
+
+    const blockBottomY = y + 2;
+    page.drawRectangle({
+      x: startX,
+      y: blockBottomY,
+      width: tableWidth,
+      height: blockTopY - blockBottomY - 16,
+      borderColor: tableBorder,
+      borderWidth: 1,
+      color: rgb(1, 1, 1),
+      opacity: 0,
+    });
+    y -= 8;
+  }
+
+  if (orderedWeeks.length === 0) {
+    ensureSpace(24);
+    page.drawText("No data for selected period.", {
+      x: startX,
+      y: y - 10,
+      size: 10,
+      font,
+      color: textColor,
+    });
+  }
 
   return pdfDoc.save();
 }
@@ -781,10 +963,16 @@ function validateGeneratePayload(body) {
   if (reportType === "bericht") {
     const year = Number.parseInt(String(body.year ?? ""), 10);
     const week = Number.parseInt(String(body.week ?? ""), 10);
+    const yearParam = report.params.find((p) => p.id === "year");
+    const weekParam = report.params.find((p) => p.id === "week");
+    const minYear = toInt(yearParam?.min, 2020);
+    const maxYear = toInt(yearParam?.max, 2100);
+    const minWeek = toInt(weekParam?.min, 1);
+    const maxWeek = toInt(weekParam?.max, 53);
     if (!Number.isFinite(year) || !Number.isFinite(week)) {
       return { ok: false, status: 400, error: "Invalid year/week" };
     }
-    if (!(year >= 2020 && year <= 2100 && week >= 1 && week <= 53)) {
+    if (!(year >= minYear && year <= maxYear && week >= minWeek && week <= maxWeek)) {
       return { ok: false, status: 400, error: "Year/week out of range" };
     }
     return { ok: true, reportType, year, week };
@@ -852,9 +1040,14 @@ async function handleGenerate(request, env) {
   }
 
   let rows;
+  let weekSummaries;
   try {
-    const result = await queryNeon(dbConnectionString, BERICHT_SQL, [valid.year, valid.week]);
-    rows = result.rows;
+    const [companyResult, summaryResult] = await Promise.all([
+      queryNeon(dbConnectionString, BERICHT_COMPANY_SQL, [valid.year, valid.week]),
+      queryNeon(dbConnectionString, BERICHT_WEEK_SUMMARY_SQL, [valid.year, valid.week]),
+    ]);
+    rows = companyResult.rows;
+    weekSummaries = summaryResult.rows;
   } catch (err) {
     return json(
       {
@@ -878,11 +1071,12 @@ async function handleGenerate(request, env) {
       week: valid.week,
       userId: auth.userId,
       rows,
+      weekSummaries,
     });
   } catch (err) {
     // Keep generation available even if pdf-lib fails on edge runtime.
     pdfEngine = "legacy-fallback";
-    const lines = formatBerichtLines(rows);
+    const lines = formatBerichtLines(rows, weekSummaries);
     pdfBytes = buildSimplePdf({
       title: `Bericht (Trucks by Company) - ${valid.year}/W${pad2(valid.week)}`,
       subtitle: `Generated at ${generatedAt} UTC, user ${auth.userId}`,

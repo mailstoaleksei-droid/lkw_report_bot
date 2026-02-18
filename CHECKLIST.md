@@ -1,6 +1,6 @@
 # LKW Report Bot — Checklist
 
-> Last updated: 2026-02-17
+> Last updated: 2026-02-18
 > Status legend: [ ] pending | [~] in progress | [x] done | [-] skipped
 
 ## Target Architecture
@@ -283,6 +283,16 @@ Reports are generated from PostgreSQL data in milliseconds via SQL.
   - Added safe fallback to legacy generator if pdf-lib runtime fails
   - Result: evaluate if quality is sufficient
 
+- [x] **3.1.1** Bericht layout update (4-week forward + weekly summary rows)
+  - SQL window changed to `selected week + 3 weeks` (`generate_series(0,3)`), not backward range
+  - Added second SQL dataset for weekly summary: `occupied_*` and `soll_*`
+  - PDF now renders separate block per week with summary rows:
+    - `Besetzte LKW` (Container/Planen/Total)
+    - `Soll` (Container/Planen/Total)
+  - Removed bottom global line `TOTALS: Container ... | Planen ... | Total ...`
+  - Worker generation path now uses `BERICHT_COMPANY_SQL` + `BERICHT_WEEK_SUMMARY_SQL`
+  - Result: report structure now matches target weekly block format
+
 - [ ] **3.2** Fallback: Cloudflare Browser Rendering API
   - If pdf-lib insufficient → HTML template + Browser Rendering
   - Jinja2-style template → HTML → PDF
@@ -330,6 +340,11 @@ Reports are generated from PostgreSQL data in milliseconds via SQL.
 - [ ] **5.1** Update API endpoints in Mini App
   - Point fetch() calls to Cloudflare Functions (not localhost)
   - Result: Mini App works from Cloudflare Pages
+
+- [x] **5.1.1** Bericht year selector limited to 2025-2030
+  - Updated `miniapp/index.html`: container year dropdown now uses fixed range `2025..2030`
+  - Added client-side validation for year range before calling `/api/generate`
+  - Result: UI selection now matches requested planning horizon
 
 - [ ] **5.2** Enhanced greeting (already implemented)
   - Photo from Telegram, name, ID — already working
