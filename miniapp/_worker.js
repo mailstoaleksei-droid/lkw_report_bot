@@ -981,8 +981,7 @@ function validateGeneratePayload(body) {
   return { ok: true, reportType };
 }
 
-async function handleGenerate(request, env) {
-  const body = await parseJsonBody(request);
+async function handleGenerateWithBody(body, env, enforceRateLimit = true) {
   const valid = validateGeneratePayload(body);
   if (!valid.ok) {
     return json({ ok: false, error: valid.error }, valid.status, {
@@ -997,21 +996,23 @@ async function handleGenerate(request, env) {
     });
   }
 
-  const rl = checkRateLimit(auth.userId, env);
-  if (!rl.ok) {
-    return json(
-      {
-        ok: false,
-        error: `Please wait ${rl.retryAfterSec}s`,
-        code: "RATE_LIMITED",
-        retry_after_sec: rl.retryAfterSec,
-      },
-      429,
-      {
-        "Cache-Control": "no-store",
-        "Retry-After": String(rl.retryAfterSec),
-      },
-    );
+  if (enforceRateLimit) {
+    const rl = checkRateLimit(auth.userId, env);
+    if (!rl.ok) {
+      return json(
+        {
+          ok: false,
+          error: `Please wait ${rl.retryAfterSec}s`,
+          code: "RATE_LIMITED",
+          retry_after_sec: rl.retryAfterSec,
+        },
+        429,
+        {
+          "Cache-Control": "no-store",
+          "Retry-After": String(rl.retryAfterSec),
+        },
+      );
+    }
   }
 
   if (valid.reportType !== "bericht") {
@@ -1063,6 +1064,8 @@ async function handleGenerate(request, env) {
 
   const generatedAt = new Date().toISOString();
   const filename = `bericht_${valid.year}_w${pad2(valid.week)}.pdf`;
+  const requestedDisposition = String(body?.disposition || "").toLowerCase();
+  const dispositionType = requestedDisposition === "inline" ? "inline" : "attachment";
   let pdfBytes;
   let pdfEngine = "pdf-lib";
   try {
@@ -1092,13 +1095,30 @@ async function handleGenerate(request, env) {
     status: 200,
     headers: {
       "Content-Type": "application/pdf",
-      "Content-Disposition": `attachment; filename=\"${filename}\"`,
+      "Content-Disposition": `${dispositionType}; filename=\"${filename}\"`,
       "Cache-Control": "no-store",
       "X-Report-Type": "bericht",
       "X-Source": "sql-neon",
       "X-PDF-Engine": pdfEngine,
     },
   });
+}
+
+async function handleGenerate(request, env) {
+  const body = await parseJsonBody(request);
+  return handleGenerateWithBody(body, env, true);
+}
+
+async function handleGenerateGet(request, env) {
+  const url = new URL(request.url);
+  const body = {
+    initData: url.searchParams.get("initData") || "",
+    report_type: url.searchParams.get("report_type") || "",
+    year: url.searchParams.get("year"),
+    week: url.searchParams.get("week"),
+    disposition: url.searchParams.get("disposition") || "",
+  };
+  return handleGenerateWithBody(body, env, false);
 }
 
 export default {
@@ -1119,6 +1139,10 @@ export default {
 
     if (request.method === "POST" && url.pathname === "/api/generate") {
       return handleGenerate(request, env);
+    }
+    
+    if (request.method === "GET" && url.pathname === "/api/generate") {
+      return handleGenerateGet(request, env);
     }
 
     if (request.method === "GET" && url.pathname === "/api/avatar") {

@@ -1131,6 +1131,8 @@
     let currentLang = "en";
     let latestPdfUrl = "";
     let latestPdfFilename = "";
+    let latestPdfOpenUrl = "";
+    let latestPdfSaveUrl = "";
 
     // === UTILS ===
     const $ = (id) => document.getElementById(id);
@@ -1169,6 +1171,8 @@
       if (latestPdfUrl) URL.revokeObjectURL(latestPdfUrl);
       latestPdfUrl = "";
       latestPdfFilename = "";
+      latestPdfOpenUrl = "";
+      latestPdfSaveUrl = "";
     }
 
     function openPdfInNewTab(url, filename) {
@@ -1187,13 +1191,47 @@
       const a = document.createElement("a");
       a.href = url;
       a.download = filename || "report.pdf";
+      a.target = "_blank";
+      a.rel = "noopener";
       a.style.display = "none";
       document.body.appendChild(a);
       a.click();
       a.remove();
     }
 
-    function renderPdfActions(url, filename) {
+    function buildGenerateDirectUrl(reportType, payload, initData, disposition = "attachment") {
+      const u = new URL("/api/generate", window.location.origin);
+      u.searchParams.set("initData", initData || "");
+      u.searchParams.set("report_type", reportType || "");
+      if (payload && payload.year !== undefined) u.searchParams.set("year", String(payload.year));
+      if (payload && payload.week !== undefined) u.searchParams.set("week", String(payload.week));
+      if (disposition) u.searchParams.set("disposition", disposition);
+      return u.toString();
+    }
+
+    function openDirectUrl(url, fallbackBlobUrl, filename) {
+      if (url) {
+        try {
+          if (Telegram?.WebApp?.openLink) {
+            Telegram.WebApp.openLink(url);
+            return;
+          }
+        } catch {}
+        openPdfInNewTab(url, filename);
+        return;
+      }
+      if (fallbackBlobUrl) openPdfInNewTab(fallbackBlobUrl, filename);
+    }
+
+    function saveDirectUrl(url, fallbackBlobUrl, filename) {
+      if (url) {
+        triggerPdfDownload(url, filename);
+        return;
+      }
+      if (fallbackBlobUrl) triggerPdfDownload(fallbackBlobUrl, filename);
+    }
+
+    function renderPdfActions() {
       setNote(`
         <div>${L("pdfReadyNote")}</div>
         <div class="note-actions">
@@ -1206,13 +1244,13 @@
       if (openBtn) {
         openBtn.onclick = () => {
           haptic("impact");
-          openPdfInNewTab(url, filename);
+          openDirectUrl(latestPdfOpenUrl, latestPdfUrl, latestPdfFilename);
         };
       }
       if (saveBtn) {
         saveBtn.onclick = () => {
           haptic("impact");
-          triggerPdfDownload(url, filename);
+          saveDirectUrl(latestPdfSaveUrl, latestPdfUrl, latestPdfFilename);
         };
       }
     }
@@ -1308,7 +1346,9 @@
 
           latestPdfUrl = URL.createObjectURL(blob);
           latestPdfFilename = filename;
-          renderPdfActions(latestPdfUrl, latestPdfFilename);
+          latestPdfOpenUrl = buildGenerateDirectUrl(reportType, payload, ctx.initData || "", "inline");
+          latestPdfSaveUrl = buildGenerateDirectUrl(reportType, payload, ctx.initData || "", "attachment");
+          renderPdfActions();
 
           haptic("success");
           showToast(L("toastPdfReady"));
