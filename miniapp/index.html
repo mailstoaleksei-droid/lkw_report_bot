@@ -717,6 +717,20 @@
       color: rgba(234,240,255,.85);
       line-height:1.5;
     }
+
+    .note-actions{
+      display:flex;
+      gap:10px;
+      margin-top:12px;
+    }
+
+    .note-actions .btn{
+      width:auto;
+      flex:1 1 0;
+      padding:12px 14px;
+      font-size:14px;
+      border-radius:12px;
+    }
     
     /* Footer */
     .sheet-footer{
@@ -989,7 +1003,7 @@
     </div>
   </div>
 
-  <div class="toast" id="toast">Report sent successfully!</div>
+  <div class="toast" id="toast">PDF is ready</div>
 
   <script>
     // === CONFIG ===
@@ -1047,10 +1061,14 @@
         tabUrlaub: "Vacation",
         
         // Toast
-        toastSuccess: "Report sent successfully!",
+        toastSuccess: "Request completed",
+        toastPdfReady: "PDF is ready. Tap Open PDF",
         toastComingSoon: "Feature coming soon",
         backendNotReady: "Backend is not connected yet",
         fullscreenRequested: "Switched to full screen",
+        pdfReadyNote: "PDF generated successfully.",
+        openPdf: "Open PDF",
+        savePdf: "Save PDF",
       },
       ru: {
         welcome: "Добро пожаловать",
@@ -1099,14 +1117,20 @@
         tabUrlaub: "Отпуск",
         
         // Toast
-        toastSuccess: "Отчет успешно отправлен!",
+        toastSuccess: "Запрос выполнен",
+        toastPdfReady: "PDF готов. Нажмите «Открыть PDF»",
         toastComingSoon: "Функция скоро будет доступна",
         backendNotReady: "Backend пока не подключен",
         fullscreenRequested: "Открываю на весь экран",
+        pdfReadyNote: "PDF успешно сформирован.",
+        openPdf: "Открыть PDF",
+        savePdf: "Скачать PDF",
       },
     };
 
     let currentLang = "en";
+    let latestPdfUrl = "";
+    let latestPdfFilename = "";
 
     // === UTILS ===
     const $ = (id) => document.getElementById(id);
@@ -1139,6 +1163,58 @@
       toast.textContent = message;
       toast.classList.add("show");
       setTimeout(() => toast.classList.remove("show"), duration);
+    }
+
+    function clearPdfUrl() {
+      if (latestPdfUrl) URL.revokeObjectURL(latestPdfUrl);
+      latestPdfUrl = "";
+      latestPdfFilename = "";
+    }
+
+    function openPdfInNewTab(url, filename) {
+      const a = document.createElement("a");
+      a.href = url;
+      a.target = "_blank";
+      a.rel = "noopener";
+      a.download = filename || "report.pdf";
+      a.style.display = "none";
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+    }
+
+    function triggerPdfDownload(url, filename) {
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = filename || "report.pdf";
+      a.style.display = "none";
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+    }
+
+    function renderPdfActions(url, filename) {
+      setNote(`
+        <div>${L("pdfReadyNote")}</div>
+        <div class="note-actions">
+          <button class="btn btn-secondary" id="btnOpenPdf">${L("openPdf")}</button>
+          <button class="btn btn-secondary" id="btnSavePdf">${L("savePdf")}</button>
+        </div>
+      `);
+      const openBtn = $("btnOpenPdf");
+      const saveBtn = $("btnSavePdf");
+      if (openBtn) {
+        openBtn.onclick = () => {
+          haptic("impact");
+          openPdfInNewTab(url, filename);
+        };
+      }
+      if (saveBtn) {
+        saveBtn.onclick = () => {
+          haptic("impact");
+          triggerPdfDownload(url, filename);
+        };
+      }
     }
 
     async function showIntroThenApp() {
@@ -1212,6 +1288,7 @@
       btn.innerHTML = '<span class="loading"><span class="spinner"></span>Sending...</span>';
 
       try {
+        clearPdfUrl();
         const ctx = getTgContext();
         const resp = await fetch("/api/generate", {
           method: "POST",
@@ -1229,19 +1306,12 @@
           const filenameMatch = disposition.match(/filename=\"?([^\";]+)\"?/i);
           const filename = filenameMatch?.[1] || `${reportType}.pdf`;
 
-          const href = URL.createObjectURL(blob);
-          const a = document.createElement("a");
-          a.href = href;
-          a.download = filename;
-          a.style.display = "none";
-          document.body.appendChild(a);
-          a.click();
-          a.remove();
-          URL.revokeObjectURL(href);
+          latestPdfUrl = URL.createObjectURL(blob);
+          latestPdfFilename = filename;
+          renderPdfActions(latestPdfUrl, latestPdfFilename);
 
           haptic("success");
-          showToast(L("toastSuccess"));
-          closeSheet();
+          showToast(L("toastPdfReady"));
           return true;
         }
 
@@ -1347,6 +1417,7 @@
     function closeSheet() {
       haptic("impact");
       $("sheet").classList.remove("show");
+      clearPdfUrl();
     }
 
     function setSheetHeader(title, hint, type) {

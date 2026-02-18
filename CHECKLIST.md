@@ -89,6 +89,8 @@ Reports are generated from PostgreSQL data in milliseconds via SQL.
   - Lightened icon containers for stronger icon contrast
   - Added bottom button "Open full screen"
   - Added avatar proxy endpoint (`GET /api/avatar`) in `miniapp/_worker.js` to improve Telegram avatar loading without exposing bot token
+  - Updated PDF delivery UX for Android WebView: after generation show explicit actions `Open PDF` / `Save PDF` in sheet note area
+  - Success toast text changed from "report sent" to "PDF ready" to avoid misleading status
   - Deployed via Git auto-deploy (`main`, commits `b275bb8`, `a910d5f`)
   - Result: cleaner cards, better readability, fullscreen action, improved avatar fallback path
 
