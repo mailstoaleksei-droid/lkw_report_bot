@@ -1196,6 +1196,7 @@
     /* ===== Final Layout (lighter techno + folder docs + clay apps) ===== */
     :root{
       --top-dock-h: 98px;
+      --bottom-dock-h: 116px;
       --glass-folder-bg: linear-gradient(155deg, rgba(246,252,255,.36), rgba(202,220,248,.20));
       --glass-folder-border: rgba(213,231,255,.62);
       --ink-dark: #132746;
@@ -1229,7 +1230,7 @@
     .wrap{
       max-width: 760px;
       padding-top: calc(var(--safe-top) + var(--top-dock-h) + 14px);
-      padding-bottom: calc(var(--safe-bottom) + 16px);
+      padding-bottom: calc(var(--safe-bottom) + var(--bottom-dock-h) + 16px);
     }
 
     .card{
@@ -1261,22 +1262,34 @@
       min-width: 0;
       text-align: left;
     }
-    .top-id{
+    .top-brand{
       min-width: 0;
       text-align: right;
     }
     .top-greet .title,
-    .top-id .title{
+    .top-brand .title{
       font-size: 14px;
       font-weight: 800;
       color: var(--ink-dark);
       text-shadow: none;
     }
     .top-greet .sub,
-    .top-id .sub{
+    .top-brand .sub{
       font-size: 13px;
       color: rgba(19,39,70,.82);
       text-shadow: none;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+    .brand-glow{
+      font-size: clamp(18px, 3.8vw, 24px);
+      font-weight: 800;
+      letter-spacing: .01em;
+      color: #112b66;
+      text-shadow:
+        0 0 8px rgba(63,111,255,.35),
+        0 0 16px rgba(120,164,255,.18);
       white-space: nowrap;
       overflow: hidden;
       text-overflow: ellipsis;
@@ -1297,7 +1310,7 @@
       text-shadow: none;
     }
 
-    /* Available reports as transparent file folders */
+    /* Available reports as liquid transparent rounded rectangles */
     .menu{
       display: grid;
       grid-template-columns: repeat(2, minmax(0, 1fr));
@@ -1305,9 +1318,9 @@
       margin-bottom: 14px;
     }
     .tile{
-      min-height: 90px;
-      padding: 12px 12px 12px 10px;
-      border-radius: 14px;
+      min-height: clamp(86px, 11vh, 108px);
+      padding: clamp(10px, 1.8vh, 14px) clamp(10px, 1.8vw, 14px);
+      border-radius: 16px;
       border: 1px solid var(--glass-folder-border);
       background: var(--glass-folder-bg);
       box-shadow:
@@ -1315,33 +1328,24 @@
         inset 0 1px 0 rgba(255,255,255,.30);
       backdrop-filter: blur(15px) saturate(112%);
       -webkit-backdrop-filter: blur(15px) saturate(112%);
-      display: flex;
+      display: grid;
+      grid-template-columns: auto 1fr;
       align-items: center;
-      gap: 10px;
+      gap: clamp(8px, 1.4vw, 14px);
       position: relative;
-      overflow: visible;
+      overflow: hidden;
     }
     .tile::before{
-      content: "";
-      position: absolute;
-      left: 12px;
-      top: -8px;
-      width: 48px;
-      height: 12px;
-      border-radius: 8px 8px 0 0;
-      border: 1px solid var(--glass-folder-border);
-      border-bottom: 0;
-      background: linear-gradient(165deg, rgba(247,252,255,.32), rgba(197,216,244,.16));
-      opacity: .94;
+      display: none;
     }
     .tile::after{
       display: none;
     }
     .tile-icon{
       display: grid !important;
-      width: 50px;
-      height: 50px;
-      flex: 0 0 50px;
+      width: clamp(38px, 9vw, 56px);
+      height: clamp(38px, 9vw, 56px);
+      flex: 0 0 clamp(38px, 9vw, 56px);
       border-radius: 14px;
       border: 1px solid rgba(222,238,255,.74);
       background: linear-gradient(145deg, rgba(243,250,255,.56), rgba(191,215,243,.26));
@@ -1350,8 +1354,8 @@
       place-items: center;
     }
     .tile-icon img{
-      width: 26px;
-      height: 26px;
+      width: clamp(22px, 5vw, 32px);
+      height: clamp(22px, 5vw, 32px);
       filter: saturate(.84) contrast(1.04) brightness(.66);
     }
     .tile-desc,
@@ -1363,20 +1367,19 @@
       min-width: 0;
       display: flex;
       align-items: center;
-      justify-content: flex-start;
-      text-align: left;
+      justify-content: center;
+      text-align: center;
     }
     .tile-title{
-      font-size: clamp(17px, 3.3vw, 21px);
+      font-size: clamp(15px, 2.9vw, 21px);
       font-weight: 700;
       line-height: 1.15;
       letter-spacing: .01em;
       text-transform: none;
       color: #22395d;
       text-shadow: none;
-      white-space: nowrap;
-      overflow: hidden;
-      text-overflow: ellipsis;
+      white-space: normal;
+      overflow-wrap: anywhere;
     }
     .tile-title::before{
       display: none;
@@ -1384,21 +1387,23 @@
 
     /* Bottom 3D clay apps */
     .dock{
-      margin-top: 6px;
+      position: fixed;
+      left: 50%;
+      bottom: calc(var(--safe-bottom) + 8px);
+      transform: translateX(-50%);
+      width: min(760px, calc(100vw - 16px));
+      z-index: 90;
+      margin-top: 0;
       display: grid;
-      grid-template-columns: repeat(2, minmax(120px, 1fr));
-      gap: 12px;
+      grid-template-columns: repeat(4, minmax(0, 1fr));
+      gap: 10px;
       border: 0;
       border-radius: 0;
-      padding: 0;
+      padding: 0 2px;
       background: transparent;
       box-shadow: none;
       backdrop-filter: none;
       -webkit-backdrop-filter: none;
-      position: static;
-      transform: none;
-      width: auto;
-      z-index: 1;
     }
     .dock::before{
       display: none;
@@ -1413,11 +1418,11 @@
         inset 0 1px 0 rgba(255,255,255,.72);
       backdrop-filter: blur(10px);
       -webkit-backdrop-filter: blur(10px);
-      padding: 12px;
-      display: flex;
-      align-items: center;
-      justify-content: flex-start;
-      gap: 10px;
+      padding: 10px 6px;
+      display: grid;
+      justify-items: center;
+      align-content: center;
+      gap: 7px;
       cursor: pointer;
       color: #1f2a44;
     }
@@ -1426,9 +1431,9 @@
       background: rgba(241,247,255,.86);
     }
     .dock-icon{
-      width: 68px;
-      height: 68px;
-      flex: 0 0 68px;
+      width: clamp(50px, 12vw, 66px);
+      height: clamp(50px, 12vw, 66px);
+      flex: 0 0 clamp(50px, 12vw, 66px);
       border-radius: 16px;
       border: 1px solid rgba(228,236,248,.88);
       background: linear-gradient(150deg, #f5f8ff, #e8eef9);
@@ -1439,16 +1444,16 @@
       place-items: center;
     }
     .dock-icon img{
-      width: 40px;
-      height: 40px;
+      width: clamp(28px, 7.8vw, 40px);
+      height: clamp(28px, 7.8vw, 40px);
       object-fit: contain;
       display: block;
       filter: saturate(.9) brightness(.88);
     }
     .dock-label{
-      font-size: 15px;
+      font-size: clamp(11px, 2.4vw, 14px);
       line-height: 1.2;
-      text-align: left;
+      text-align: center;
       color: #1f2a44;
       font-weight: 700;
     }
@@ -1494,34 +1499,23 @@
     @media (max-width: 640px){
       :root{
         --top-dock-h: 92px;
+        --bottom-dock-h: 106px;
       }
       .menu{
         grid-template-columns: repeat(2, minmax(0, 1fr));
       }
       .tile{
-        min-height: 84px;
-        padding: 10px 10px 10px 8px;
+        min-height: clamp(80px, 10.5vh, 96px);
+        padding: 10px;
       }
       .tile-icon{
-        width: 44px;
-        height: 44px;
-        flex-basis: 44px;
+        width: clamp(36px, 10vw, 46px);
+        height: clamp(36px, 10vw, 46px);
+        flex-basis: clamp(36px, 10vw, 46px);
       }
       .tile-icon img{
-        width: 24px;
-        height: 24px;
-      }
-      .dock-icon{
-        width: 62px;
-        height: 62px;
-        flex-basis: 62px;
-      }
-      .dock-icon img{
-        width: 36px;
-        height: 36px;
-      }
-      .dock-label{
-        font-size: 14px;
+        width: clamp(20px, 6vw, 24px);
+        height: clamp(20px, 6vw, 24px);
       }
     }
   </style>
@@ -1550,9 +1544,8 @@
           <div class="sub" id="welcomeSub">User</div>
         </div>
         <div class="avatar" id="avatar">??</div>
-        <div class="top-id">
-          <div class="title" id="idLabel">ID</div>
-          <div class="sub" id="userIdValue">...</div>
+        <div class="top-brand">
+          <div class="brand-glow" id="companyName">Groo GmbH</div>
         </div>
       </div>
       
@@ -1618,7 +1611,7 @@
       </button>
       <button class="dock-item" data-dock="lkw-list">
         <span class="dock-icon"><img src="icons/truck.svg" alt="" width="18" height="18"></span>
-        <span class="dock-label" id="dock-lkw-label">LKW List</span>
+        <span class="dock-label" id="dock-lkw-label">LKW</span>
       </button>
       <button class="dock-item" data-dock="drivers-list">
         <span class="dock-icon"><img src="icons/driver.svg" alt="" width="18" height="18"></span>
@@ -1679,7 +1672,7 @@
         pending: "INFO",
         sectionTitle: "Available Reports",
         navHistory: "Berichtsverlauf",
-        navLkwList: "LKW List",
+        navLkwList: "LKW",
         navDriversList: "Fahrer",
         navFuelCards: "Tankkarte",
         historyTitle: "Generated Files",
@@ -1747,8 +1740,8 @@
         pending: "ИНФО",
         sectionTitle: "Доступные отчеты",
         navHistory: "Berichtsverlauf",
-        navLkwList: "Список LKW",
-        navDriversList: "Водители",
+        navLkwList: "LKW",
+        navDriversList: "Fahrer",
         navFuelCards: "Tankkarte",
         historyTitle: "Сгенерированные файлы",
         historyHint: "Нажмите на файл, чтобы открыть",
@@ -2697,14 +2690,11 @@
       const ctx = getTgContext();
       const user = ctx.user || {};
       const name = user.first_name || user.username || "User";
-      const id = user.id || "";
-      const username = user.username ? `@${user.username}` : "";
 
       await setAvatarFromTelegram(user, name, ctx.initData);
       $("welcomeTitle").textContent = `${L("welcome")}`;
       $("welcomeSub").textContent = `${name}`.trim();
-      $("idLabel").textContent = "ID";
-      $("userIdValue").textContent = `${id || "-"}${username ? ` ${username}` : ""}`.trim();
+      $("companyName").textContent = "Groo GmbH";
 
       // Access check
       $("accessMsg").textContent = L("checking");
