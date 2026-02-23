@@ -1196,7 +1196,7 @@
     /* ===== Final Layout (lighter techno + folder docs + clay apps) ===== */
     :root{
       --top-dock-h: 98px;
-      --bottom-dock-h: 116px;
+      --bottom-dock-h: 82px;
       --glass-folder-bg: linear-gradient(155deg, rgba(246,252,255,.36), rgba(202,220,248,.20));
       --glass-folder-border: rgba(213,231,255,.62);
       --ink-dark: #132746;
@@ -1262,19 +1262,13 @@
       min-width: 0;
       text-align: left;
     }
-    .top-brand{
-      min-width: 0;
-      text-align: right;
-    }
-    .top-greet .title,
-    .top-brand .title{
+    .top-greet .title{
       font-size: 14px;
       font-weight: 800;
       color: var(--ink-dark);
       text-shadow: none;
     }
-    .top-greet .sub,
-    .top-brand .sub{
+    .top-greet .sub{
       font-size: 13px;
       color: rgba(19,39,70,.82);
       text-shadow: none;
@@ -1282,17 +1276,31 @@
       overflow: hidden;
       text-overflow: ellipsis;
     }
-    .brand-glow{
-      font-size: clamp(18px, 3.8vw, 24px);
-      font-weight: 800;
-      letter-spacing: .01em;
-      color: #112b66;
-      text-shadow:
-        0 0 8px rgba(63,111,255,.35),
-        0 0 16px rgba(120,164,255,.18);
-      white-space: nowrap;
-      overflow: hidden;
-      text-overflow: ellipsis;
+    .top-actions{
+      min-width: 0;
+      display: flex;
+      justify-content: flex-end;
+      align-items: center;
+      gap: 8px;
+    }
+    .top-icon-btn{
+      width: 34px;
+      height: 34px;
+      border-radius: 10px;
+      border: 1px solid rgba(28,57,106,.24);
+      background: linear-gradient(150deg, rgba(241,248,255,.72), rgba(191,214,243,.42));
+      color: #133271;
+      font-size: 18px;
+      font-weight: 700;
+      line-height: 1;
+      display: grid;
+      place-items: center;
+      cursor: pointer;
+      box-shadow: inset 0 1px 0 rgba(255,255,255,.55);
+    }
+    .top-icon-btn:active{
+      transform: scale(.96);
+      background: linear-gradient(150deg, rgba(234,244,255,.76), rgba(180,205,236,.48));
     }
     .avatar{
       grid-column: 2;
@@ -1304,10 +1312,29 @@
       display: none;
     }
 
-    .section-title{
+    .section-head{
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 10px;
       margin: 12px 0 12px 2px;
+    }
+    .section-title{
+      margin: 0;
+      flex: 1 1 auto;
       color: rgba(231,242,255,.96);
       text-shadow: none;
+    }
+    .section-brand-inline{
+      flex: 0 0 auto;
+      text-align: right;
+      color: rgba(231,242,255,.96);
+      font-size: inherit;
+      font-weight: inherit;
+      letter-spacing: .08em;
+      text-transform: uppercase;
+      text-shadow: none;
+      white-space: nowrap;
     }
 
     /* Available reports as liquid transparent rounded rectangles */
@@ -1410,51 +1437,46 @@
     }
     .dock-item{
       border: 0;
-      border-radius: 18px;
-      background: rgba(247, 250, 255, 0.78);
-      box-shadow:
-        8px 8px 18px rgba(27, 45, 78, .16),
-        -6px -6px 14px rgba(255,255,255,.82),
-        inset 0 1px 0 rgba(255,255,255,.72);
-      backdrop-filter: blur(10px);
-      -webkit-backdrop-filter: blur(10px);
-      padding: 10px 6px;
+      border-radius: 0;
+      background: transparent;
+      box-shadow: none;
+      backdrop-filter: none;
+      -webkit-backdrop-filter: none;
+      padding: 4px 2px;
       display: grid;
       justify-items: center;
       align-content: center;
-      gap: 7px;
+      gap: 6px;
       cursor: pointer;
       color: #1f2a44;
     }
     .dock-item:active{
-      transform: translateY(1px) scale(.99);
-      background: rgba(241,247,255,.86);
+      transform: scale(.96);
+      background: transparent;
     }
     .dock-icon{
-      width: clamp(50px, 12vw, 66px);
-      height: clamp(50px, 12vw, 66px);
-      flex: 0 0 clamp(50px, 12vw, 66px);
-      border-radius: 16px;
-      border: 1px solid rgba(228,236,248,.88);
-      background: linear-gradient(150deg, #f5f8ff, #e8eef9);
-      box-shadow:
-        6px 6px 14px rgba(74,96,132,.2),
-        -5px -5px 12px rgba(255,255,255,.94);
+      width: clamp(34px, 9.2vw, 48px);
+      height: clamp(34px, 9.2vw, 48px);
+      flex: 0 0 clamp(34px, 9.2vw, 48px);
+      border-radius: 0;
+      border: 0;
+      background: transparent;
+      box-shadow: none;
       display: grid;
       place-items: center;
     }
     .dock-icon img{
-      width: clamp(28px, 7.8vw, 40px);
-      height: clamp(28px, 7.8vw, 40px);
+      width: clamp(26px, 7vw, 36px);
+      height: clamp(26px, 7vw, 36px);
       object-fit: contain;
       display: block;
-      filter: saturate(.9) brightness(.88);
+      filter: saturate(.9) brightness(.92);
     }
     .dock-label{
-      font-size: clamp(11px, 2.4vw, 14px);
+      font-size: clamp(10px, 2.2vw, 13px);
       line-height: 1.2;
       text-align: center;
-      color: #1f2a44;
+      color: rgba(232,243,255,.96);
       font-weight: 700;
     }
 
@@ -1495,11 +1517,34 @@
       font-size: 14px;
       line-height: 1.5;
     }
+    .etl-list{
+      display: grid;
+      gap: 10px;
+    }
+    .etl-item{
+      border: 1px solid rgba(213,231,255,.56);
+      border-radius: 12px;
+      background: linear-gradient(155deg, rgba(246,252,255,.36), rgba(202,220,248,.20));
+      padding: 10px 12px;
+      color: #132746;
+      backdrop-filter: blur(12px) saturate(112%);
+      -webkit-backdrop-filter: blur(12px) saturate(112%);
+    }
+    .etl-item strong{
+      display: block;
+      font-size: 13px;
+      margin-bottom: 4px;
+    }
+    .etl-item small{
+      display: block;
+      opacity: .82;
+      line-height: 1.35;
+    }
 
     @media (max-width: 640px){
       :root{
         --top-dock-h: 92px;
-        --bottom-dock-h: 106px;
+        --bottom-dock-h: 74px;
       }
       .menu{
         grid-template-columns: repeat(2, minmax(0, 1fr));
@@ -1516,6 +1561,11 @@
       .tile-icon img{
         width: clamp(20px, 6vw, 24px);
         height: clamp(20px, 6vw, 24px);
+      }
+      .top-icon-btn{
+        width: 32px;
+        height: 32px;
+        font-size: 17px;
       }
     }
   </style>
@@ -1544,8 +1594,9 @@
           <div class="sub" id="welcomeSub">User</div>
         </div>
         <div class="avatar" id="avatar">??</div>
-        <div class="top-brand">
-          <div class="brand-glow" id="companyName">Groo GmbH</div>
+        <div class="top-actions">
+          <button class="top-icon-btn" id="btnSettings" aria-label="Settings">⚙</button>
+          <button class="top-icon-btn" id="btnBell" aria-label="ETL updates">🔔</button>
         </div>
       </div>
       
@@ -1558,7 +1609,10 @@
       </div>
     </div>
 
-    <div class="section-title" id="sectionTitle">Available Reports</div>
+    <div class="section-head">
+      <div class="section-title" id="sectionTitle">Available Reports</div>
+      <div class="section-brand-inline" id="sectionBrand">GROO&nbsp;&nbsp;GmbH</div>
+    </div>
     
     <div class="menu" id="menu">
       <div class="tile" data-report="container">
@@ -1607,7 +1661,7 @@
     <div class="dock" id="dock">
       <button class="dock-item" data-dock="history">
         <span class="dock-icon"><img src="icons/chart.svg" alt="" width="18" height="18"></span>
-        <span class="dock-label" id="dock-history-label">Berichtsverlauf</span>
+        <span class="dock-label" id="dock-history-label">Historie</span>
       </button>
       <button class="dock-item" data-dock="lkw-list">
         <span class="dock-icon"><img src="icons/truck.svg" alt="" width="18" height="18"></span>
@@ -1671,10 +1725,17 @@
         no: "NO",
         pending: "INFO",
         sectionTitle: "Available Reports",
-        navHistory: "Berichtsverlauf",
+        navHistory: "Historie",
         navLkwList: "LKW",
         navDriversList: "Fahrer",
         navFuelCards: "Tankkarte",
+        yourTelegramId: "Your Telegram ID",
+        etlTitle: "ETL Updates",
+        etlHint: "Last successful imports",
+        etlDataFile: "LKW_Fahrer_Data.xlsm",
+        etlPlanFile: "LKW_Fahrer_Plan.xlsb",
+        noEtlUpdate: "No successful update yet",
+        close: "Close",
         historyTitle: "Generated Files",
         historyHint: "Tap a file to open it",
         historyEmpty: "No generated files yet.",
@@ -1739,10 +1800,17 @@
         no: "НЕТ",
         pending: "ИНФО",
         sectionTitle: "Доступные отчеты",
-        navHistory: "Berichtsverlauf",
+        navHistory: "Historie",
         navLkwList: "LKW",
         navDriversList: "Fahrer",
         navFuelCards: "Tankkarte",
+        yourTelegramId: "Твой Telegram ID",
+        etlTitle: "ETL Обновления",
+        etlHint: "Последние успешные импорты",
+        etlDataFile: "LKW_Fahrer_Data.xlsm",
+        etlPlanFile: "LKW_Fahrer_Plan.xlsb",
+        noEtlUpdate: "Успешных обновлений пока нет",
+        close: "Закрыть",
         historyTitle: "Сгенерированные файлы",
         historyHint: "Нажмите на файл, чтобы открыть",
         historyEmpty: "Сгенерированных файлов пока нет.",
@@ -2027,6 +2095,68 @@
         return { state: "pending" };
       } catch {
         return { state: "pending" };
+      }
+    }
+
+    async function fetchMetaServer() {
+      const ctx = getTgContext();
+      const metaUrl = new URL("/api/meta", window.location.origin);
+      if (ctx.initData) metaUrl.searchParams.set("initData", ctx.initData);
+      const resp = await fetch(metaUrl.toString(), {
+        cache: "no-store",
+        headers: { "Accept": "application/json" },
+      });
+      const data = await resp.json().catch(() => null);
+      if (!resp.ok || !data || typeof data !== "object") {
+        throw new Error(data?.error || "Failed to load meta");
+      }
+      return data;
+    }
+
+    function formatDateTimeLocal(isoString) {
+      const ts = Date.parse(String(isoString || ""));
+      if (!Number.isFinite(ts)) return L("noEtlUpdate");
+      return new Date(ts).toLocaleString();
+    }
+
+    function showTelegramId() {
+      const ctx = getTgContext();
+      const userId = ctx?.user?.id ? String(ctx.user.id) : "-";
+      haptic("impact");
+      showToast(`${L("yourTelegramId")}: ${userId}`, 2600);
+    }
+
+    async function showEtlUpdates() {
+      haptic("impact");
+      setSheetHeader(L("etlTitle"), L("etlHint"), "ETL");
+      setSegments([], "", () => {});
+      setForm(`<div class="history-empty">${L("loadingHistory")}</div>`);
+      setNote("");
+      $("btnPrimary").textContent = L("close");
+      $("btnPrimary").onclick = closeSheet;
+      openSheet();
+
+      try {
+        const meta = await fetchMetaServer();
+        const sources = meta?.etl?.sources || {};
+        const xlsm = sources?.xlsm_lkw_fahrer_data || {};
+        const xlsb = sources?.xlsb_fahrer_plan || {};
+
+        const html = `
+          <div class="etl-list">
+            <div class="etl-item">
+              <strong>${L("etlDataFile")}</strong>
+              <small>${formatDateTimeLocal(xlsm.last_import_at)}</small>
+            </div>
+            <div class="etl-item">
+              <strong>${L("etlPlanFile")}</strong>
+              <small>${formatDateTimeLocal(xlsb.last_import_at)}</small>
+            </div>
+          </div>
+        `;
+        setForm(html);
+      } catch (err) {
+        setForm(`<div class="history-empty">${err?.message || "Failed to load ETL updates"}</div>`);
       }
     }
 
@@ -2670,6 +2800,13 @@
       });
     }
 
+    function wireTopActions() {
+      const settingsBtn = $("btnSettings");
+      const bellBtn = $("btnBell");
+      if (settingsBtn) settingsBtn.onclick = showTelegramId;
+      if (bellBtn) bellBtn.onclick = showEtlUpdates;
+    }
+
     async function main() {
       // Detect language
       currentLang = detectLanguage();
@@ -2694,7 +2831,7 @@
       await setAvatarFromTelegram(user, name, ctx.initData);
       $("welcomeTitle").textContent = `${L("welcome")}`;
       $("welcomeSub").textContent = `${name}`.trim();
-      $("companyName").textContent = "Groo GmbH";
+      $("sectionBrand").innerHTML = "GROO&nbsp;&nbsp;GmbH";
 
       // Access check
       $("accessMsg").textContent = L("checking");
@@ -2730,6 +2867,7 @@
 
       wireMenu();
       wireDock();
+      wireTopActions();
     }
 
     main();

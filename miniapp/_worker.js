@@ -1760,35 +1760,67 @@ async function buildMetaWithAccess(request, env) {
   const dbConnectionString = getDbConnectionString(env);
   if (dbConnectionString) {
     try {
+      const staleAfterHours = Math.max(1, toInt(env.ETL_STALE_AFTER_HOURS, 4));
+      const staleAfterSec = staleAfterHours * 3600;
+      const sourceSpecs = [
+        { key: "xlsm_lkw_fahrer_data", file_name: "LKW_Fahrer_Data.xlsm" },
+        { key: "xlsb_fahrer_plan", file_name: "LKW_Fahrer_Plan.xlsb" },
+      ];
+      const sourceMap = Object.fromEntries(
+        sourceSpecs.map((spec) => [
+          spec.key,
+          {
+            source_name: spec.key,
+            file_name: spec.file_name,
+            last_import_at: null,
+            age_sec: null,
+            is_stale: true,
+          },
+        ]),
+      );
+
       const result = await queryNeon(
         dbConnectionString,
         `
-          SELECT
+          SELECT DISTINCT ON (source_name)
             source_name,
             COALESCE(finished_at, started_at) AS import_ts
           FROM etl_log
           WHERE status = 'success'
-          ORDER BY COALESCE(finished_at, started_at) DESC
-          LIMIT 1
+            AND source_name IN ($1, $2)
+          ORDER BY source_name, COALESCE(finished_at, started_at) DESC
         `,
-        [],
+        [sourceSpecs[0].key, sourceSpecs[1].key],
       );
-      if (result.rows.length > 0) {
-        const row = result.rows[0];
-        const tsRaw = String(row.import_ts || "");
-        const parsed = Date.parse(tsRaw);
-        if (Number.isFinite(parsed)) {
-          const ageSec = Math.max(0, Math.floor((Date.now() - parsed) / 1000));
-          const staleAfterHours = Math.max(1, toInt(env.ETL_STALE_AFTER_HOURS, 4));
-          meta.etl = {
-            last_import_at: new Date(parsed).toISOString(),
-            age_sec: ageSec,
-            is_stale: ageSec > staleAfterHours * 3600,
-            stale_after_hours: staleAfterHours,
-            source_name: String(row.source_name || ""),
-          };
-        }
+
+      for (const row of result.rows) {
+        const sourceName = String(row.source_name || "").trim();
+        if (!sourceName || !sourceMap[sourceName]) continue;
+        const parsed = Date.parse(String(row.import_ts || ""));
+        if (!Number.isFinite(parsed)) continue;
+        const ageSec = Math.max(0, Math.floor((Date.now() - parsed) / 1000));
+        sourceMap[sourceName] = {
+          ...sourceMap[sourceName],
+          last_import_at: new Date(parsed).toISOString(),
+          age_sec: ageSec,
+          is_stale: ageSec > staleAfterSec,
+        };
       }
+
+      const sourceEntries = Object.values(sourceMap);
+      const newest = sourceEntries
+        .filter((entry) => entry.last_import_at)
+        .sort((a, b) => Date.parse(String(b.last_import_at)) - Date.parse(String(a.last_import_at)))[0] || null;
+      const isStale = sourceEntries.some((entry) => entry.is_stale);
+
+      meta.etl = {
+        last_import_at: newest?.last_import_at || null,
+        age_sec: newest?.age_sec ?? null,
+        is_stale: isStale,
+        stale_after_hours: staleAfterHours,
+        source_name: newest?.source_name || null,
+        sources: sourceMap,
+      };
     } catch {
       // Keep safe fallback metadata from env.
     }
