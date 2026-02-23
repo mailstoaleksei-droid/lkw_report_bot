@@ -62,6 +62,8 @@ const REPORTS = [
 const REPORT_MAP = new Map(REPORTS.map((r) => [r.id, r]));
 const USER_COOLDOWNS = new Map();
 let LAST_COOLDOWN_CLEANUP_MS = 0;
+const USER_ALLOW_CACHE = new Map();
+let LAST_ALLOW_CACHE_CLEANUP_MS = 0;
 const BERICHT_COMPANY_SQL = `
 WITH ref AS (
   SELECT to_date($1::text || '-W' || lpad($2::text, 2, '0') || '-1', 'IYYY-"W"IW-ID')::date AS week_monday
@@ -173,6 +175,10 @@ function getCooldownSec(env) {
   return Math.max(1, toInt(env.API_COOLDOWN_SEC, 5));
 }
 
+function getAllowedUsersCacheSec(env) {
+  return Math.max(10, toInt(env.ALLOWED_USERS_CACHE_SEC, 300));
+}
+
 function checkRateLimit(userId, env) {
   const now = Date.now();
   const cooldownSec = getCooldownSec(env);
@@ -204,7 +210,7 @@ function buildMeta(env) {
   const timezone = env.SCHEDULE_TIMEZONE || "Europe/Berlin";
   const reportType = env.SCHEDULE_REPORT_TYPE || "bericht";
 
-  const staleAfterHours = Math.max(1, toInt(env.ETL_STALE_AFTER_HOURS, 12));
+  const staleAfterHours = Math.max(1, toInt(env.ETL_STALE_AFTER_HOURS, 4));
   const staleAfterSec = staleAfterHours * 3600;
   const lastImportAt = (env.ETL_LAST_IMPORT_AT || "").trim() || null;
 
@@ -239,6 +245,14 @@ function buildMeta(env) {
   };
 }
 
+function toBoolish(value) {
+  if (typeof value === "boolean") return value;
+  const v = String(value ?? "").trim().toLowerCase();
+  if (["1", "true", "t", "yes", "y", "on"].includes(v)) return true;
+  if (["0", "false", "f", "no", "n", "off"].includes(v)) return false;
+  return false;
+}
+
 function json(data, status = 200, extraHeaders = {}) {
   return new Response(JSON.stringify(data), {
     status,
@@ -255,16 +269,6 @@ async function parseJsonBody(request) {
   } catch {
     return null;
   }
-}
-
-function parseWhitelist(env) {
-  const raw = String(env.WHITELIST_USER_IDS || "").trim();
-  if (!raw) return new Set();
-  const ids = raw
-    .split(",")
-    .map((x) => Number.parseInt(x.trim(), 10))
-    .filter((x) => Number.isFinite(x) && x > 0);
-  return new Set(ids);
 }
 
 function parseInitData(initDataRaw) {
@@ -390,6 +394,39 @@ async function queryNeon(connectionString, query, params = []) {
     return obj;
   });
   return { rows, rowCount: Number.parseInt(String(data?.rowCount ?? rows.length), 10) || rows.length };
+}
+
+async function isUserAllowedInDb(userId, env, connectionString) {
+  const uid = Number.parseInt(String(userId ?? ""), 10);
+  if (!Number.isFinite(uid) || uid <= 0) return false;
+
+  const now = Date.now();
+  const ttlMs = getAllowedUsersCacheSec(env) * 1000;
+  const cached = USER_ALLOW_CACHE.get(uid);
+  if (cached && cached.untilMs > now) {
+    return Boolean(cached.allowed);
+  }
+
+  const result = await queryNeon(
+    connectionString,
+    `
+      SELECT is_active
+      FROM allowed_users
+      WHERE telegram_user_id = $1
+      LIMIT 1
+    `,
+    [uid],
+  );
+  const allowed = result.rows.length > 0 && toBoolish(result.rows[0].is_active);
+
+  USER_ALLOW_CACHE.set(uid, { allowed, untilMs: now + ttlMs });
+  if (USER_ALLOW_CACHE.size > 5000 && now - LAST_ALLOW_CACHE_CLEANUP_MS > 60_000) {
+    for (const [k, v] of USER_ALLOW_CACHE.entries()) {
+      if (!v || v.untilMs <= now) USER_ALLOW_CACHE.delete(k);
+    }
+    LAST_ALLOW_CACHE_CLEANUP_MS = now;
+  }
+  return allowed;
 }
 
 function toIntSafe(value, fallback = 0) {
@@ -896,11 +933,6 @@ async function validateTelegramInitData(initDataRaw, env) {
     return { ok: false, error: "User id is missing in initData" };
   }
 
-  const whitelist = parseWhitelist(env);
-  if (whitelist.size > 0 && !whitelist.has(userId)) {
-    return { ok: false, error: "Access denied" };
-  }
-
   return { ok: true, userId };
 }
 
@@ -911,6 +943,28 @@ async function handleAvatar(request, env) {
   if (!auth.ok) {
     return new Response("Forbidden", {
       status: 403,
+      headers: { "Cache-Control": "no-store" },
+    });
+  }
+
+  const dbConnectionString = getDbConnectionString(env);
+  if (!dbConnectionString) {
+    return new Response("Server not configured", {
+      status: 503,
+      headers: { "Cache-Control": "no-store" },
+    });
+  }
+  try {
+    const allowed = await isUserAllowedInDb(auth.userId, env, dbConnectionString);
+    if (!allowed) {
+      return new Response("Forbidden", {
+        status: 403,
+        headers: { "Cache-Control": "no-store" },
+      });
+    }
+  } catch {
+    return new Response("Server error", {
+      status: 500,
       headers: { "Cache-Control": "no-store" },
     });
   }
@@ -996,25 +1050,6 @@ async function handleGenerateWithBody(body, env, enforceRateLimit = true) {
     });
   }
 
-  if (enforceRateLimit) {
-    const rl = checkRateLimit(auth.userId, env);
-    if (!rl.ok) {
-      return json(
-        {
-          ok: false,
-          error: `Please wait ${rl.retryAfterSec}s`,
-          code: "RATE_LIMITED",
-          retry_after_sec: rl.retryAfterSec,
-        },
-        429,
-        {
-          "Cache-Control": "no-store",
-          "Retry-After": String(rl.retryAfterSec),
-        },
-      );
-    }
-  }
-
   if (valid.reportType !== "bericht") {
     return json(
       {
@@ -1038,6 +1073,51 @@ async function handleGenerateWithBody(body, env, enforceRateLimit = true) {
       500,
       { "Cache-Control": "no-store" },
     );
+  }
+
+  let allowed = false;
+  try {
+    allowed = await isUserAllowedInDb(auth.userId, env, dbConnectionString);
+  } catch {
+    return json(
+      {
+        ok: false,
+        error: "Failed to verify access",
+        code: "ACCESS_CHECK_FAILED",
+      },
+      500,
+      { "Cache-Control": "no-store" },
+    );
+  }
+  if (!allowed) {
+    return json(
+      {
+        ok: false,
+        error: "Access denied",
+        code: "ACCESS_DENIED",
+      },
+      403,
+      { "Cache-Control": "no-store" },
+    );
+  }
+
+  if (enforceRateLimit) {
+    const rl = checkRateLimit(auth.userId, env);
+    if (!rl.ok) {
+      return json(
+        {
+          ok: false,
+          error: `Please wait ${rl.retryAfterSec}s`,
+          code: "RATE_LIMITED",
+          retry_after_sec: rl.retryAfterSec,
+        },
+        429,
+        {
+          "Cache-Control": "no-store",
+          "Retry-After": String(rl.retryAfterSec),
+        },
+      );
+    }
   }
 
   let rows;
@@ -1121,6 +1201,90 @@ async function handleGenerateGet(request, env) {
   return handleGenerateWithBody(body, env, false);
 }
 
+async function buildMetaWithAccess(request, env) {
+  const meta = buildMeta(env);
+  const url = new URL(request.url);
+
+  const dbConnectionString = getDbConnectionString(env);
+  if (dbConnectionString) {
+    try {
+      const result = await queryNeon(
+        dbConnectionString,
+        `
+          SELECT
+            source_name,
+            COALESCE(finished_at, started_at) AS import_ts
+          FROM etl_log
+          WHERE status = 'success'
+          ORDER BY COALESCE(finished_at, started_at) DESC
+          LIMIT 1
+        `,
+        [],
+      );
+      if (result.rows.length > 0) {
+        const row = result.rows[0];
+        const tsRaw = String(row.import_ts || "");
+        const parsed = Date.parse(tsRaw);
+        if (Number.isFinite(parsed)) {
+          const ageSec = Math.max(0, Math.floor((Date.now() - parsed) / 1000));
+          const staleAfterHours = Math.max(1, toInt(env.ETL_STALE_AFTER_HOURS, 4));
+          meta.etl = {
+            last_import_at: new Date(parsed).toISOString(),
+            age_sec: ageSec,
+            is_stale: ageSec > staleAfterHours * 3600,
+            stale_after_hours: staleAfterHours,
+            source_name: String(row.source_name || ""),
+          };
+        }
+      }
+    } catch {
+      // Keep safe fallback metadata from env.
+    }
+  }
+
+  const initDataRaw = url.searchParams.get("initData") || "";
+  if (!initDataRaw) {
+    meta.access = { mode: "anonymous", allowed: null };
+    return meta;
+  }
+
+  const auth = await validateTelegramInitData(initDataRaw, env);
+  if (!auth.ok) {
+    return {
+      ...meta,
+      ok: false,
+      access: { mode: "telegram", allowed: false, error: auth.error },
+    };
+  }
+
+  if (!dbConnectionString) {
+    return {
+      ...meta,
+      ok: false,
+      access: { mode: "telegram", allowed: false, error: "Database is not configured" },
+    };
+  }
+
+  try {
+    const allowed = await isUserAllowedInDb(auth.userId, env, dbConnectionString);
+    return {
+      ...meta,
+      ok: allowed,
+      access: {
+        mode: "telegram",
+        allowed,
+        user_id: auth.userId,
+      },
+    };
+  } catch {
+    return {
+      ...meta,
+      ok: false,
+      access: { mode: "telegram", allowed: false, error: "Access check failed" },
+    };
+  }
+}
+
 export default {
   async fetch(request, env) {
     const url = new URL(request.url);
@@ -1132,7 +1296,8 @@ export default {
     }
     
     if (request.method === "GET" && url.pathname === "/api/meta") {
-      return json(buildMeta(env), 200, {
+      const payload = await buildMetaWithAccess(request, env);
+      return json(payload, 200, {
         "Cache-Control": "no-store",
       });
     }
