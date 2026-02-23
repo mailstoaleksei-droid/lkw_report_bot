@@ -158,6 +158,50 @@ LEFT JOIN soll s ON s.iso_year = w.iso_year AND s.iso_week = w.iso_week
 ORDER BY w.week_start;
 `;
 
+const DOCK_KIND_TO_REPORT_TYPE = {
+  "lkw-list": "lkw_list",
+  "drivers-list": "drivers_list",
+  "fuel-cards": "fuel_cards",
+};
+
+const REPORT_TYPE_TO_DOCK_KIND = {
+  lkw_list: "lkw-list",
+  drivers_list: "drivers-list",
+  fuel_cards: "fuel-cards",
+};
+
+const LKW_LIST_SQL = `
+SELECT
+  t.external_id AS lkw_id,
+  COALESCE(NULLIF(t.plate_number, ''), NULLIF(t.raw_payload->>'LKW-Nummer', ''), NULLIF(t.raw_payload->>'Number', '')) AS lkw_nummer,
+  COALESCE(NULLIF(t.raw_payload->>'Marke/Modell', ''), NULLIF(t.raw_payload->>'Brand/Model', '')) AS marke_modell,
+  COALESCE(NULLIF(t.truck_type, ''), NULLIF(t.raw_payload->>'LKW-Typ', ''), NULLIF(t.raw_payload->>'Type', '')) AS lkw_typ,
+  COALESCE(NULLIF(c.name, ''), NULLIF(t.raw_payload->>'Firma', ''), NULLIF(t.raw_payload->>'Company', '')) AS firma,
+  COALESCE(NULLIF(t.status, ''), NULLIF(t.raw_payload->>'Status', '')) AS verkauft,
+  COALESCE(to_char(t.status_since, 'DD/MM/YYYY'), NULLIF(t.raw_payload->>'Datum verkauft', ''), NULLIF(t.raw_payload->>'Sale Date', '')) AS datum_verkauft,
+  COALESCE(NULLIF(t.raw_payload->>'Telefonnummer', ''), NULLIF(t.raw_payload->>'Phone Number', ''), NULLIF(t.raw_payload->>'Phone', '')) AS telefonnummer,
+  COALESCE(NULLIF(t.raw_payload->>'DKV Card', ''), NULLIF(t.raw_payload->>'DKV', '')) AS dkv_card,
+  COALESCE(NULLIF(t.raw_payload->>'Shell Card', ''), NULLIF(t.raw_payload->>'Shell', '')) AS shell_card,
+  COALESCE(NULLIF(t.raw_payload->>'Tankpool Card', ''), NULLIF(t.raw_payload->>'Tankpool', '')) AS tankpool_card
+FROM trucks t
+LEFT JOIN companies c ON c.id = t.company_id
+ORDER BY t.external_id;
+`;
+
+const DRIVERS_LIST_SQL = `
+SELECT
+  d.external_id AS fahrer_id,
+  d.full_name AS fahrername,
+  COALESCE(NULLIF(c.name, ''), NULLIF(d.raw_payload->>'Firma', ''), NULLIF(d.raw_payload->>'Company', '')) AS firma,
+  COALESCE(NULLIF(d.phone, ''), NULLIF(d.raw_payload->>'Telefonnummer', ''), NULLIF(d.raw_payload->>'Phone', '')) AS telefonnummer,
+  COALESCE(NULLIF(d.raw_payload->>'LKW-Typ', ''), NULLIF(d.raw_payload->>'Type', '')) AS lkw_typ,
+  COALESCE(NULLIF(d.raw_payload->>'Status', ''), CASE WHEN d.is_active THEN 'Aktiv' ELSE 'Entlassen' END) AS status,
+  COALESCE(NULLIF(d.raw_payload->>'Datum entlassen', ''), NULLIF(d.raw_payload->>'Dismiss Date', '')) AS datum_entlassen
+FROM drivers d
+LEFT JOIN companies c ON c.id = d.company_id
+ORDER BY d.external_id;
+`;
+
 function toBool(value, defaultValue = false) {
   if (typeof value !== "string") return defaultValue;
   const v = value.trim().toLowerCase();
@@ -396,6 +440,58 @@ async function queryNeon(connectionString, query, params = []) {
   return { rows, rowCount: Number.parseInt(String(data?.rowCount ?? rows.length), 10) || rows.length };
 }
 
+async function writeReportLog(connectionString, payload) {
+  const paramsJson = JSON.stringify(payload?.params || {});
+  await queryNeon(
+    connectionString,
+    `
+      INSERT INTO reports_log (
+        user_id,
+        chat_id,
+        report_type,
+        iso_year,
+        iso_week,
+        params,
+        status,
+        requested_at,
+        completed_at,
+        duration_ms,
+        output_key,
+        error_message
+      )
+      VALUES (
+        $1, $2, $3, $4, $5, $6::jsonb, $7,
+        NOW(), CASE WHEN $7 IN ('success', 'failed') THEN NOW() ELSE NULL END,
+        $8, $9, $10
+      )
+    `,
+    [
+      Number.parseInt(String(payload?.userId ?? "0"), 10),
+      Number.parseInt(String(payload?.chatId ?? payload?.userId ?? "0"), 10),
+      String(payload?.reportType || "unknown"),
+      payload?.isoYear ?? null,
+      payload?.isoWeek ?? null,
+      paramsJson,
+      String(payload?.status || "success"),
+      payload?.durationMs ?? null,
+      payload?.outputKey ?? null,
+      payload?.errorMessage ?? null,
+    ],
+  );
+}
+
+function makeBerichtFilename(year, week) {
+  return `bericht_${Number.parseInt(String(year), 10)}_w${pad2(Number.parseInt(String(week), 10))}.pdf`;
+}
+
+function makeDockFilename(kind, at = new Date()) {
+  const stamp = formatUtcDateStamp(at);
+  if (kind === "lkw-list") return `lkw_list_${stamp}.pdf`;
+  if (kind === "drivers-list") return `drivers_list_${stamp}.pdf`;
+  if (kind === "fuel-cards") return `fuel_cards_${stamp}.pdf`;
+  return `report_${stamp}.pdf`;
+}
+
 async function isUserAllowedInDb(userId, env, connectionString) {
   const uid = Number.parseInt(String(userId ?? ""), 10);
   if (!Number.isFinite(uid) || uid <= 0) return false;
@@ -436,6 +532,18 @@ function toIntSafe(value, fallback = 0) {
 
 function pad2(value) {
   return String(value).padStart(2, "0");
+}
+
+function formatUtcDateStamp(date = new Date()) {
+  const y = date.getUTCFullYear();
+  const m = pad2(date.getUTCMonth() + 1);
+  const d = pad2(date.getUTCDate());
+  return `${y}${m}${d}`;
+}
+
+function safeText(value, fallback = "-") {
+  const s = String(value ?? "").trim();
+  return s || fallback;
 }
 
 function normalizeAscii(text) {
@@ -833,6 +941,224 @@ async function buildBerichtPdfWithPdfLib({ year, week, userId, rows, weekSummari
   return pdfDoc.save();
 }
 
+function fitTextToWidth(font, text, size, maxWidth) {
+  const raw = safeText(text, "");
+  if (!raw) return "";
+  if (font.widthOfTextAtSize(raw, size) <= maxWidth) return raw;
+  let out = raw;
+  while (out.length > 1 && font.widthOfTextAtSize(`${out}...`, size) > maxWidth) {
+    out = out.slice(0, -1);
+  }
+  return `${out}...`;
+}
+
+function getDockTableSpec(kind) {
+  if (kind === "lkw-list") {
+    return {
+      title: "LKW List",
+      subtitle: "Sheet LKW: ID, Nummer, Modell, Typ, Firma, Verkauft, Datum verkauft, Telefonnummer",
+      sql: LKW_LIST_SQL,
+      columns: [
+        { key: "lkw_id", label: "LKW ID", width: 60 },
+        { key: "lkw_nummer", label: "LKW-Nummer", width: 78 },
+        { key: "marke_modell", label: "Marke/Modell", width: 100 },
+        { key: "lkw_typ", label: "LKW-Typ", width: 54 },
+        { key: "firma", label: "Firma", width: 70 },
+        { key: "verkauft", label: "Verkauft", width: 62 },
+        { key: "datum_verkauft", label: "Datum verkauft", width: 84 },
+        { key: "telefonnummer", label: "Telefonnummer", width: 102 },
+      ],
+    };
+  }
+
+  if (kind === "drivers-list") {
+    return {
+      title: "Drivers List",
+      subtitle: "Sheet Fahrer: Fahrer-ID, Fahrername, Firma, Telefonnummer, LKW-Typ, Status, Datum entlassen",
+      sql: DRIVERS_LIST_SQL,
+      columns: [
+        { key: "fahrer_id", label: "Fahrer-ID", width: 72 },
+        { key: "fahrername", label: "Fahrername", width: 132 },
+        { key: "firma", label: "Firma", width: 90 },
+        { key: "telefonnummer", label: "Telefonnummer", width: 104 },
+        { key: "lkw_typ", label: "LKW-Typ", width: 74 },
+        { key: "status", label: "Status", width: 70 },
+        { key: "datum_entlassen", label: "Datum entlassen", width: 106 },
+      ],
+    };
+  }
+
+  if (kind === "fuel-cards") {
+    return {
+      title: "Fuel Cards by LKW",
+      subtitle: "Sheet LKW: base truck data + DKV/Shell/Tankpool cards",
+      sql: LKW_LIST_SQL,
+      columns: [
+        { key: "lkw_id", label: "LKW ID", width: 58 },
+        { key: "lkw_nummer", label: "LKW-Nummer", width: 74 },
+        { key: "marke_modell", label: "Marke/Modell", width: 96 },
+        { key: "lkw_typ", label: "LKW-Typ", width: 52 },
+        { key: "firma", label: "Firma", width: 64 },
+        { key: "verkauft", label: "Verkauft", width: 54 },
+        { key: "datum_verkauft", label: "Datum verkauft", width: 74 },
+        { key: "telefonnummer", label: "Telefonnummer", width: 96 },
+        { key: "dkv_card", label: "DKV Card", width: 62 },
+        { key: "shell_card", label: "Shell Card", width: 62 },
+        { key: "tankpool_card", label: "Tankpool Card", width: 66 },
+      ],
+    };
+  }
+  return null;
+}
+
+async function buildDockPdfWithPdfLib({ kind, rows, userId }) {
+  const spec = getDockTableSpec(kind);
+  if (!spec) throw new Error(`Unsupported dock kind: ${kind}`);
+
+  const pdfDoc = await PDFDocument.create();
+  const font = await pdfDoc.embedFont(StandardFonts.Helvetica);
+  const boldFont = await pdfDoc.embedFont(StandardFonts.HelveticaBold);
+
+  const pageSize = [842, 595]; // A4 landscape
+  const margin = 22;
+  const rowHeight = 14;
+  const tableWidth = spec.columns.reduce((sum, c) => sum + c.width, 0);
+  const tableX = margin;
+  const maxTextSize = 8;
+
+  const borderColor = rgb(0.74, 0.8, 0.9);
+  const headerBg = rgb(0.93, 0.96, 1);
+  const oddBg = rgb(0.985, 0.99, 1);
+  const textColor = rgb(0.08, 0.14, 0.24);
+
+  let page = pdfDoc.addPage(pageSize);
+  let y = page.getHeight() - margin;
+
+  const drawPageHeader = () => {
+    page.drawText(spec.title, {
+      x: margin,
+      y,
+      size: 13,
+      font: boldFont,
+      color: textColor,
+    });
+    y -= 16;
+    page.drawText(`${spec.subtitle} | Generated: ${new Date().toISOString()} UTC | User: ${userId}`, {
+      x: margin,
+      y,
+      size: 8,
+      font,
+      color: rgb(0.24, 0.3, 0.4),
+    });
+    y -= 14;
+  };
+
+  const drawHeaderRow = () => {
+    page.drawRectangle({
+      x: tableX,
+      y: y - rowHeight + 2,
+      width: tableWidth,
+      height: rowHeight,
+      color: headerBg,
+      borderColor,
+      borderWidth: 1,
+    });
+
+    let x = tableX;
+    for (const col of spec.columns) {
+      const label = fitTextToWidth(boldFont, col.label, maxTextSize, col.width - 8);
+      page.drawText(label, {
+        x: x + 4,
+        y: y - 9,
+        size: maxTextSize,
+        font: boldFont,
+        color: textColor,
+      });
+      x += col.width;
+      if (x < tableX + tableWidth - 0.5) {
+        page.drawLine({
+          start: { x, y: y - rowHeight + 2 },
+          end: { x, y: y + 2 },
+          thickness: 0.8,
+          color: borderColor,
+        });
+      }
+    }
+    y -= rowHeight;
+  };
+
+  const ensureSpace = (needed) => {
+    if (y - needed >= margin) return;
+    page = pdfDoc.addPage(pageSize);
+    y = page.getHeight() - margin;
+    drawPageHeader();
+    drawHeaderRow();
+  };
+
+  const drawRow = (row, idx) => {
+    if (idx % 2 === 1) {
+      page.drawRectangle({
+        x: tableX,
+        y: y - rowHeight + 2,
+        width: tableWidth,
+        height: rowHeight,
+        color: oddBg,
+      });
+    }
+
+    let x = tableX;
+    for (const col of spec.columns) {
+      const value = fitTextToWidth(font, safeText(row?.[col.key], ""), maxTextSize, col.width - 8);
+      page.drawText(value, {
+        x: x + 4,
+        y: y - 9,
+        size: maxTextSize,
+        font,
+        color: textColor,
+      });
+      x += col.width;
+      if (x < tableX + tableWidth - 0.5) {
+        page.drawLine({
+          start: { x, y: y - rowHeight + 2 },
+          end: { x, y: y + 2 },
+          thickness: 0.5,
+          color: borderColor,
+        });
+      }
+    }
+    page.drawLine({
+      start: { x: tableX, y: y - rowHeight + 2 },
+      end: { x: tableX + tableWidth, y: y - rowHeight + 2 },
+      thickness: 0.5,
+      color: borderColor,
+    });
+    y -= rowHeight;
+  };
+
+  drawPageHeader();
+  drawHeaderRow();
+
+  if (!Array.isArray(rows) || rows.length === 0) {
+    ensureSpace(20);
+    page.drawText("No rows found.", {
+      x: margin,
+      y: y - 10,
+      size: 9,
+      font,
+      color: textColor,
+    });
+  } else {
+    let idx = 0;
+    for (const row of rows) {
+      ensureSpace(rowHeight + 2);
+      drawRow(row, idx);
+      idx += 1;
+    }
+  }
+
+  return pdfDoc.save();
+}
+
 async function fetchImageByUrl(url) {
   if (!url) return null;
   try {
@@ -934,6 +1260,215 @@ async function validateTelegramInitData(initDataRaw, env) {
   }
 
   return { ok: true, userId };
+}
+
+function parseJsonSafe(value, fallback = {}) {
+  if (value && typeof value === "object") return value;
+  if (typeof value !== "string" || !value.trim()) return fallback;
+  try {
+    const parsed = JSON.parse(value);
+    return parsed && typeof parsed === "object" ? parsed : fallback;
+  } catch {
+    return fallback;
+  }
+}
+
+async function authorizeUserByInitData(initDataRaw, env) {
+  const auth = await validateTelegramInitData(initDataRaw, env);
+  if (!auth.ok) {
+    return { ok: false, status: 403, error: auth.error };
+  }
+
+  const dbConnectionString = getDbConnectionString(env);
+  if (!dbConnectionString) {
+    return { ok: false, status: 500, error: "Database connection is not configured" };
+  }
+
+  let allowed = false;
+  try {
+    allowed = await isUserAllowedInDb(auth.userId, env, dbConnectionString);
+  } catch {
+    return { ok: false, status: 500, error: "Failed to verify access" };
+  }
+  if (!allowed) {
+    return { ok: false, status: 403, error: "Access denied" };
+  }
+  return {
+    ok: true,
+    userId: auth.userId,
+    dbConnectionString,
+  };
+}
+
+async function handleHistory(request, env) {
+  const url = new URL(request.url);
+  const initDataRaw = url.searchParams.get("initData") || "";
+  const authz = await authorizeUserByInitData(initDataRaw, env);
+  if (!authz.ok) {
+    return json({ ok: false, error: authz.error }, authz.status, { "Cache-Control": "no-store" });
+  }
+
+  const limit = Math.max(1, Math.min(100, Number.parseInt(url.searchParams.get("limit") || "40", 10) || 40));
+  let result;
+  try {
+    result = await queryNeon(
+      authz.dbConnectionString,
+      `
+        SELECT
+          id,
+          report_type,
+          iso_year,
+          iso_week,
+          params::text AS params_text,
+          status,
+          requested_at,
+          completed_at,
+          duration_ms
+        FROM reports_log
+        WHERE user_id = $1
+          AND status = 'success'
+        ORDER BY COALESCE(completed_at, requested_at) DESC
+        LIMIT $2
+      `,
+      [authz.userId, limit],
+    );
+  } catch (err) {
+    return json(
+      {
+        ok: false,
+        error: "Failed to load history",
+        details: String(err?.message || err || "unknown error"),
+      },
+      500,
+      { "Cache-Control": "no-store" },
+    );
+  }
+
+  const items = result.rows.map((row) => {
+    const reportType = String(row.report_type || "");
+    const params = parseJsonSafe(row.params_text, {});
+    const isoYear = toIntSafe(row.iso_year, 0) || null;
+    const isoWeek = toIntSafe(row.iso_week, 0) || null;
+
+    let filename = `report_${formatUtcDateStamp(new Date())}.pdf`;
+    if (reportType === "bericht" && isoYear && isoWeek) {
+      filename = makeBerichtFilename(isoYear, isoWeek);
+    } else if (REPORT_TYPE_TO_DOCK_KIND[reportType]) {
+      filename = makeDockFilename(REPORT_TYPE_TO_DOCK_KIND[reportType]);
+    }
+
+    return {
+      id: toIntSafe(row.id, 0),
+      report_type: reportType,
+      dock_kind: REPORT_TYPE_TO_DOCK_KIND[reportType] || null,
+      iso_year: isoYear,
+      iso_week: isoWeek,
+      requested_at: row.requested_at ? String(row.requested_at) : null,
+      completed_at: row.completed_at ? String(row.completed_at) : null,
+      duration_ms: toIntSafe(row.duration_ms, 0) || null,
+      params,
+      filename,
+    };
+  });
+
+  return json(
+    {
+      ok: true,
+      count: items.length,
+      items,
+    },
+    200,
+    { "Cache-Control": "no-store" },
+  );
+}
+
+async function handleDockPdf(request, env) {
+  const url = new URL(request.url);
+  const initDataRaw = url.searchParams.get("initData") || "";
+  const kind = String(url.searchParams.get("kind") || "").trim();
+  const requestedDisposition = String(url.searchParams.get("disposition") || "").toLowerCase();
+  const dispositionType = requestedDisposition === "inline" ? "inline" : "attachment";
+
+  const spec = getDockTableSpec(kind);
+  if (!spec) {
+    return json({ ok: false, error: `Unknown dock kind: ${kind}` }, 400, { "Cache-Control": "no-store" });
+  }
+
+  const authz = await authorizeUserByInitData(initDataRaw, env);
+  if (!authz.ok) {
+    return json({ ok: false, error: authz.error }, authz.status, { "Cache-Control": "no-store" });
+  }
+
+  let rows = [];
+  try {
+    const result = await queryNeon(authz.dbConnectionString, spec.sql, []);
+    rows = result.rows || [];
+  } catch (err) {
+    return json(
+      {
+        ok: false,
+        error: "Failed to load data for PDF",
+        details: String(err?.message || err || "unknown error"),
+      },
+      500,
+      { "Cache-Control": "no-store" },
+    );
+  }
+
+  let pdfBytes;
+  const startedMs = Date.now();
+  let pdfEngine = "pdf-lib";
+  const filename = makeDockFilename(kind);
+  try {
+    pdfBytes = await buildDockPdfWithPdfLib({
+      kind,
+      rows,
+      userId: authz.userId,
+    });
+  } catch (err) {
+    pdfEngine = "legacy-fallback";
+    const lines = [];
+    const cols = spec.columns.map((c) => c.key);
+    lines.push(spec.columns.map((c) => c.label).join(" | "));
+    lines.push("-".repeat(120));
+    for (const row of rows.slice(0, 500)) {
+      lines.push(cols.map((k) => safeText(row?.[k], "")).join(" | "));
+    }
+    if (rows.length > 500) {
+      lines.push(`... truncated: ${rows.length - 500} more rows`);
+    }
+    pdfBytes = buildSimplePdf({
+      title: spec.title,
+      subtitle: `Generated at ${new Date().toISOString()} UTC, user ${authz.userId}`,
+      lines,
+    });
+  }
+
+  try {
+    await writeReportLog(authz.dbConnectionString, {
+      userId: authz.userId,
+      chatId: authz.userId,
+      reportType: DOCK_KIND_TO_REPORT_TYPE[kind] || "dock_report",
+      status: "success",
+      params: { kind, source: "miniapp_dock" },
+      durationMs: Date.now() - startedMs,
+      outputKey: `${kind}:${formatUtcDateStamp(new Date())}`,
+    });
+  } catch {
+    // logging is best-effort
+  }
+
+  return new Response(pdfBytes, {
+    status: 200,
+    headers: {
+      "Content-Type": "application/pdf",
+      "Content-Disposition": `${dispositionType}; filename=\"${filename}\"`,
+      "Cache-Control": "no-store",
+      "X-Report-Type": DOCK_KIND_TO_REPORT_TYPE[kind] || "dock_report",
+      "X-Source": "sql-neon",
+      "X-PDF-Engine": pdfEngine,
+    },
+  });
 }
 
 async function handleAvatar(request, env) {
@@ -1120,6 +1655,7 @@ async function handleGenerateWithBody(body, env, enforceRateLimit = true) {
     }
   }
 
+  const startedMs = Date.now();
   let rows;
   let weekSummaries;
   try {
@@ -1143,7 +1679,7 @@ async function handleGenerateWithBody(body, env, enforceRateLimit = true) {
   }
 
   const generatedAt = new Date().toISOString();
-  const filename = `bericht_${valid.year}_w${pad2(valid.week)}.pdf`;
+  const filename = makeBerichtFilename(valid.year, valid.week);
   const requestedDisposition = String(body?.disposition || "").toLowerCase();
   const dispositionType = requestedDisposition === "inline" ? "inline" : "attachment";
   let pdfBytes;
@@ -1169,6 +1705,22 @@ async function handleGenerateWithBody(body, env, enforceRateLimit = true) {
         ...lines,
       ],
     });
+  }
+
+  try {
+    await writeReportLog(dbConnectionString, {
+      userId: auth.userId,
+      chatId: auth.userId,
+      reportType: "bericht",
+      isoYear: valid.year,
+      isoWeek: valid.week,
+      status: "success",
+      params: { year: valid.year, week: valid.week, source: "miniapp_generate" },
+      durationMs: Date.now() - startedMs,
+      outputKey: `bericht:${valid.year}:W${pad2(valid.week)}`,
+    });
+  } catch {
+    // logging is best-effort
   }
 
   return new Response(pdfBytes, {
@@ -1308,6 +1860,14 @@ export default {
     
     if (request.method === "GET" && url.pathname === "/api/generate") {
       return handleGenerateGet(request, env);
+    }
+
+    if (request.method === "GET" && url.pathname === "/api/history") {
+      return handleHistory(request, env);
+    }
+
+    if (request.method === "GET" && url.pathname === "/api/dock-pdf") {
+      return handleDockPdf(request, env);
     }
 
     if (request.method === "GET" && url.pathname === "/api/avatar") {

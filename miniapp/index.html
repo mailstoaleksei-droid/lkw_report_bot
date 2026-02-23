@@ -1192,6 +1192,228 @@
         letter-spacing: .05em;
       }
     }
+
+    /* ===== Fixed Docks + 2-col Reports Override ===== */
+    :root{
+      --top-dock-h: 92px;
+      --bottom-dock-h: 88px;
+    }
+
+    body{
+      background:
+        radial-gradient(1200px 780px at 8% -4%, rgba(14, 28, 88, .62), transparent 62%),
+        radial-gradient(980px 700px at 92% 2%, rgba(12, 62, 43, .52), transparent 64%),
+        radial-gradient(900px 660px at 52% 112%, rgba(71, 21, 96, .45), transparent 66%),
+        linear-gradient(180deg, #071019, #040a12);
+    }
+
+    .bg-disks .disk{
+      background:
+        radial-gradient(circle at 30% 24%, rgba(114,145,255,.34), transparent 42%),
+        radial-gradient(circle at 70% 72%, rgba(31,120,90,.32), transparent 58%),
+        repeating-radial-gradient(circle at 45% 45%, rgba(206,224,255,.06) 0 2px, rgba(0,0,0,.08) 2px 4px),
+        linear-gradient(145deg, #1e2d56, #173f35 58%, #3f1f5e);
+      opacity: .76;
+      box-shadow:
+        inset 0 2px 10px rgba(180,205,255,.15),
+        inset 0 -22px 42px rgba(0,0,0,.28);
+    }
+
+    .wrap{
+      max-width: 760px;
+      padding-top: calc(var(--safe-top) + var(--top-dock-h) + 16px);
+      padding-bottom: calc(var(--safe-bottom) + var(--bottom-dock-h) + 18px);
+    }
+
+    .card{
+      position: fixed;
+      top: calc(var(--safe-top) + 8px);
+      left: 50%;
+      transform: translateX(-50%);
+      width: min(760px, calc(100vw - 16px));
+      z-index: 80;
+      border-radius: 16px;
+      border: 1px solid #000;
+      background: #000;
+      box-shadow: none;
+      backdrop-filter: none;
+      -webkit-backdrop-filter: none;
+    }
+
+    .top{
+      padding: 12px 14px;
+      min-height: calc(var(--top-dock-h) - 2px);
+    }
+    .title,
+    .sub{
+      color: #f3f3f3;
+      text-shadow: none;
+    }
+    .access{
+      display: none;
+    }
+
+    .section-title{
+      margin: 12px 0 12px 2px;
+      color: rgba(239,247,255,.95);
+    }
+
+    .menu{
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: 10px;
+      margin-bottom: 8px;
+    }
+
+    .tile{
+      min-height: 124px;
+      padding: 14px 12px;
+      border-radius: 16px;
+      border: 1px solid rgba(212,226,247,.52);
+      background:
+        linear-gradient(150deg, rgba(246,251,255,.88), rgba(214,228,245,.74));
+      box-shadow: none;
+      display: grid;
+      grid-template-rows: auto 1fr;
+      justify-items: center;
+      align-items: start;
+      gap: 10px;
+    }
+
+    .tile-icon{
+      display: grid !important;
+      width: 40px;
+      height: 40px;
+      border-radius: 12px;
+      border: 1px solid rgba(21,36,58,.16);
+      background: linear-gradient(145deg, #eaf1fb, #ccd9ea);
+      box-shadow: none;
+      place-items: center;
+    }
+    .tile-icon img{
+      width: 22px;
+      height: 22px;
+      filter: saturate(.82) contrast(1.05) brightness(.72);
+    }
+    .tile-desc,
+    .tile-arrow{
+      display: none !important;
+    }
+    .tile-content{
+      width: 100%;
+      justify-content: center;
+      align-items: center;
+      text-align: center;
+    }
+    .tile-title{
+      position: static;
+      display: block;
+      margin: 0;
+      font-size: clamp(22px, 5.2vw, 30px);
+      font-weight: 900;
+      line-height: 1.06;
+      letter-spacing: .02em;
+      text-transform: uppercase;
+      color: #000;
+      background: none;
+      -webkit-background-clip: initial;
+      background-clip: initial;
+      text-shadow: none;
+      white-space: normal;
+      word-break: normal;
+    }
+    .tile-title::before{
+      display: none;
+    }
+
+    .dock{
+      position: fixed;
+      left: 50%;
+      bottom: calc(var(--safe-bottom) + 6px);
+      transform: translateX(-50%);
+      width: min(760px, calc(100vw - 16px));
+      z-index: 90;
+      margin: 0;
+      border: 1px solid #000;
+      border-radius: 16px;
+      padding: 8px 6px;
+      background: #000;
+      box-shadow: none;
+      backdrop-filter: none;
+      -webkit-backdrop-filter: none;
+      gap: 4px;
+    }
+    .dock-item{
+      padding: 6px 3px;
+      border-radius: 10px;
+      color: #f6f6f6;
+      gap: 4px;
+    }
+    .dock-item:active{
+      background: rgba(255,255,255,.14);
+      transform: scale(.985);
+    }
+    .dock-icon{
+      width: 30px;
+      height: 30px;
+      border-radius: 999px;
+      border: 1px solid rgba(255,255,255,.32);
+      background: rgba(255,255,255,.10);
+      box-shadow: none;
+    }
+    .dock-icon img{
+      width: 16px;
+      height: 16px;
+      filter: brightness(1.95) contrast(1.04);
+    }
+    .dock-label{
+      font-size: 10px;
+      color: #f6f6f6;
+    }
+
+    .history-list{
+      display: grid;
+      gap: 10px;
+    }
+    .history-item{
+      width: 100%;
+      border: 1px solid rgba(209,228,248,.55);
+      border-radius: 14px;
+      background: linear-gradient(145deg, rgba(244,251,255,.88), rgba(219,233,247,.72));
+      color: #09131d;
+      padding: 12px;
+      text-align: left;
+      cursor: pointer;
+      box-shadow: none;
+    }
+    .history-item strong{
+      display: block;
+      font-size: 14px;
+      margin-bottom: 4px;
+    }
+    .history-item small{
+      display: block;
+      opacity: .78;
+      line-height: 1.35;
+    }
+    .history-empty{
+      color: rgba(236,247,255,.9);
+      font-size: 14px;
+      line-height: 1.5;
+    }
+
+    @media (max-width: 640px){
+      :root{
+        --top-dock-h: 84px;
+        --bottom-dock-h: 84px;
+      }
+      .menu{
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+      }
+      .tile{
+        min-height: 114px;
+      }
+    }
   </style>
 </head>
 <body>
@@ -1233,38 +1455,44 @@
     
     <div class="menu" id="menu">
       <div class="tile" data-report="container">
+        <div class="tile-icon"><img src="icons/container.svg" alt="" width="22" height="22"></div>
         <div class="tile-content">
-          <div class="tile-title" data-text="CONTAINER">CONTAINER</div>
+          <div class="tile-title">CONTAINER</div>
         </div>
       </div>
 
       <div class="tile" data-report="lkw">
+        <div class="tile-icon"><img src="icons/truck.svg" alt="" width="22" height="22"></div>
         <div class="tile-content">
-          <div class="tile-title" data-text="LKW">LKW</div>
+          <div class="tile-title">LKW</div>
         </div>
       </div>
 
       <div class="tile" data-report="fahrer">
+        <div class="tile-icon"><img src="icons/driver.svg" alt="" width="22" height="22"></div>
         <div class="tile-content">
-          <div class="tile-title" data-text="FAHRER">FAHRER</div>
+          <div class="tile-title">FAHRER</div>
         </div>
       </div>
 
       <div class="tile" data-report="yf">
+        <div class="tile-icon"><img src="icons/chart.svg" alt="" width="22" height="22"></div>
         <div class="tile-content">
-          <div class="tile-title" data-text="YF">YF</div>
+          <div class="tile-title">YF</div>
         </div>
       </div>
 
       <div class="tile" data-report="einnahmen">
+        <div class="tile-icon"><img src="icons/money.svg" alt="" width="22" height="22"></div>
         <div class="tile-content">
-          <div class="tile-title" data-text="EINNAHMEN">EINNAHMEN</div>
+          <div class="tile-title">EINNAHMEN</div>
         </div>
       </div>
 
       <div class="tile" data-report="bonus">
+        <div class="tile-icon"><img src="icons/target.svg" alt="" width="22" height="22"></div>
         <div class="tile-content">
-          <div class="tile-title" data-text="BONUS">BONUS</div>
+          <div class="tile-title">BONUS</div>
         </div>
       </div>
     </div>
@@ -1340,6 +1568,14 @@
         navLkwList: "LKW List",
         navDriversList: "Drivers",
         navFuelCards: "Fuel Cards",
+        historyTitle: "Generated Files",
+        historyHint: "Tap a file to open it",
+        historyEmpty: "No generated files yet.",
+        loadingHistory: "Loading history...",
+        loadingPdf: "Preparing PDF...",
+        lkwDockTitle: "LKW List PDF",
+        driversDockTitle: "Drivers List PDF",
+        fuelDockTitle: "Fuel Cards PDF",
         
         // Descriptions
         descContainer: "Run current Bericht PDF report",
@@ -1400,6 +1636,14 @@
         navLkwList: "Список LKW",
         navDriversList: "Водители",
         navFuelCards: "Топливные карты",
+        historyTitle: "Сгенерированные файлы",
+        historyHint: "Нажмите на файл, чтобы открыть",
+        historyEmpty: "Сгенерированных файлов пока нет.",
+        loadingHistory: "Загрузка истории...",
+        loadingPdf: "Подготовка PDF...",
+        lkwDockTitle: "PDF списка LKW",
+        driversDockTitle: "PDF списка водителей",
+        fuelDockTitle: "PDF топливных карт",
         
         // Descriptions
         descContainer: "Запуск текущего отчета Bericht PDF",
@@ -1527,6 +1771,36 @@
       if (payload && payload.week !== undefined) u.searchParams.set("week", String(payload.week));
       if (disposition) u.searchParams.set("disposition", disposition);
       return u.toString();
+    }
+
+    function buildDockPdfDirectUrl(kind, initData, disposition = "attachment") {
+      const u = new URL("/api/dock-pdf", window.location.origin);
+      u.searchParams.set("initData", initData || "");
+      u.searchParams.set("kind", kind || "");
+      if (disposition) u.searchParams.set("disposition", disposition);
+      return u.toString();
+    }
+
+    function buildHistoryEntryOpenUrl(item, initData, disposition = "inline") {
+      const type = String(item?.report_type || "");
+      if (type === "bericht" && item?.iso_year && item?.iso_week) {
+        return buildGenerateDirectUrl(
+          "bericht",
+          { year: Number(item.iso_year), week: Number(item.iso_week) },
+          initData || "",
+          disposition,
+        );
+      }
+
+      const dockKind = item?.dock_kind || {
+        lkw_list: "lkw-list",
+        drivers_list: "drivers-list",
+        fuel_cards: "fuel-cards",
+      }[type];
+      if (dockKind) {
+        return buildDockPdfDirectUrl(dockKind, initData || "", disposition);
+      }
+      return "";
     }
 
     function openDirectUrl(url, fallbackBlobUrl, filename) {
@@ -1711,6 +1985,112 @@
 
     function sendToBot(_) {
       showToast(L("toastComingSoon"));
+    }
+
+    async function openDockPdf(kind, titleKey) {
+      haptic("impact");
+      showToast(L("loadingPdf"), 1200);
+
+      try {
+        clearPdfUrl();
+        const ctx = getTgContext();
+        const openUrl = buildDockPdfDirectUrl(kind, ctx.initData || "", "inline");
+        const saveUrl = buildDockPdfDirectUrl(kind, ctx.initData || "", "attachment");
+
+        const resp = await fetch(saveUrl, {
+          cache: "no-store",
+          headers: { "Accept": "application/pdf" },
+        });
+        const ct = (resp.headers.get("content-type") || "").toLowerCase();
+        if (!(resp.ok && ct.includes("application/pdf"))) {
+          const data = await resp.json().catch(() => ({}));
+          throw new Error(data.error || "PDF is not available");
+        }
+
+        const blob = await resp.blob();
+        const disposition = String(resp.headers.get("content-disposition") || "");
+        const match = disposition.match(/filename=\"?([^\";]+)\"?/i);
+
+        latestPdfUrl = URL.createObjectURL(blob);
+        latestPdfFilename = match?.[1] || `${kind}.pdf`;
+        latestPdfOpenUrl = openUrl;
+        latestPdfSaveUrl = saveUrl;
+
+        setSheetHeader(L(titleKey), L("toastPdfReady"), "PDF");
+        setSegments([], "", () => {});
+        setForm("");
+        renderPdfActions();
+        openSheet();
+        showToast(L("toastPdfReady"));
+      } catch (err) {
+        haptic("error");
+        showToast(err?.message || "Network error");
+      }
+    }
+
+    async function openHistory() {
+      haptic("impact");
+      setSheetHeader(L("historyTitle"), L("historyHint"), "History");
+      setSegments([], "", () => {});
+      setForm(`<div class="history-empty">${L("loadingHistory")}</div>`);
+      setNote("");
+      $("btnPrimary").textContent = L("openPdf");
+      $("btnPrimary").onclick = () => closeSheet();
+      openSheet();
+
+      try {
+        const ctx = getTgContext();
+        const url = new URL("/api/history", window.location.origin);
+        url.searchParams.set("initData", ctx.initData || "");
+        url.searchParams.set("limit", "40");
+        const resp = await fetch(url.toString(), {
+          cache: "no-store",
+          headers: { "Accept": "application/json" },
+        });
+        const data = await resp.json().catch(() => null);
+        if (!resp.ok || !data?.ok) {
+          throw new Error(data?.error || "Failed to load history");
+        }
+
+        const items = Array.isArray(data.items) ? data.items : [];
+        if (!items.length) {
+          setForm(`<div class="history-empty">${L("historyEmpty")}</div>`);
+          return;
+        }
+
+        const html = `
+          <div class="history-list">
+            ${items.map((item, idx) => `
+              <button class="history-item" data-history-idx="${idx}">
+                <strong>${item.filename || "report.pdf"}</strong>
+                <small>${item.report_type || ""}</small>
+                <small>${item.completed_at || item.requested_at || ""}</small>
+              </button>
+            `).join("")}
+          </div>
+        `;
+        setForm(html);
+
+        document.querySelectorAll(".history-item").forEach((btn) => {
+          btn.onclick = () => {
+            const idx = Number(btn.getAttribute("data-history-idx"));
+            const item = items[idx];
+            const openUrl = buildHistoryEntryOpenUrl(item, ctx.initData || "", "inline");
+            const saveUrl = buildHistoryEntryOpenUrl(item, ctx.initData || "", "attachment");
+            if (!openUrl) {
+              showToast("Open URL not available");
+              return;
+            }
+            latestPdfOpenUrl = openUrl;
+            latestPdfSaveUrl = saveUrl;
+            latestPdfUrl = "";
+            latestPdfFilename = item?.filename || "report.pdf";
+            openDirectUrl(openUrl, "", latestPdfFilename);
+          };
+        });
+      } catch (err) {
+        setForm(`<div class="history-empty">${err?.message || "Failed to load history"}</div>`);
+      }
     }
 
     async function tryAttachAvatarFromSrc(avatar, name, src) {
@@ -2168,11 +2548,17 @@
       $("dock-drivers-label").textContent = labels["drivers-list"];
       $("dock-fuel-label").textContent = labels["fuel-cards"];
 
+      const handlers = {
+        history: () => openHistory(),
+        "lkw-list": () => openDockPdf("lkw-list", "lkwDockTitle"),
+        "drivers-list": () => openDockPdf("drivers-list", "driversDockTitle"),
+        "fuel-cards": () => openDockPdf("fuel-cards", "fuelDockTitle"),
+      };
+
       document.querySelectorAll(".dock-item").forEach((item) => {
         item.onclick = () => {
           const key = item.getAttribute("data-dock");
-          haptic("impact");
-          showToast(`${labels[key]}: ${L("toastComingSoon")}`);
+          handlers[key]?.();
         };
       });
     }
