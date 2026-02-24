@@ -181,8 +181,8 @@ SELECT
   COALESCE(to_char(t.status_since, 'DD/MM/YYYY'), NULLIF(t.raw_payload->>'Datum verkauft', ''), NULLIF(t.raw_payload->>'Sale Date', '')) AS datum_verkauft,
   COALESCE(NULLIF(t.raw_payload->>'Telefonnummer', ''), NULLIF(t.raw_payload->>'Phone Number', ''), NULLIF(t.raw_payload->>'Phone', '')) AS telefonnummer,
   COALESCE(NULLIF(t.raw_payload->>'DKV Card', ''), NULLIF(t.raw_payload->>'DKV', '')) AS dkv_card,
-  COALESCE(NULLIF(t.raw_payload->>'Shell Card', ''), NULLIF(t.raw_payload->>'Shell', ''), '7077147037426750094') AS shell_card,
-  COALESCE(NULLIF(t.raw_payload->>'Tankpool Card', ''), NULLIF(t.raw_payload->>'Tankpool', ''), '10324177') AS tankpool_card
+  COALESCE(NULLIF(t.raw_payload->>'Shell Card', ''), NULLIF(t.raw_payload->>'Shell', '')) AS shell_card,
+  COALESCE(NULLIF(t.raw_payload->>'Tankpool Card', ''), NULLIF(t.raw_payload->>'Tankpool', '')) AS tankpool_card
 FROM trucks t
 LEFT JOIN companies c ON c.id = t.company_id
 ORDER BY t.external_id;
