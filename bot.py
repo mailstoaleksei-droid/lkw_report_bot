@@ -58,6 +58,7 @@ HEARTBEAT_PATH = os.path.join(
     "lkw_report_bot_heartbeat.txt",
 )
 HEARTBEAT_INTERVAL_SEC = max(5, int(os.getenv("HEARTBEAT_INTERVAL_SEC", "30") or 30))
+ACTION_QUEUE_POLL_SEC = max(2, int(os.getenv("ACTION_QUEUE_POLL_SEC", "5") or 5))
 
 logging.basicConfig(
     level=logging.INFO,
@@ -164,6 +165,154 @@ def _touch_heartbeat_file():
             f.write(str(int(time.time())))
     except Exception:
         logger.debug("Heartbeat write failed", exc_info=True)
+
+
+def _db_url() -> str:
+    return (os.getenv("DATABASE_URL", "") or "").strip()
+
+
+def _ensure_action_queue_schema() -> None:
+    db_url = _db_url()
+    if not db_url:
+        return
+    import psycopg  # type: ignore
+
+    with psycopg.connect(db_url) as conn:
+        with conn.cursor() as cur:
+            cur.execute(
+                """
+                CREATE TABLE IF NOT EXISTS miniapp_action_queue (
+                    id BIGSERIAL PRIMARY KEY,
+                    action_type TEXT NOT NULL,
+                    user_id BIGINT NOT NULL,
+                    payload JSONB NOT NULL DEFAULT '{}'::jsonb,
+                    status TEXT NOT NULL CHECK (status IN ('pending', 'running', 'done', 'failed')) DEFAULT 'pending',
+                    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+                    started_at TIMESTAMPTZ,
+                    finished_at TIMESTAMPTZ,
+                    result_text TEXT,
+                    error_text TEXT
+                );
+                CREATE INDEX IF NOT EXISTS idx_miniapp_action_queue_status_created
+                  ON miniapp_action_queue(status, created_at);
+                CREATE INDEX IF NOT EXISTS idx_miniapp_action_queue_user_created
+                  ON miniapp_action_queue(user_id, created_at DESC);
+                """
+            )
+        conn.commit()
+
+
+def _queue_claim_plan_update_action() -> dict | None:
+    db_url = _db_url()
+    if not db_url:
+        return None
+    import psycopg  # type: ignore
+
+    with psycopg.connect(db_url) as conn:
+        with conn.cursor() as cur:
+            cur.execute(
+                """
+                WITH next_action AS (
+                    SELECT id
+                    FROM miniapp_action_queue
+                    WHERE status = 'pending'
+                      AND action_type = 'plan_update'
+                    ORDER BY created_at ASC
+                    LIMIT 1
+                    FOR UPDATE SKIP LOCKED
+                )
+                UPDATE miniapp_action_queue q
+                SET status = 'running',
+                    started_at = NOW()
+                FROM next_action
+                WHERE q.id = next_action.id
+                RETURNING q.id, q.user_id, q.payload::text
+                """
+            )
+            row = cur.fetchone()
+        conn.commit()
+    if not row:
+        return None
+    payload = {}
+    try:
+        payload = json.loads(row[2] or "{}")
+    except Exception:
+        payload = {}
+    return {"id": int(row[0]), "user_id": int(row[1]), "payload": payload}
+
+
+def _queue_finish_action(action_id: int, status: str, result_text: str = "", error_text: str = "") -> None:
+    db_url = _db_url()
+    if not db_url:
+        return
+    import psycopg  # type: ignore
+
+    with psycopg.connect(db_url) as conn:
+        with conn.cursor() as cur:
+            cur.execute(
+                """
+                UPDATE miniapp_action_queue
+                SET status = %s,
+                    finished_at = NOW(),
+                    result_text = %s,
+                    error_text = %s
+                WHERE id = %s
+                """,
+                (status, result_text or None, error_text or None, int(action_id)),
+            )
+        conn.commit()
+
+
+async def _plan_update_queue_loop(app):
+    db_url = _db_url()
+    if not db_url:
+        logger.warning("Plan-update queue disabled: DATABASE_URL is empty")
+        return
+
+    try:
+        await asyncio.to_thread(_ensure_action_queue_schema)
+    except Exception:
+        logger.exception("Failed to ensure miniapp_action_queue schema")
+        return
+
+    logger.info("Plan-update queue loop started (poll=%ss)", ACTION_QUEUE_POLL_SEC)
+    while not _shutdown_event.is_set():
+        action = None
+        try:
+            action = await asyncio.to_thread(_queue_claim_plan_update_action)
+        except Exception:
+            logger.exception("Failed to claim plan_update action")
+            await asyncio.sleep(ACTION_QUEUE_POLL_SEC)
+            continue
+
+        if not action:
+            await asyncio.sleep(ACTION_QUEUE_POLL_SEC)
+            continue
+
+        action_id = int(action["id"])
+        user_id = int(action["user_id"])
+        try:
+            async with EXCEL_LOCK:
+                result = await asyncio.wait_for(asyncio.to_thread(run_plan_update), timeout=30 * 60)
+            await asyncio.to_thread(
+                _queue_finish_action,
+                action_id,
+                "done",
+                json.dumps(result, ensure_ascii=False),
+                "",
+            )
+            await app.bot.send_message(chat_id=user_id, text=TEXT["ru"]["plan_update_done"])
+            logger.info("Plan-update queue action done id=%s user=%s", action_id, user_id)
+        except Exception as e:
+            logger.exception("Plan-update queue action failed id=%s user=%s", action_id, user_id)
+            await asyncio.to_thread(_queue_finish_action, action_id, "failed", "", str(e))
+            try:
+                await app.bot.send_message(
+                    chat_id=user_id,
+                    text=TEXT["ru"]["plan_update_failed"].format(err=str(e)),
+                )
+            except Exception:
+                logger.exception("Failed to notify user about plan-update error user=%s", user_id)
 
 
 async def _heartbeat_loop():
@@ -958,11 +1107,13 @@ def main():
     async def _run():
         await app.initialize()
         heartbeat_task = None
+        queue_task = None
         try:
             await app.start()
             await app.updater.start_polling(drop_pending_updates=True)
             _touch_heartbeat_file()
             heartbeat_task = asyncio.create_task(_heartbeat_loop())
+            queue_task = asyncio.create_task(_plan_update_queue_loop(app))
             logger.info("Bot started polling.")
 
             # Wait for shutdown signal
@@ -974,6 +1125,12 @@ def main():
                 heartbeat_task.cancel()
                 try:
                     await heartbeat_task
+                except asyncio.CancelledError:
+                    pass
+            if queue_task is not None:
+                queue_task.cancel()
+                try:
+                    await queue_task
                 except asyncio.CancelledError:
                     pass
             await app.updater.stop()

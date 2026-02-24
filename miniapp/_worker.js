@@ -1383,6 +1383,126 @@ async function authorizeUserByInitData(initDataRaw, env) {
   };
 }
 
+async function ensureMiniappActionQueueSchema(connectionString) {
+  await queryNeon(
+    connectionString,
+    `
+      CREATE TABLE IF NOT EXISTS miniapp_action_queue (
+        id BIGSERIAL PRIMARY KEY,
+        action_type TEXT NOT NULL,
+        user_id BIGINT NOT NULL,
+        payload JSONB NOT NULL DEFAULT '{}'::jsonb,
+        status TEXT NOT NULL CHECK (status IN ('pending', 'running', 'done', 'failed')) DEFAULT 'pending',
+        created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+        started_at TIMESTAMPTZ,
+        finished_at TIMESTAMPTZ,
+        result_text TEXT,
+        error_text TEXT
+      );
+      CREATE INDEX IF NOT EXISTS idx_miniapp_action_queue_status_created
+        ON miniapp_action_queue(status, created_at);
+      CREATE INDEX IF NOT EXISTS idx_miniapp_action_queue_user_created
+        ON miniapp_action_queue(user_id, created_at DESC);
+    `,
+    [],
+  );
+}
+
+async function handlePlanUpdate(request, env) {
+  const body = await parseJsonBody(request);
+  const initDataRaw = String(body?.initData || "").trim();
+  const source = String(body?.source || "miniapp").trim() || "miniapp";
+
+  const authz = await authorizeUserByInitData(initDataRaw, env);
+  if (!authz.ok) {
+    return json({ ok: false, error: authz.error }, authz.status, { "Cache-Control": "no-store" });
+  }
+
+  try {
+    await ensureMiniappActionQueueSchema(authz.dbConnectionString);
+  } catch (err) {
+    return json(
+      {
+        ok: false,
+        error: "Failed to prepare action queue schema",
+        details: String(err?.message || err || "unknown error"),
+      },
+      500,
+      { "Cache-Control": "no-store" },
+    );
+  }
+
+  try {
+    const existing = await queryNeon(
+      authz.dbConnectionString,
+      `
+        SELECT id
+        FROM miniapp_action_queue
+        WHERE action_type = 'plan_update'
+          AND user_id = $1
+          AND status IN ('pending', 'running')
+        ORDER BY created_at DESC
+        LIMIT 1
+      `,
+      [authz.userId],
+    );
+    if ((existing.rows || []).length > 0) {
+      return json(
+        {
+          ok: true,
+          queued: true,
+          action_id: toIntSafe(existing.rows[0].id, 0) || null,
+          dedup: true,
+        },
+        200,
+        { "Cache-Control": "no-store" },
+      );
+    }
+
+    const inserted = await queryNeon(
+      authz.dbConnectionString,
+      `
+        INSERT INTO miniapp_action_queue (
+          action_type,
+          user_id,
+          payload,
+          status,
+          created_at
+        )
+        VALUES (
+          'plan_update',
+          $1,
+          $2::jsonb,
+          'pending',
+          NOW()
+        )
+        RETURNING id
+      `,
+      [authz.userId, JSON.stringify({ source, requested_via: "miniapp_api" })],
+    );
+
+    return json(
+      {
+        ok: true,
+        queued: true,
+        action_id: toIntSafe(inserted.rows?.[0]?.id, 0) || null,
+      },
+      200,
+      { "Cache-Control": "no-store" },
+    );
+  } catch (err) {
+    return json(
+      {
+        ok: false,
+        error: "Failed to enqueue plan update action",
+        details: String(err?.message || err || "unknown error"),
+      },
+      500,
+      { "Cache-Control": "no-store" },
+    );
+  }
+}
+
 async function handleHistory(request, env) {
   const url = new URL(request.url);
   const initDataRaw = url.searchParams.get("initData") || "";
@@ -1983,6 +2103,10 @@ export default {
 
     if (request.method === "GET" && url.pathname === "/api/dock-pdf") {
       return handleDockPdf(request, env);
+    }
+
+    if (request.method === "POST" && url.pathname === "/api/plan-update") {
+      return handlePlanUpdate(request, env);
     }
 
     if (request.method === "GET" && url.pathname === "/api/avatar") {

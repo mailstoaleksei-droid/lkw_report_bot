@@ -2244,6 +2244,24 @@
       return false;
     }
 
+    async function requestPlanUpdate() {
+      const ctx = getTgContext();
+      if (!ctx.initData) throw new Error("initData is missing");
+      const resp = await fetch("/api/plan-update", {
+        method: "POST",
+        headers: { "Content-Type": "application/json", "Accept": "application/json" },
+        body: JSON.stringify({
+          initData: ctx.initData || "",
+          source: "miniapp",
+        }),
+      });
+      const data = await resp.json().catch(() => null);
+      if (!resp.ok || !data || data.ok !== true) {
+        throw new Error(data?.error || "Failed to queue plan update");
+      }
+      return data;
+    }
+
     async function openDockPdf(kind, titleKey) {
       haptic("impact");
       showToast(L("loadingPdf"), 1200);
@@ -2543,21 +2561,35 @@
       setNote("");
 
       $("btnPrimary").textContent = "Plan aktualisiere";
-      $("btnPrimary").onclick = () => {
+      $("btnPrimary").onclick = async () => {
         haptic("impact");
-        const ok = sendToBot({
-          action: "plan_update",
-          source: "miniapp",
-          ts: Date.now(),
-        });
-        if (!ok) {
-          haptic("error");
-          showToast(L("toastPlanUpdateNotSupported"));
+        const btn = $("btnPrimary");
+        const prevText = btn.textContent;
+        btn.disabled = true;
+        try {
+          await requestPlanUpdate();
+          haptic("success");
+          showToast(L("toastPlanUpdateSent"));
+          closeSheet();
           return;
+        } catch (apiErr) {
+          const ok = sendToBot({
+            action: "plan_update",
+            source: "miniapp",
+            ts: Date.now(),
+          });
+          if (ok) {
+            haptic("success");
+            showToast(L("toastPlanUpdateSent"));
+            closeSheet();
+            return;
+          }
+          haptic("error");
+          showToast(apiErr?.message || L("toastPlanUpdateNotSupported"));
+        } finally {
+          btn.disabled = false;
+          btn.textContent = prevText;
         }
-        haptic("success");
-        showToast(L("toastPlanUpdateSent"));
-        closeSheet();
       };
 
       openSheet();
