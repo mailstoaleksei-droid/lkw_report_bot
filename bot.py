@@ -31,15 +31,13 @@ from telegram.ext import (
     CommandHandler,
     ContextTypes,
     MessageHandler,
-    CallbackQueryHandler,
     filters,
 )
 from telegram.error import BadRequest
 
 from excel_service import run_report
+from plan_update_service import run_plan_update
 from report_config import get_report_config, REPORT_TYPES
-from scheduler import setup_scheduler
-from web_server import start_web_server, init_web_app
 
 # Load env early so module-level constants read values from .env
 load_dotenv(override=True)
@@ -226,6 +224,9 @@ TEXT = {
         "invalid_params": "Invalid year or week values.",
         "panel_hint": "Tap the button below to open the control panel.",
         "panel_not_configured": "WebApp URL is not configured. Set WEBAPP_URL in .env.",
+        "plan_update_start": "Plan update started. Please wait...",
+        "plan_update_done": "Plan aktualisiert.",
+        "plan_update_failed": "Plan update failed: {err}",
     },
     "ru": {
         "btn_report": "📄 Отчёт",
@@ -251,6 +252,9 @@ TEXT = {
         "invalid_params": "Некорректные значения года или недели.",
         "panel_hint": "Нажмите кнопку ниже, чтобы открыть окно.",
         "panel_not_configured": "WebApp URL не настроен. Укажите WEBAPP_URL в .env.",
+        "plan_update_start": "Актуализация плана запущена. Подождите...",
+        "plan_update_done": "План актуализирован.",
+        "plan_update_failed": "Ошибка актуализации плана: {err}",
     },
 }
 
@@ -264,22 +268,44 @@ def T(update: Update, key: str, **kwargs) -> str:
 # =========================
 # ACCESS
 # =========================
-def _parse_whitelist(raw: str) -> set[int]:
-    return {int(x.strip()) for x in raw.split(",") if x.strip().isdigit()}
-
-
-# Cached whitelist with TTL — allows adding users via .env without restart
+# Cached allowed_users from DB with TTL.
 _wl_cache: set[int] = set()
 _wl_cache_ts: float = 0.0
 _WL_CACHE_TTL = 60  # seconds
+_wl_db_warned: bool = False
+
+
+def _load_allowed_users_from_db() -> set[int]:
+    db_url = (os.getenv("DATABASE_URL", "") or "").strip()
+    if not db_url:
+        return set()
+    try:
+        import psycopg  # type: ignore
+
+        with psycopg.connect(db_url) as conn:
+            with conn.cursor() as cur:
+                cur.execute(
+                    """
+                    SELECT telegram_user_id
+                    FROM allowed_users
+                    WHERE is_active = true
+                    """
+                )
+                return {int(row[0]) for row in cur.fetchall() if row and row[0]}
+    except Exception:
+        global _wl_db_warned
+        if not _wl_db_warned:
+            logger.exception("Failed to load allowed_users from DB; denying access until DB is reachable")
+            _wl_db_warned = True
+        return set()
 
 
 def _whitelist() -> set[int]:
-    """Return current whitelist, re-reading from env every _WL_CACHE_TTL seconds."""
+    """Return allowed users from DB table allowed_users."""
     global _wl_cache, _wl_cache_ts
     now = time.time()
     if now - _wl_cache_ts > _WL_CACHE_TTL:
-        _wl_cache = _parse_whitelist(os.getenv("WHITELIST_USER_IDS", ""))
+        _wl_cache = _load_allowed_users_from_db()
         _wl_cache_ts = now
     return _wl_cache
 
@@ -575,17 +601,8 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 
 async def report_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    if not _allowed(update):
-        uid = update.effective_user.id if update.effective_user else "unknown"
-        await update.message.reply_text(T(update, "access_denied", uid=uid))
-        return
-
-    st = _state_get(context)
-    if len(context.args) == 2 and context.args[0].isdigit() and context.args[1].isdigit():
-        st["year"] = int(context.args[0])
-        st["week"] = int(context.args[1])
-
-    await update.message.reply_text(T(update, "report_params"), reply_markup=_inline_menu(update, st))
+    # SQL-first mode: generation is performed only from Mini App / Cloudflare API.
+    await panel_cmd(update, context)
 
 
 async def panel_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -714,7 +731,8 @@ async def on_cb(update: Update, context: ContextTypes.DEFAULT_TYPE):
         return
 
     q = update.callback_query
-    await q.answer()
+    await q.answer("Use Open App in Mini App mode.", show_alert=True)
+    return
 
     st = _state_get(context)
 
@@ -796,50 +814,68 @@ async def on_cb(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 async def on_webapp_data(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Handle data from Telegram Mini App."""
-    uid = update.effective_user.id if update.effective_user else "unknown"
-    logger.info("WEBAPP DATA received from user=%s", uid)
+    uid = update.effective_user.id if update.effective_user else 0
+    logger.info("WEBAPP DATA received from user=%s", uid or "unknown")
 
     if not _allowed(update):
-        await update.message.reply_text(T(update, "access_denied", uid=uid))
+        await update.effective_message.reply_text(T(update, "access_denied", uid=uid or "unknown"))
+        return
+
+    payload_raw = ""
+    try:
+        payload_raw = update.effective_message.web_app_data.data or ""
+    except Exception:
+        payload_raw = ""
+    if not payload_raw:
+        await update.effective_message.reply_text(T(update, "err"), reply_markup=_kb(update))
         return
 
     try:
-        data = json.loads(update.effective_message.web_app_data.data)
+        data = json.loads(payload_raw)
     except Exception:
-        logger.exception("Invalid web_app_data from user=%s", uid)
-        await update.message.reply_text(T(update, "err"), reply_markup=_kb(update))
+        logger.exception("Invalid web_app_data from user=%s payload=%r", uid, payload_raw)
+        await update.effective_message.reply_text(T(update, "err"), reply_markup=_kb(update))
         return
 
-    action = data.get("action", "report")
-    report_type = data.get("report_type", "bericht")
+    action = str(data.get("action", "")).strip().lower()
+    if action != "plan_update":
+        await update.effective_message.reply_text(T(update, "err"), reply_markup=_kb(update))
+        return
 
-    if action == "report" or report_type in REPORT_TYPES:
-        y = int(data.get("year", 0))
-        w = int(data.get("week", 0))
+    status_msg = await context.bot.send_message(
+        chat_id=uid,
+        text=T(update, "plan_update_start"),
+    )
 
-        if not _validate_year_week(y, w):
-            await update.message.reply_text(T(update, "invalid_params"), reply_markup=_kb(update))
-            return
-
-        allowed, wait_sec = _check_cooldown(uid)
-        if not allowed:
-            logger.info("WEBAPP cooldown active for user=%s, wait=%s sec", uid, wait_sec)
-            await update.message.reply_text(T(update, "cooldown", sec=wait_sec), reply_markup=_kb(update))
-            return
-
-        logger.info("WEBAPP GEN start user=%s type=%s year=%s week=%s", uid, report_type, y, w)
-        _update_cooldown(uid)
-
-        status_msg = await context.bot.send_message(
+    try:
+        async with EXCEL_LOCK:
+            result = await asyncio.wait_for(
+                asyncio.to_thread(run_plan_update),
+                timeout=30 * 60,
+            )
+        logger.info("PLAN UPDATE success user=%s result=%s", uid, result)
+        await context.bot.edit_message_text(
             chat_id=uid,
-            text=T(update, "gen_title", y=y, w=w, step=T(update, "step1")),
+            message_id=status_msg.message_id,
+            text=T(update, "plan_update_done"),
+            reply_markup=_kb(update),
         )
-
-        await _run_report_and_send(context.bot, status_msg, uid, report_type, y, w, update, context, tag="WEBAPP GEN")
-        return
-
-    # Future actions placeholder
-    await update.message.reply_text(T(update, "err"), reply_markup=_kb(update))
+    except asyncio.TimeoutError:
+        logger.exception("PLAN UPDATE timeout user=%s", uid)
+        await context.bot.edit_message_text(
+            chat_id=uid,
+            message_id=status_msg.message_id,
+            text=T(update, "plan_update_failed", err="timeout"),
+            reply_markup=_kb(update),
+        )
+    except Exception as e:
+        logger.exception("PLAN UPDATE failed user=%s", uid)
+        await context.bot.edit_message_text(
+            chat_id=uid,
+            message_id=status_msg.message_id,
+            text=T(update, "plan_update_failed", err=str(e)),
+            reply_markup=_kb(update),
+        )
 
 
 async def on_error(update: object, context: ContextTypes.DEFAULT_TYPE) -> None:
@@ -903,20 +939,14 @@ def main():
     app.add_handler(CommandHandler("panel", panel_cmd))
     app.add_handler(MessageHandler(filters.StatusUpdate.WEB_APP_DATA, on_webapp_data))
     app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, on_text))
-    app.add_handler(CallbackQueryHandler(on_cb))
     app.add_error_handler(on_error)
 
     _setup_signal_handlers(app)
 
-    # Setup scheduler (if enabled in .env)
-    setup_scheduler(app, EXCEL_LOCK, run_report)
-
-    # Start web server for Mini App hosting + bot polling
-    web_port = int(os.getenv("WEBAPP_PORT", "8443"))
-
-    logger.info("Starting bot + web server...")
+    # SQL-first + Mini App only mode:
+    # no local web server, no Excel report generation from bot runtime.
+    logger.info("Starting bot (Mini App only mode)...")
     logger.info(f"WEBAPP_URL: {WEBAPP_URL or 'not configured'}")
-    logger.info(f"WEBAPP_PORT: {web_port}")
     logger.info(f"Whitelist users: {len(_whitelist())}")
     logger.info(f"HEARTBEAT_PATH: {HEARTBEAT_PATH}")
     logger.info(f"HEARTBEAT_INTERVAL_SEC: {HEARTBEAT_INTERVAL_SEC}")
@@ -926,23 +956,14 @@ def main():
         logger.warning("WEBAPP_URL uses trycloudflare domain. Use stable domain for production.")
 
     async def _run():
-        # Initialize web server with bot dependencies for /api/generate
         await app.initialize()
-        init_web_app(
-            bot=app.bot,
-            excel_lock=EXCEL_LOCK,
-            run_report_fn=run_report,
-            whitelist_fn=_whitelist,
-            bot_token=token,
-        )
-        runner = await start_web_server(port=web_port)
         heartbeat_task = None
         try:
             await app.start()
             await app.updater.start_polling(drop_pending_updates=True)
             _touch_heartbeat_file()
             heartbeat_task = asyncio.create_task(_heartbeat_loop())
-            logger.info("Bot started polling. Web server on port %s.", web_port)
+            logger.info("Bot started polling.")
 
             # Wait for shutdown signal
             await _shutdown_event.wait()
@@ -958,7 +979,6 @@ def main():
             await app.updater.stop()
             await app.stop()
             await app.shutdown()
-            await runner.cleanup()
             logger.info("Bot shutdown complete.")
 
     try:
