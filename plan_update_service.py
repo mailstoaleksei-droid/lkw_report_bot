@@ -30,6 +30,9 @@ def _rgb_int(r: int, g: int, b: int) -> int:
 
 TRANSFER_BLUE = _rgb_int(204, 238, 255)   # new transfer fill in VBA module
 LEGACY_YELLOW = _rgb_int(204, 255, 255)   # old transfer fill left in some files
+HIGHLIGHT_YELLOW_1 = _rgb_int(255, 255, 0)
+HIGHLIGHT_YELLOW_2 = _rgb_int(255, 242, 204)
+HIGHLIGHT_YELLOW_3 = _rgb_int(255, 235, 156)
 
 
 def _retry(callable_, *args, retries: int = 240, sleep_sec: float = 0.5, **kwargs):
@@ -58,7 +61,7 @@ def _wait_excel_ready(excel, timeout_sec: int = 600) -> bool:
 
 
 def _cleanup_legacy_transfer_fill(ws) -> int:
-    # Removes stale yellow/blue transfer fill when the arrow symbol is absent.
+    # Removes stale transfer/yellow fill when the arrow symbol is absent.
     last_col = ws.Cells(PLAN_KW_ROW, ws.Columns.Count).End(-4159).Column  # xlToLeft
     last_row = ws.Cells(ws.Rows.Count, PLAN_LKW_ID_COL).End(-4162).Row  # xlUp
     if last_col < PLAN_GRID_FIRST_COL or last_row < PLAN_FIRST_ROW:
@@ -78,7 +81,13 @@ def _cleanup_legacy_transfer_fill(ws) -> int:
                 cur_color = int(cell.Interior.Color)
             except Exception:
                 continue
-            if cur_color in (TRANSFER_BLUE, LEGACY_YELLOW):
+            if cur_color in (
+                TRANSFER_BLUE,
+                LEGACY_YELLOW,
+                HIGHLIGHT_YELLOW_1,
+                HIGHLIGHT_YELLOW_2,
+                HIGHLIGHT_YELLOW_3,
+            ):
                 cell.Interior.Pattern = XL_NONE
                 cleaned += 1
     return cleaned

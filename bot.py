@@ -263,6 +263,35 @@ def _queue_finish_action(action_id: int, status: str, result_text: str = "", err
         conn.commit()
 
 
+def _queue_fail_stale_running_actions(max_age_minutes: int = 120) -> int:
+    db_url = _db_url()
+    if not db_url:
+        return 0
+    import psycopg  # type: ignore
+
+    with psycopg.connect(db_url) as conn:
+        with conn.cursor() as cur:
+            cur.execute(
+                """
+                UPDATE miniapp_action_queue
+                SET status = 'failed',
+                    finished_at = NOW(),
+                    error_text = COALESCE(error_text, '') || CASE
+                        WHEN COALESCE(error_text, '') = '' THEN 'stale running action auto-failed'
+                        ELSE '; stale running action auto-failed'
+                    END
+                WHERE action_type = 'plan_update'
+                  AND status = 'running'
+                  AND started_at IS NOT NULL
+                  AND started_at < (NOW() - (%s * INTERVAL '1 minute'))
+                """,
+                (int(max_age_minutes),),
+            )
+            affected = int(cur.rowcount or 0)
+        conn.commit()
+    return affected
+
+
 async def _plan_update_queue_loop(app):
     db_url = _db_url()
     if not db_url:
@@ -274,6 +303,15 @@ async def _plan_update_queue_loop(app):
     except Exception:
         logger.exception("Failed to ensure miniapp_action_queue schema")
         return
+
+    try:
+        # On process start there is no valid in-flight worker state.
+        # Any lingering "running" rows are orphaned from a previous crash/restart.
+        stale_count = await asyncio.to_thread(_queue_fail_stale_running_actions, 0)
+        if stale_count > 0:
+            logger.warning("Auto-failed orphan running plan_update actions: %s", stale_count)
+    except Exception:
+        logger.exception("Failed to auto-fail orphan running plan_update actions")
 
     logger.info("Plan-update queue loop started (poll=%ss)", ACTION_QUEUE_POLL_SEC)
     while not _shutdown_event.is_set():
@@ -291,7 +329,13 @@ async def _plan_update_queue_loop(app):
 
         action_id = int(action["id"])
         user_id = int(action["user_id"])
+        logger.info("Plan-update queue action start id=%s user=%s", action_id, user_id)
         try:
+            try:
+                await app.bot.send_message(chat_id=user_id, text=TEXT["ru"]["plan_update_start"])
+            except Exception:
+                logger.exception("Failed to notify user about plan-update start user=%s", user_id)
+
             async with EXCEL_LOCK:
                 result = await asyncio.wait_for(asyncio.to_thread(run_plan_update), timeout=30 * 60)
             await asyncio.to_thread(

@@ -171,23 +171,6 @@ const REPORT_TYPE_TO_DOCK_KIND = {
 };
 
 const LKW_LIST_SQL = `
-WITH card_defaults AS (
-  SELECT
-    (
-      SELECT NULLIF(x.raw_payload->>'Shell Card', '')
-      FROM trucks x
-      WHERE NULLIF(x.raw_payload->>'Shell Card', '') IS NOT NULL
-      ORDER BY x.id
-      LIMIT 1
-    ) AS shell_card_default,
-    (
-      SELECT NULLIF(x.raw_payload->>'Tankpool Card', '')
-      FROM trucks x
-      WHERE NULLIF(x.raw_payload->>'Tankpool Card', '') IS NOT NULL
-      ORDER BY x.id
-      LIMIT 1
-    ) AS tankpool_card_default
-)
 SELECT
   t.external_id AS lkw_id,
   COALESCE(NULLIF(t.plate_number, ''), NULLIF(t.raw_payload->>'LKW-Nummer', ''), NULLIF(t.raw_payload->>'Number', '')) AS lkw_nummer,
@@ -198,11 +181,10 @@ SELECT
   COALESCE(to_char(t.status_since, 'DD/MM/YYYY'), NULLIF(t.raw_payload->>'Datum verkauft', ''), NULLIF(t.raw_payload->>'Sale Date', '')) AS datum_verkauft,
   COALESCE(NULLIF(t.raw_payload->>'Telefonnummer', ''), NULLIF(t.raw_payload->>'Phone Number', ''), NULLIF(t.raw_payload->>'Phone', '')) AS telefonnummer,
   COALESCE(NULLIF(t.raw_payload->>'DKV Card', ''), NULLIF(t.raw_payload->>'DKV', '')) AS dkv_card,
-  COALESCE(NULLIF(t.raw_payload->>'Shell Card', ''), NULLIF(t.raw_payload->>'Shell', ''), d.shell_card_default) AS shell_card,
-  COALESCE(NULLIF(t.raw_payload->>'Tankpool Card', ''), NULLIF(t.raw_payload->>'Tankpool', ''), d.tankpool_card_default) AS tankpool_card
+  COALESCE(NULLIF(t.raw_payload->>'Shell Card', ''), NULLIF(t.raw_payload->>'Shell', ''), '7077147037426750094') AS shell_card,
+  COALESCE(NULLIF(t.raw_payload->>'Tankpool Card', ''), NULLIF(t.raw_payload->>'Tankpool', ''), '10324177') AS tankpool_card
 FROM trucks t
 LEFT JOIN companies c ON c.id = t.company_id
-CROSS JOIN card_defaults d
 ORDER BY t.external_id;
 `;
 
@@ -1433,6 +1415,24 @@ async function handlePlanUpdate(request, env) {
   }
 
   try {
+    await queryNeon(
+      authz.dbConnectionString,
+      `
+        UPDATE miniapp_action_queue
+        SET status = 'failed',
+            finished_at = NOW(),
+            error_text = COALESCE(error_text, '') || CASE
+              WHEN COALESCE(error_text, '') = '' THEN 'stale running action auto-failed'
+              ELSE '; stale running action auto-failed'
+            END
+        WHERE action_type = 'plan_update'
+          AND status = 'running'
+          AND started_at IS NOT NULL
+          AND started_at < (NOW() - INTERVAL '120 minutes')
+      `,
+      [],
+    );
+
     const existing = await queryNeon(
       authz.dbConnectionString,
       `

@@ -15,11 +15,45 @@ def _ids(raw: str) -> list[int]:
     return out
 
 
+def _ids_from_db(db_url: str) -> list[int]:
+    if not db_url:
+        return []
+    try:
+        import psycopg  # type: ignore
+    except Exception:
+        print("WARN: psycopg is unavailable in this Python environment; DB user sync skipped")
+        return []
+
+    ids: list[int] = []
+    try:
+        with psycopg.connect(db_url) as conn:
+            with conn.cursor() as cur:
+                cur.execute(
+                    """
+                    SELECT telegram_user_id
+                    FROM allowed_users
+                    WHERE is_active = TRUE
+                    ORDER BY telegram_user_id
+                    """
+                )
+                for row in cur.fetchall():
+                    try:
+                        ids.append(int(row[0]))
+                    except Exception:
+                        pass
+    except Exception as e:
+        print(f"WARN: failed to load allowed_users from DB: {e}")
+    return ids
+
+
 async def _main() -> int:
     load_dotenv(override=True)
     token = (os.getenv("TELEGRAM_BOT_TOKEN") or "").strip()
     webapp_url = (os.getenv("WEBAPP_URL") or "").strip().rstrip("/")
-    whitelist = _ids(os.getenv("WHITELIST_USER_IDS", ""))
+    db_url = (os.getenv("DATABASE_URL") or "").strip()
+    whitelist_env = _ids(os.getenv("WHITELIST_USER_IDS", ""))
+    whitelist_db = _ids_from_db(db_url)
+    whitelist = sorted(set(whitelist_env) | set(whitelist_db))
 
     if not token:
         print("ERROR: TELEGRAM_BOT_TOKEN is empty")
@@ -73,6 +107,8 @@ async def _main() -> int:
 
     print(f"OK: WEBAPP_URL={webapp_url}")
     print(f"OK: synced_menu_chats={synced}")
+    print(f"OK: source_env_ids={whitelist_env}")
+    print(f"OK: source_db_ids={whitelist_db}")
     if failed:
         print(f"WARN: failed_menu_chats={failed}")
     return 0
