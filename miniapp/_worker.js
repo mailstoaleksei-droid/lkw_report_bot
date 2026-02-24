@@ -171,6 +171,23 @@ const REPORT_TYPE_TO_DOCK_KIND = {
 };
 
 const LKW_LIST_SQL = `
+WITH card_defaults AS (
+  SELECT
+    (
+      SELECT NULLIF(x.raw_payload->>'Shell Card', '')
+      FROM trucks x
+      WHERE NULLIF(x.raw_payload->>'Shell Card', '') IS NOT NULL
+      ORDER BY x.id
+      LIMIT 1
+    ) AS shell_card_default,
+    (
+      SELECT NULLIF(x.raw_payload->>'Tankpool Card', '')
+      FROM trucks x
+      WHERE NULLIF(x.raw_payload->>'Tankpool Card', '') IS NOT NULL
+      ORDER BY x.id
+      LIMIT 1
+    ) AS tankpool_card_default
+)
 SELECT
   t.external_id AS lkw_id,
   COALESCE(NULLIF(t.plate_number, ''), NULLIF(t.raw_payload->>'LKW-Nummer', ''), NULLIF(t.raw_payload->>'Number', '')) AS lkw_nummer,
@@ -181,10 +198,11 @@ SELECT
   COALESCE(to_char(t.status_since, 'DD/MM/YYYY'), NULLIF(t.raw_payload->>'Datum verkauft', ''), NULLIF(t.raw_payload->>'Sale Date', '')) AS datum_verkauft,
   COALESCE(NULLIF(t.raw_payload->>'Telefonnummer', ''), NULLIF(t.raw_payload->>'Phone Number', ''), NULLIF(t.raw_payload->>'Phone', '')) AS telefonnummer,
   COALESCE(NULLIF(t.raw_payload->>'DKV Card', ''), NULLIF(t.raw_payload->>'DKV', '')) AS dkv_card,
-  COALESCE(NULLIF(t.raw_payload->>'Shell Card', ''), NULLIF(t.raw_payload->>'Shell', '')) AS shell_card,
-  COALESCE(NULLIF(t.raw_payload->>'Tankpool Card', ''), NULLIF(t.raw_payload->>'Tankpool', '')) AS tankpool_card
+  COALESCE(NULLIF(t.raw_payload->>'Shell Card', ''), NULLIF(t.raw_payload->>'Shell', ''), d.shell_card_default) AS shell_card,
+  COALESCE(NULLIF(t.raw_payload->>'Tankpool Card', ''), NULLIF(t.raw_payload->>'Tankpool', ''), d.tankpool_card_default) AS tankpool_card
 FROM trucks t
 LEFT JOIN companies c ON c.id = t.company_id
+CROSS JOIN card_defaults d
 ORDER BY t.external_id;
 `;
 
@@ -952,6 +970,65 @@ function fitTextToWidth(font, text, size, maxWidth) {
   return `${out}...`;
 }
 
+function resolveAutoColumns({ columns, rows, font, size, maxTableWidth }) {
+  const resolved = columns.map((col) => {
+    const out = { ...col };
+    if (!Number.isFinite(Number(out.min_width))) out.min_width = 52;
+    if (!Number.isFinite(Number(out.max_width))) out.max_width = 180;
+    if (!Number.isFinite(Number(out.width)) || String(out.width).toLowerCase() === "auto") {
+      out.width = null;
+    } else {
+      out.width = Number(out.width);
+    }
+    return out;
+  });
+
+  const sampleRows = Array.isArray(rows) ? rows.slice(0, 800) : [];
+  for (const col of resolved) {
+    if (Number.isFinite(col.width) && col.width > 0) continue;
+
+    let best = font.widthOfTextAtSize(safeText(col.label, ""), size) + 12;
+    for (const row of sampleRows) {
+      const value = safeText(row?.[col.key], "");
+      if (!value) continue;
+      const w = font.widthOfTextAtSize(value, size) + 12;
+      if (w > best) best = w;
+      if (best >= col.max_width) break;
+    }
+
+    col.width = Math.min(col.max_width, Math.max(col.min_width, Math.ceil(best)));
+  }
+
+  let sumWidth = resolved.reduce((sum, col) => sum + col.width, 0);
+  if (sumWidth <= maxTableWidth) return resolved;
+
+  const minTotal = resolved.reduce((sum, col) => sum + col.min_width, 0);
+  if (minTotal >= maxTableWidth) {
+    const ratio = maxTableWidth / minTotal;
+    for (const col of resolved) col.width = Math.max(24, Math.floor(col.min_width * ratio));
+    return resolved;
+  }
+
+  const extraBudget = maxTableWidth - minTotal;
+  const extraNeed = resolved.reduce((sum, col) => sum + Math.max(0, col.width - col.min_width), 0);
+  for (const col of resolved) {
+    const need = Math.max(0, col.width - col.min_width);
+    const extra = extraNeed > 0 ? Math.floor((need * extraBudget) / extraNeed) : 0;
+    col.width = col.min_width + extra;
+  }
+
+  sumWidth = resolved.reduce((sum, col) => sum + col.width, 0);
+  let remainder = maxTableWidth - sumWidth;
+  let idx = 0;
+  while (remainder > 0 && resolved.length > 0) {
+    resolved[idx % resolved.length].width += 1;
+    remainder -= 1;
+    idx += 1;
+  }
+
+  return resolved;
+}
+
 function getDockTableSpec(kind) {
   if (kind === "lkw-list") {
     return {
@@ -991,20 +1068,18 @@ function getDockTableSpec(kind) {
   if (kind === "fuel-cards") {
     return {
       title: "Fuel Cards by LKW",
-      subtitle: "Sheet LKW: base truck data + DKV/Shell/Tankpool cards",
+      subtitle: "Sheet LKW: LKW-ID, LKW-Nummer, Marke/Modell, LKW-Typ, Firma, Telefonnummer, DKV/Shell/Tankpool",
       sql: LKW_LIST_SQL,
       columns: [
-        { key: "lkw_id", label: "LKW ID", width: 58 },
-        { key: "lkw_nummer", label: "LKW-Nummer", width: 74 },
-        { key: "marke_modell", label: "Marke/Modell", width: 96 },
-        { key: "lkw_typ", label: "LKW-Typ", width: 52 },
-        { key: "firma", label: "Firma", width: 64 },
-        { key: "verkauft", label: "Verkauft", width: 54 },
-        { key: "datum_verkauft", label: "Datum verkauft", width: 74 },
-        { key: "telefonnummer", label: "Telefonnummer", width: 96 },
-        { key: "dkv_card", label: "DKV Card", width: 62 },
-        { key: "shell_card", label: "Shell Card", width: 62 },
-        { key: "tankpool_card", label: "Tankpool Card", width: 66 },
+        { key: "lkw_id", label: "LKW ID", width: "auto", min_width: 52, max_width: 76 },
+        { key: "lkw_nummer", label: "LKW-Nummer", width: "auto", min_width: 78, max_width: 120 },
+        { key: "marke_modell", label: "Marke/Modell", width: "auto", min_width: 92, max_width: 172 },
+        { key: "lkw_typ", label: "LKW-Typ", width: "auto", min_width: 62, max_width: 96 },
+        { key: "firma", label: "Firma", width: "auto", min_width: 72, max_width: 122 },
+        { key: "telefonnummer", label: "Telefonnummer", width: "auto", min_width: 98, max_width: 142 },
+        { key: "dkv_card", label: "DKV Card", width: "auto", min_width: 66, max_width: 124 },
+        { key: "shell_card", label: "Shell Card", width: "auto", min_width: 70, max_width: 124 },
+        { key: "tankpool_card", label: "Tankpool Card", width: "auto", min_width: 78, max_width: 136 },
       ],
     };
   }
@@ -1022,9 +1097,17 @@ async function buildDockPdfWithPdfLib({ kind, rows, userId }) {
   const pageSize = [842, 595]; // A4 landscape
   const margin = 22;
   const rowHeight = 14;
-  const tableWidth = spec.columns.reduce((sum, c) => sum + c.width, 0);
-  const tableX = margin;
   const maxTextSize = 8;
+  const tableMaxWidth = pageSize[0] - (margin * 2);
+  const columns = resolveAutoColumns({
+    columns: spec.columns,
+    rows,
+    font,
+    size: maxTextSize,
+    maxTableWidth: tableMaxWidth,
+  });
+  const tableWidth = columns.reduce((sum, c) => sum + c.width, 0);
+  const tableX = margin;
 
   const borderColor = rgb(0.74, 0.8, 0.9);
   const headerBg = rgb(0.93, 0.96, 1);
@@ -1065,7 +1148,7 @@ async function buildDockPdfWithPdfLib({ kind, rows, userId }) {
     });
 
     let x = tableX;
-    for (const col of spec.columns) {
+    for (const col of columns) {
       const label = fitTextToWidth(boldFont, col.label, maxTextSize, col.width - 8);
       page.drawText(label, {
         x: x + 4,
@@ -1107,7 +1190,7 @@ async function buildDockPdfWithPdfLib({ kind, rows, userId }) {
     }
 
     let x = tableX;
-    for (const col of spec.columns) {
+    for (const col of columns) {
       const value = fitTextToWidth(font, safeText(row?.[col.key], ""), maxTextSize, col.width - 8);
       page.drawText(value, {
         x: x + 4,

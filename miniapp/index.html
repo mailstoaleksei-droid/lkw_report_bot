@@ -1622,6 +1622,13 @@
         </div>
       </div>
 
+      <div class="tile" data-report="data-plan">
+        <div class="tile-icon"><img src="icons/check.svg" alt="" width="22" height="22"></div>
+        <div class="tile-content">
+          <div class="tile-title">Data/Plan</div>
+        </div>
+      </div>
+
       <div class="tile" data-report="lkw">
         <div class="tile-icon"><img src="icons/truck.svg" alt="" width="22" height="22"></div>
         <div class="tile-content">
@@ -1760,6 +1767,7 @@
         hintYf: "Vehicle mileage and fuel consumption",
         hintEinnahmen: "Total revenue report for all operations",
         hintBonus: "Calculate driver bonuses",
+        hintDataPlan: "Sync plan workbook from source data",
         
         // Common
         choose: "Choose...",
@@ -1784,6 +1792,8 @@
         toastSuccess: "Request completed",
         toastPdfReady: "PDF is ready. Tap Open PDF",
         toastComingSoon: "Feature coming soon",
+        toastPlanUpdateSent: "Plan update request sent",
+        toastPlanUpdateNotSupported: "Mini App sendData is not available",
         backendNotReady: "Backend is not connected yet",
         fullscreenRequested: "Switched to full screen",
         pdfReadyNote: "PDF generated successfully.",
@@ -1835,6 +1845,7 @@
         hintYf: "Пробег и расход топлива транспорта",
         hintEinnahmen: "Отчет по общей выручке",
         hintBonus: "Расчет бонусов водителей",
+        hintDataPlan: "Синхронизация план-файла из исходных данных",
         
         // Common
         choose: "Выбрать...",
@@ -1859,6 +1870,8 @@
         toastSuccess: "Запрос выполнен",
         toastPdfReady: "PDF готов. Нажмите «Открыть PDF»",
         toastComingSoon: "Функция скоро будет доступна",
+        toastPlanUpdateSent: "Запрос на актуализацию плана отправлен",
+        toastPlanUpdateNotSupported: "В этом клиенте sendData недоступен",
         backendNotReady: "Backend пока не подключен",
         fullscreenRequested: "Открываю на весь экран",
         pdfReadyNote: "PDF успешно сформирован.",
@@ -2220,8 +2233,15 @@
       }
     }
 
-    function sendToBot(_) {
-      showToast(L("toastComingSoon"));
+    function sendToBot(payload) {
+      const data = payload || {};
+      try {
+        if (Telegram?.WebApp?.sendData) {
+          Telegram.WebApp.sendData(JSON.stringify(data));
+          return true;
+        }
+      } catch {}
+      return false;
     }
 
     async function openDockPdf(kind, titleKey) {
@@ -2511,6 +2531,38 @@
       openSheet();
     }
 
+    function openDataPlan() {
+      setSheetHeader("Data/Plan", L("hintDataPlan"), "Action");
+      setSegments([], "", () => {});
+      setForm(`
+        <div class="note">
+          ${L("hintDataPlan")}<br>
+          <strong>Plan aktualisiere</strong>
+        </div>
+      `);
+      setNote("");
+
+      $("btnPrimary").textContent = "Plan aktualisiere";
+      $("btnPrimary").onclick = () => {
+        haptic("impact");
+        const ok = sendToBot({
+          action: "plan_update",
+          source: "miniapp",
+          ts: Date.now(),
+        });
+        if (!ok) {
+          haptic("error");
+          showToast(L("toastPlanUpdateNotSupported"));
+          return;
+        }
+        haptic("success");
+        showToast(L("toastPlanUpdateSent"));
+        closeSheet();
+      };
+
+      openSheet();
+    }
+
     function openLkw() {
       let active = "mileage";
       const tabs = [
@@ -2757,6 +2809,7 @@
       };
       const map = {
         container: openContainer,
+        "data-plan": openDataPlan,
         lkw: comingSoon,
         fahrer: comingSoon,
         yf: comingSoon,
