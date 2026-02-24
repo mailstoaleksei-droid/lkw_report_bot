@@ -2573,17 +2573,6 @@
           closeSheet();
           return;
         } catch (apiErr) {
-          const ok = sendToBot({
-            action: "plan_update",
-            source: "miniapp",
-            ts: Date.now(),
-          });
-          if (ok) {
-            haptic("success");
-            showToast(L("toastPlanUpdateSent"));
-            closeSheet();
-            return;
-          }
           haptic("error");
           showToast(apiErr?.message || L("toastPlanUpdateNotSupported"));
         } finally {
