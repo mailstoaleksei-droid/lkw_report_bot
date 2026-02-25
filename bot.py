@@ -1,7 +1,6 @@
 import os
 import sys
 import time
-import json
 import atexit
 import msvcrt
 import logging
@@ -36,7 +35,6 @@ from telegram.ext import (
 from telegram.error import BadRequest
 
 from excel_service import run_report
-from plan_update_service import run_plan_update
 from report_config import get_report_config, REPORT_TYPES
 
 # Load env early so module-level constants read values from .env
@@ -58,7 +56,6 @@ HEARTBEAT_PATH = os.path.join(
     "lkw_report_bot_heartbeat.txt",
 )
 HEARTBEAT_INTERVAL_SEC = max(5, int(os.getenv("HEARTBEAT_INTERVAL_SEC", "30") or 30))
-ACTION_QUEUE_POLL_SEC = max(2, int(os.getenv("ACTION_QUEUE_POLL_SEC", "5") or 5))
 
 logging.basicConfig(
     level=logging.INFO,
@@ -167,198 +164,6 @@ def _touch_heartbeat_file():
         logger.debug("Heartbeat write failed", exc_info=True)
 
 
-def _db_url() -> str:
-    return (os.getenv("DATABASE_URL", "") or "").strip()
-
-
-def _ensure_action_queue_schema() -> None:
-    db_url = _db_url()
-    if not db_url:
-        return
-    import psycopg  # type: ignore
-
-    with psycopg.connect(db_url) as conn:
-        with conn.cursor() as cur:
-            cur.execute(
-                """
-                CREATE TABLE IF NOT EXISTS miniapp_action_queue (
-                    id BIGSERIAL PRIMARY KEY,
-                    action_type TEXT NOT NULL,
-                    user_id BIGINT NOT NULL,
-                    payload JSONB NOT NULL DEFAULT '{}'::jsonb,
-                    status TEXT NOT NULL CHECK (status IN ('pending', 'running', 'done', 'failed')) DEFAULT 'pending',
-                    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-                    started_at TIMESTAMPTZ,
-                    finished_at TIMESTAMPTZ,
-                    result_text TEXT,
-                    error_text TEXT
-                );
-                CREATE INDEX IF NOT EXISTS idx_miniapp_action_queue_status_created
-                  ON miniapp_action_queue(status, created_at);
-                CREATE INDEX IF NOT EXISTS idx_miniapp_action_queue_user_created
-                  ON miniapp_action_queue(user_id, created_at DESC);
-                """
-            )
-        conn.commit()
-
-
-def _queue_claim_plan_update_action() -> dict | None:
-    db_url = _db_url()
-    if not db_url:
-        return None
-    import psycopg  # type: ignore
-
-    with psycopg.connect(db_url) as conn:
-        with conn.cursor() as cur:
-            cur.execute(
-                """
-                WITH next_action AS (
-                    SELECT id
-                    FROM miniapp_action_queue
-                    WHERE status = 'pending'
-                      AND action_type = 'plan_update'
-                    ORDER BY created_at ASC
-                    LIMIT 1
-                    FOR UPDATE SKIP LOCKED
-                )
-                UPDATE miniapp_action_queue q
-                SET status = 'running',
-                    started_at = NOW()
-                FROM next_action
-                WHERE q.id = next_action.id
-                RETURNING q.id, q.user_id, q.payload::text
-                """
-            )
-            row = cur.fetchone()
-        conn.commit()
-    if not row:
-        return None
-    payload = {}
-    try:
-        payload = json.loads(row[2] or "{}")
-    except Exception:
-        payload = {}
-    return {"id": int(row[0]), "user_id": int(row[1]), "payload": payload}
-
-
-def _queue_finish_action(action_id: int, status: str, result_text: str = "", error_text: str = "") -> None:
-    db_url = _db_url()
-    if not db_url:
-        return
-    import psycopg  # type: ignore
-
-    with psycopg.connect(db_url) as conn:
-        with conn.cursor() as cur:
-            cur.execute(
-                """
-                UPDATE miniapp_action_queue
-                SET status = %s,
-                    finished_at = NOW(),
-                    result_text = %s,
-                    error_text = %s
-                WHERE id = %s
-                """,
-                (status, result_text or None, error_text or None, int(action_id)),
-            )
-        conn.commit()
-
-
-def _queue_fail_stale_running_actions(max_age_minutes: int = 120) -> int:
-    db_url = _db_url()
-    if not db_url:
-        return 0
-    import psycopg  # type: ignore
-
-    with psycopg.connect(db_url) as conn:
-        with conn.cursor() as cur:
-            cur.execute(
-                """
-                UPDATE miniapp_action_queue
-                SET status = 'failed',
-                    finished_at = NOW(),
-                    error_text = COALESCE(error_text, '') || CASE
-                        WHEN COALESCE(error_text, '') = '' THEN 'stale running action auto-failed'
-                        ELSE '; stale running action auto-failed'
-                    END
-                WHERE action_type = 'plan_update'
-                  AND status = 'running'
-                  AND started_at IS NOT NULL
-                  AND started_at < (NOW() - (%s * INTERVAL '1 minute'))
-                """,
-                (int(max_age_minutes),),
-            )
-            affected = int(cur.rowcount or 0)
-        conn.commit()
-    return affected
-
-
-async def _plan_update_queue_loop(app):
-    db_url = _db_url()
-    if not db_url:
-        logger.warning("Plan-update queue disabled: DATABASE_URL is empty")
-        return
-
-    try:
-        await asyncio.to_thread(_ensure_action_queue_schema)
-    except Exception:
-        logger.exception("Failed to ensure miniapp_action_queue schema")
-        return
-
-    try:
-        # On process start there is no valid in-flight worker state.
-        # Any lingering "running" rows are orphaned from a previous crash/restart.
-        stale_count = await asyncio.to_thread(_queue_fail_stale_running_actions, 0)
-        if stale_count > 0:
-            logger.warning("Auto-failed orphan running plan_update actions: %s", stale_count)
-    except Exception:
-        logger.exception("Failed to auto-fail orphan running plan_update actions")
-
-    logger.info("Plan-update queue loop started (poll=%ss)", ACTION_QUEUE_POLL_SEC)
-    while not _shutdown_event.is_set():
-        action = None
-        try:
-            action = await asyncio.to_thread(_queue_claim_plan_update_action)
-        except Exception:
-            logger.exception("Failed to claim plan_update action")
-            await asyncio.sleep(ACTION_QUEUE_POLL_SEC)
-            continue
-
-        if not action:
-            await asyncio.sleep(ACTION_QUEUE_POLL_SEC)
-            continue
-
-        action_id = int(action["id"])
-        user_id = int(action["user_id"])
-        logger.info("Plan-update queue action start id=%s user=%s", action_id, user_id)
-        try:
-            try:
-                await app.bot.send_message(chat_id=user_id, text=TEXT["ru"]["plan_update_start"])
-            except Exception:
-                logger.exception("Failed to notify user about plan-update start user=%s", user_id)
-
-            async with EXCEL_LOCK:
-                result = await asyncio.wait_for(asyncio.to_thread(run_plan_update), timeout=30 * 60)
-            await asyncio.to_thread(
-                _queue_finish_action,
-                action_id,
-                "done",
-                json.dumps(result, ensure_ascii=False),
-                "",
-            )
-            await app.bot.send_message(chat_id=user_id, text=TEXT["ru"]["plan_update_done"])
-            logger.info("Plan-update queue action done id=%s user=%s", action_id, user_id)
-        except Exception as e:
-            logger.exception("Plan-update queue action failed id=%s user=%s", action_id, user_id)
-            await asyncio.to_thread(_queue_finish_action, action_id, "failed", "", str(e))
-            try:
-                await app.bot.send_message(
-                    chat_id=user_id,
-                    text=TEXT["ru"]["plan_update_failed"].format(err=str(e)),
-                )
-            except Exception:
-                logger.exception("Failed to notify user about plan-update error user=%s", user_id)
-
-
 async def _heartbeat_loop():
     """Background heartbeat loop used by watchdog."""
     while not _shutdown_event.is_set():
@@ -417,9 +222,6 @@ TEXT = {
         "invalid_params": "Invalid year or week values.",
         "panel_hint": "Tap the button below to open the control panel.",
         "panel_not_configured": "WebApp URL is not configured. Set WEBAPP_URL in .env.",
-        "plan_update_start": "Plan update started. Please wait...",
-        "plan_update_done": "Plan aktualisiert.",
-        "plan_update_failed": "Plan update failed: {err}",
     },
     "ru": {
         "btn_report": "📄 Отчёт",
@@ -445,9 +247,6 @@ TEXT = {
         "invalid_params": "Некорректные значения года или недели.",
         "panel_hint": "Нажмите кнопку ниже, чтобы открыть окно.",
         "panel_not_configured": "WebApp URL не настроен. Укажите WEBAPP_URL в .env.",
-        "plan_update_start": "Актуализация плана запущена. Подождите...",
-        "plan_update_done": "План актуализирован.",
-        "plan_update_failed": "Ошибка актуализации плана: {err}",
     },
 }
 
@@ -1005,72 +804,6 @@ async def on_cb(update: Update, context: ContextTypes.DEFAULT_TYPE):
         return
 
 
-async def on_webapp_data(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Handle data from Telegram Mini App."""
-    uid = update.effective_user.id if update.effective_user else 0
-    logger.info("WEBAPP DATA received from user=%s", uid or "unknown")
-
-    if not _allowed(update):
-        await update.effective_message.reply_text(T(update, "access_denied", uid=uid or "unknown"))
-        return
-
-    payload_raw = ""
-    try:
-        payload_raw = update.effective_message.web_app_data.data or ""
-    except Exception:
-        payload_raw = ""
-    if not payload_raw:
-        await update.effective_message.reply_text(T(update, "err"), reply_markup=_kb(update))
-        return
-
-    try:
-        data = json.loads(payload_raw)
-    except Exception:
-        logger.exception("Invalid web_app_data from user=%s payload=%r", uid, payload_raw)
-        await update.effective_message.reply_text(T(update, "err"), reply_markup=_kb(update))
-        return
-
-    action = str(data.get("action", "")).strip().lower()
-    if action != "plan_update":
-        await update.effective_message.reply_text(T(update, "err"), reply_markup=_kb(update))
-        return
-
-    status_msg = await context.bot.send_message(
-        chat_id=uid,
-        text=T(update, "plan_update_start"),
-    )
-
-    try:
-        async with EXCEL_LOCK:
-            result = await asyncio.wait_for(
-                asyncio.to_thread(run_plan_update),
-                timeout=30 * 60,
-            )
-        logger.info("PLAN UPDATE success user=%s result=%s", uid, result)
-        await context.bot.edit_message_text(
-            chat_id=uid,
-            message_id=status_msg.message_id,
-            text=T(update, "plan_update_done"),
-            reply_markup=_kb(update),
-        )
-    except asyncio.TimeoutError:
-        logger.exception("PLAN UPDATE timeout user=%s", uid)
-        await context.bot.edit_message_text(
-            chat_id=uid,
-            message_id=status_msg.message_id,
-            text=T(update, "plan_update_failed", err="timeout"),
-            reply_markup=_kb(update),
-        )
-    except Exception as e:
-        logger.exception("PLAN UPDATE failed user=%s", uid)
-        await context.bot.edit_message_text(
-            chat_id=uid,
-            message_id=status_msg.message_id,
-            text=T(update, "plan_update_failed", err=str(e)),
-            reply_markup=_kb(update),
-        )
-
-
 async def on_error(update: object, context: ContextTypes.DEFAULT_TYPE) -> None:
     logger.exception("UNHANDLED ERROR", exc_info=context.error)
 
@@ -1130,7 +863,6 @@ def main():
     app.add_handler(CommandHandler("open", panel_cmd))
     app.add_handler(CommandHandler("open_diag", open_diag_cmd))
     app.add_handler(CommandHandler("panel", panel_cmd))
-    app.add_handler(MessageHandler(filters.StatusUpdate.WEB_APP_DATA, on_webapp_data))
     app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, on_text))
     app.add_error_handler(on_error)
 
@@ -1151,13 +883,11 @@ def main():
     async def _run():
         await app.initialize()
         heartbeat_task = None
-        queue_task = None
         try:
             await app.start()
             await app.updater.start_polling(drop_pending_updates=True)
             _touch_heartbeat_file()
             heartbeat_task = asyncio.create_task(_heartbeat_loop())
-            queue_task = asyncio.create_task(_plan_update_queue_loop(app))
             logger.info("Bot started polling.")
 
             # Wait for shutdown signal
@@ -1169,12 +899,6 @@ def main():
                 heartbeat_task.cancel()
                 try:
                     await heartbeat_task
-                except asyncio.CancelledError:
-                    pass
-            if queue_task is not None:
-                queue_task.cancel()
-                try:
-                    await queue_task
                 except asyncio.CancelledError:
                     pass
             await app.updater.stop()

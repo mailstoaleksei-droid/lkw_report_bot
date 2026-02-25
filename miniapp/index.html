@@ -1767,7 +1767,7 @@
         hintYf: "Vehicle mileage and fuel consumption",
         hintEinnahmen: "Total revenue report for all operations",
         hintBonus: "Calculate driver bonuses",
-        hintDataPlan: "Sync plan workbook from source data",
+        hintDataPlan: "Select year and week for Data/Plan report (selected week + 4)",
         
         // Common
         choose: "Choose...",
@@ -1792,8 +1792,6 @@
         toastSuccess: "Request completed",
         toastPdfReady: "PDF is ready. Tap Open PDF",
         toastComingSoon: "Feature coming soon",
-        toastPlanUpdateSent: "Plan update request sent",
-        toastPlanUpdateNotSupported: "Mini App sendData is not available",
         backendNotReady: "Backend is not connected yet",
         fullscreenRequested: "Switched to full screen",
         pdfReadyNote: "PDF generated successfully.",
@@ -1845,7 +1843,7 @@
         hintYf: "Пробег и расход топлива транспорта",
         hintEinnahmen: "Отчет по общей выручке",
         hintBonus: "Расчет бонусов водителей",
-        hintDataPlan: "Синхронизация план-файла из исходных данных",
+        hintDataPlan: "Выберите год и неделю для отчета Data/Plan (выбранная + 4 недели)",
         
         // Common
         choose: "Выбрать...",
@@ -1870,8 +1868,6 @@
         toastSuccess: "Запрос выполнен",
         toastPdfReady: "PDF готов. Нажмите «Открыть PDF»",
         toastComingSoon: "Функция скоро будет доступна",
-        toastPlanUpdateSent: "Запрос на актуализацию плана отправлен",
-        toastPlanUpdateNotSupported: "В этом клиенте sendData недоступен",
         backendNotReady: "Backend пока не подключен",
         fullscreenRequested: "Открываю на весь экран",
         pdfReadyNote: "PDF успешно сформирован.",
@@ -2244,24 +2240,6 @@
       return false;
     }
 
-    async function requestPlanUpdate() {
-      const ctx = getTgContext();
-      if (!ctx.initData) throw new Error("initData is missing");
-      const resp = await fetch("/api/plan-update", {
-        method: "POST",
-        headers: { "Content-Type": "application/json", "Accept": "application/json" },
-        body: JSON.stringify({
-          initData: ctx.initData || "",
-          source: "miniapp",
-        }),
-      });
-      const data = await resp.json().catch(() => null);
-      if (!resp.ok || !data || data.ok !== true) {
-        throw new Error(data?.error || "Failed to queue plan update");
-      }
-      return data;
-    }
-
     async function openDockPdf(kind, titleKey) {
       haptic("impact");
       showToast(L("loadingPdf"), 1200);
@@ -2550,35 +2528,40 @@
     }
 
     function openDataPlan() {
-      setSheetHeader("Data/Plan", L("hintDataPlan"), "Action");
+      setSheetHeader("Data/Plan", L("hintDataPlan"), "Params");
       setSegments([], "", () => {});
       setForm(`
-        <div class="note">
-          ${L("hintDataPlan")}<br>
-          <strong>Plan aktualisiere</strong>
+        <div class="field">
+          <label>${L("year")}</label>
+          <select id="planReportYear">${buildYearOptions(2025)}</select>
+        </div>
+        <div class="field">
+          <label>${L("week")}</label>
+          <select id="planReportWeek">${buildWeekOptions()}</select>
         </div>
       `);
       setNote("");
 
-      $("btnPrimary").textContent = "Plan aktualisiere";
+      const now = new Date();
+      const yearEl = $("planReportYear");
+      const weekEl = $("planReportWeek");
+      if (yearEl) {
+        const currentIsoYear = getISOYear(now);
+        const clampedYear = Math.max(2025, Math.min(2030, currentIsoYear));
+        yearEl.value = String(clampedYear);
+      }
+      if (weekEl) weekEl.value = String(getISOWeek(now));
+
+      $("btnPrimary").textContent = L("generate");
       $("btnPrimary").onclick = async () => {
-        haptic("impact");
-        const btn = $("btnPrimary");
-        const prevText = btn.textContent;
-        btn.disabled = true;
-        try {
-          await requestPlanUpdate();
-          haptic("success");
-          showToast(L("toastPlanUpdateSent"));
-          closeSheet();
-          return;
-        } catch (apiErr) {
+        const year = Number($("planReportYear").value);
+        const week = Number($("planReportWeek").value);
+        if (!Number.isFinite(year) || !Number.isFinite(week) || year < 2025 || year > 2030 || week < 1 || week > 53) {
           haptic("error");
-          showToast(apiErr?.message || L("toastPlanUpdateNotSupported"));
-        } finally {
-          btn.disabled = false;
-          btn.textContent = prevText;
+          showToast("Invalid year/week");
+          return;
         }
+        await sendReportGenerate("data_plan", { year, week });
       };
 
       openSheet();
