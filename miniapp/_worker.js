@@ -66,6 +66,37 @@ const REPORTS = [
     ],
   },
   {
+    id: "data_data",
+    enabled: true,
+    icon: "calendar",
+    name: {
+      en: "Data/Plan (Kalender Daily Drivers)",
+      ru: "Data/Plan (календарь по дням)",
+      de: "Data/Plan (Kalender Fahrer pro Tag)",
+    },
+    description: {
+      en: "Selected ISO week only, 7 days (Mon-Sun) by LKW",
+      ru: "Только выбранная неделя ISO, 7 дней (Пн-Вс) по LKW",
+      de: "Nur ausgewaehlte ISO-Woche, 7 Tage (Mo-So) pro LKW",
+    },
+    params: [
+      {
+        id: "year",
+        type: "year",
+        label: { en: "Year", ru: "Год" },
+        min: 2025,
+        max: 2030,
+      },
+      {
+        id: "week",
+        type: "week",
+        label: { en: "Week", ru: "Неделя" },
+        min: 1,
+        max: 53,
+      },
+    ],
+  },
+  {
     id: "tankkarten",
     enabled: false,
     icon: "fuel",
@@ -236,6 +267,59 @@ LEFT JOIN agg a
  AND a.iso_week = w.iso_week
 WHERE COALESCE(NULLIF(t.external_id, ''), '') <> ''
 ORDER BY t.external_id, w.week_idx;
+`;
+
+const DATA_WEEK_GRID_SQL = `
+WITH ref AS (
+  SELECT to_date($1::text || '-W' || lpad($2::text, 2, '0') || '-1', 'IYYY-"W"IW-ID')::date AS week_monday
+), days AS (
+  SELECT
+    g.n::int AS day_idx,
+    (week_monday + (g.n * interval '1 day'))::date AS work_date
+  FROM ref
+  CROSS JOIN generate_series(0,6) AS g(n)
+), agg_source AS (
+  SELECT
+    s.truck_id,
+    s.work_date::date AS work_date,
+    NULLIF(
+      TRIM(
+        COALESCE(
+          NULLIF(d.full_name, ''),
+          NULLIF(s.shift_code, ''),
+          NULLIF(s.raw_payload->>'assignment_value', ''),
+          NULLIF(s.raw_payload->>'Fahrername', ''),
+          NULLIF(s.raw_payload->>'driver_name', '')
+        )
+      ),
+      ''
+    ) AS value_text
+  FROM schedules s
+  JOIN days x ON x.work_date = s.work_date
+  LEFT JOIN drivers d ON d.id = s.driver_id
+), agg AS (
+  SELECT
+    truck_id,
+    work_date,
+    string_agg(DISTINCT value_text, ' / ' ORDER BY value_text) AS day_value
+  FROM agg_source
+  WHERE value_text IS NOT NULL
+  GROUP BY truck_id, work_date
+)
+SELECT
+  t.external_id AS lkw_id,
+  COALESCE(NULLIF(t.plate_number, ''), NULLIF(t.raw_payload->>'LKW-Nummer', ''), NULLIF(t.raw_payload->>'Number', '')) AS lkw_nummer,
+  COALESCE(NULLIF(t.truck_type, ''), NULLIF(t.raw_payload->>'LKW-Typ', ''), NULLIF(t.raw_payload->>'Type', '')) AS lkw_typ,
+  x.day_idx,
+  x.work_date,
+  COALESCE(a.day_value, '') AS day_value
+FROM trucks t
+CROSS JOIN days x
+LEFT JOIN agg a
+  ON a.truck_id = t.id
+ AND a.work_date = x.work_date
+WHERE COALESCE(NULLIF(t.external_id, ''), '') <> ''
+ORDER BY t.external_id, x.day_idx;
 `;
 
 const DOCK_KIND_TO_REPORT_TYPE = {
@@ -566,6 +650,10 @@ function makeBerichtFilename(year, week) {
 
 function makeDataPlanFilename(year, week) {
   return `data_plan_${Number.parseInt(String(year), 10)}_w${pad2(Number.parseInt(String(week), 10))}_plus3.pdf`;
+}
+
+function makeDataWeekFilename(year, week) {
+  return `data_week_${Number.parseInt(String(year), 10)}_w${pad2(Number.parseInt(String(week), 10))}.pdf`;
 }
 
 function makeDockFilename(kind, at = new Date()) {
@@ -1255,6 +1343,238 @@ async function buildDataPlanPdfWithPdfLib({ year, week, userId, rows }) {
   return pdfDoc.save();
 }
 
+function formatWeekDayLabel(dayIdx, workDateValue) {
+  const dayShort = ["Mo", "Di", "Mi", "Do", "Fr", "Sa", "So"][toIntSafe(dayIdx, 0)] || `D${toIntSafe(dayIdx, 0) + 1}`;
+  const m = /^(\d{4})-(\d{2})-(\d{2})/.exec(String(workDateValue || ""));
+  if (!m) return dayShort;
+  return `${dayShort} ${m[3]}.${m[2]}`;
+}
+
+function buildDataWeekMatrixRows(rows = []) {
+  const dayMeta = new Map();
+  const trucks = new Map();
+
+  for (const row of rows || []) {
+    const dayIdx = toIntSafe(row.day_idx, -1);
+    if (dayIdx < 0 || dayIdx > 6) continue;
+
+    if (!dayMeta.has(dayIdx)) {
+      dayMeta.set(dayIdx, {
+        idx: dayIdx,
+        work_date: String(row.work_date || ""),
+      });
+    }
+
+    const lkwId = String(row.lkw_id || "").trim();
+    if (!lkwId) continue;
+
+    if (!trucks.has(lkwId)) {
+      trucks.set(lkwId, {
+        lkw_id: lkwId,
+        lkw_nummer: String(row.lkw_nummer || "").trim(),
+        lkw_typ: String(row.lkw_typ || "").trim(),
+      });
+    }
+
+    const rec = trucks.get(lkwId);
+    rec[`d${dayIdx}`] = String(row.day_value ?? "").trim();
+  }
+
+  const dayDefs = Array.from(dayMeta.values())
+    .sort((a, b) => a.idx - b.idx)
+    .map((d) => ({
+      ...d,
+      key: `d${d.idx}`,
+      label: formatWeekDayLabel(d.idx, d.work_date),
+    }));
+
+  const matrixRows = Array.from(trucks.values())
+    .sort((a, b) => String(a.lkw_id || "").localeCompare(String(b.lkw_id || ""), undefined, {
+      numeric: true,
+      sensitivity: "base",
+    }))
+    .map((row) => {
+      const out = { ...row };
+      for (const d of dayDefs) {
+        if (typeof out[d.key] !== "string") out[d.key] = "";
+      }
+      return out;
+    });
+
+  return { dayDefs, matrixRows };
+}
+
+async function buildDataWeekPdfWithPdfLib({ year, week, userId, rows }) {
+  const { dayDefs, matrixRows } = buildDataWeekMatrixRows(rows);
+
+  const pdfDoc = await PDFDocument.create();
+  const font = await pdfDoc.embedFont(StandardFonts.Helvetica);
+  const boldFont = await pdfDoc.embedFont(StandardFonts.HelveticaBold);
+
+  const pageSize = [842, 595]; // A4 landscape
+  const margin = 22;
+  const rowHeight = 16;
+  const textSize = 8;
+  const tableMaxWidth = pageSize[0] - (margin * 2);
+
+  const columns = resolveAutoColumns({
+    columns: [
+      { key: "lkw_id", label: "LKW-ID", width: 58 },
+      { key: "lkw_nummer", label: "LKW-Nummer", width: 84 },
+      { key: "lkw_typ", label: "LKW-Typ", width: 74 },
+      ...dayDefs.map((d) => ({
+        key: d.key,
+        label: d.label,
+        width: "auto",
+        min_width: 88,
+        max_width: 170,
+      })),
+    ],
+    rows: matrixRows,
+    font,
+    size: textSize,
+    maxTableWidth: tableMaxWidth,
+  });
+
+  const tableWidth = columns.reduce((sum, c) => sum + c.width, 0);
+  const tableX = margin;
+  const borderColor = rgb(0.74, 0.8, 0.9);
+  const headerBg = rgb(0.93, 0.96, 1);
+  const oddBg = rgb(0.985, 0.99, 1);
+  const textColor = rgb(0.08, 0.14, 0.24);
+
+  const startLabel = dayDefs.length ? dayDefs[0].label : "";
+  const endLabel = dayDefs.length ? dayDefs[dayDefs.length - 1].label : "";
+  const periodLabel = startLabel && endLabel ? `${startLabel} - ${endLabel}` : `${year}/W${pad2(week)}`;
+
+  let page = pdfDoc.addPage(pageSize);
+  let y = page.getHeight() - margin;
+
+  const drawPageHeader = () => {
+    page.drawText(`Data (Kalender Daily Drivers) ${year}/W${pad2(week)} | ${periodLabel}`, {
+      x: margin,
+      y,
+      size: 12,
+      font: boldFont,
+      color: textColor,
+    });
+    y -= 15;
+    page.drawText(`Generated: ${new Date().toISOString()} UTC | User: ${userId}`, {
+      x: margin,
+      y,
+      size: 8,
+      font,
+      color: rgb(0.24, 0.3, 0.4),
+    });
+    y -= 14;
+  };
+
+  const drawHeaderRow = () => {
+    page.drawRectangle({
+      x: tableX,
+      y: y - rowHeight + 2,
+      width: tableWidth,
+      height: rowHeight,
+      color: headerBg,
+      borderColor,
+      borderWidth: 1,
+    });
+
+    let x = tableX;
+    for (const col of columns) {
+      const label = fitTextToWidth(boldFont, col.label, textSize, col.width - 8);
+      page.drawText(label, {
+        x: x + 4,
+        y: y - 9,
+        size: textSize,
+        font: boldFont,
+        color: textColor,
+      });
+      x += col.width;
+      if (x < tableX + tableWidth - 0.5) {
+        page.drawLine({
+          start: { x, y: y - rowHeight + 2 },
+          end: { x, y: y + 2 },
+          thickness: 0.8,
+          color: borderColor,
+        });
+      }
+    }
+    y -= rowHeight;
+  };
+
+  const ensureSpace = (needHeight) => {
+    if (y - needHeight >= margin) return;
+    page = pdfDoc.addPage(pageSize);
+    y = page.getHeight() - margin;
+    drawPageHeader();
+    drawHeaderRow();
+  };
+
+  const drawRow = (row, idx) => {
+    if (idx % 2 === 1) {
+      page.drawRectangle({
+        x: tableX,
+        y: y - rowHeight + 2,
+        width: tableWidth,
+        height: rowHeight,
+        color: oddBg,
+      });
+    }
+
+    let x = tableX;
+    for (const col of columns) {
+      const value = fitTextToWidth(font, safeText(row?.[col.key], ""), textSize, col.width - 8);
+      page.drawText(value, {
+        x: x + 4,
+        y: y - 9,
+        size: textSize,
+        font,
+        color: textColor,
+      });
+      x += col.width;
+      if (x < tableX + tableWidth - 0.5) {
+        page.drawLine({
+          start: { x, y: y - rowHeight + 2 },
+          end: { x, y: y + 2 },
+          thickness: 0.5,
+          color: borderColor,
+        });
+      }
+    }
+    page.drawLine({
+      start: { x: tableX, y: y - rowHeight + 2 },
+      end: { x: tableX + tableWidth, y: y - rowHeight + 2 },
+      thickness: 0.5,
+      color: borderColor,
+    });
+    y -= rowHeight;
+  };
+
+  drawPageHeader();
+  drawHeaderRow();
+
+  if (!Array.isArray(matrixRows) || matrixRows.length === 0) {
+    ensureSpace(20);
+    page.drawText("No rows found.", {
+      x: margin,
+      y: y - 10,
+      size: 9,
+      font,
+      color: textColor,
+    });
+  } else {
+    let idx = 0;
+    for (const row of matrixRows) {
+      ensureSpace(rowHeight + 2);
+      drawRow(row, idx);
+      idx += 1;
+    }
+  }
+
+  return pdfDoc.save();
+}
+
 function fitTextToWidth(font, text, size, maxWidth) {
   const raw = normalizeAscii(safeText(text, ""));
   if (!raw) return "";
@@ -1744,6 +2064,8 @@ async function handleHistory(request, env) {
       filename = makeBerichtFilename(isoYear, isoWeek);
     } else if (reportType === "data_plan" && isoYear && isoWeek) {
       filename = makeDataPlanFilename(isoYear, isoWeek);
+    } else if (reportType === "data_data" && isoYear && isoWeek) {
+      filename = makeDataWeekFilename(isoYear, isoWeek);
     } else if (REPORT_TYPE_TO_DOCK_KIND[reportType]) {
       filename = makeDockFilename(REPORT_TYPE_TO_DOCK_KIND[reportType]);
     }
@@ -1940,7 +2262,7 @@ function validateGeneratePayload(body) {
     return { ok: false, status: 400, error: `Report not enabled: ${reportType}` };
   }
 
-  if (reportType === "bericht" || reportType === "data_plan") {
+  if (reportType === "bericht" || reportType === "data_plan" || reportType === "data_data") {
     const year = Number.parseInt(String(body.year ?? ""), 10);
     const week = Number.parseInt(String(body.week ?? ""), 10);
     const yearParam = report.params.find((p) => p.id === "year");
@@ -1976,7 +2298,7 @@ async function handleGenerateWithBody(body, env, enforceRateLimit = true) {
     });
   }
 
-  if (valid.reportType !== "bericht" && valid.reportType !== "data_plan") {
+  if (valid.reportType !== "bericht" && valid.reportType !== "data_plan" && valid.reportType !== "data_data") {
     return json(
       {
         ok: false,
@@ -2101,7 +2423,7 @@ async function handleGenerateWithBody(body, env, enforceRateLimit = true) {
         ],
       });
     }
-  } else {
+  } else if (valid.reportType === "data_plan") {
     let rows;
     try {
       const result = await queryNeon(dbConnectionString, DATA_PLAN_GRID_SQL, [valid.year, valid.week]);
@@ -2149,6 +2471,60 @@ async function handleGenerateWithBody(body, env, enforceRateLimit = true) {
       }
       pdfBytes = buildSimplePdf({
         title: `Data/Plan - ${valid.year}/W${pad2(valid.week)} (+3 weeks)`,
+        subtitle: `Generated at ${new Date().toISOString()} UTC, user ${auth.userId}`,
+        lines,
+        pageWidth: 842,
+        pageHeight: 595,
+      });
+    }
+  } else {
+    let rows;
+    try {
+      const result = await queryNeon(dbConnectionString, DATA_WEEK_GRID_SQL, [valid.year, valid.week]);
+      rows = result.rows || [];
+    } catch (err) {
+      return json(
+        {
+          ok: false,
+          error: "Failed to execute SQL query",
+          code: "SQL_ERROR",
+          details: String(err?.message || err || "unknown error"),
+        },
+        500,
+        { "Cache-Control": "no-store" },
+      );
+    }
+
+    filename = makeDataWeekFilename(valid.year, valid.week);
+    outputKey = `data_data:${valid.year}:W${pad2(valid.week)}`;
+    try {
+      pdfBytes = await buildDataWeekPdfWithPdfLib({
+        year: valid.year,
+        week: valid.week,
+        userId: auth.userId,
+        rows,
+      });
+    } catch (err) {
+      pdfEngine = "legacy-fallback";
+      const { dayDefs, matrixRows } = buildDataWeekMatrixRows(rows);
+      const lines = [];
+      const headers = ["LKW-ID", "LKW-Nummer", "LKW-Typ", ...dayDefs.map((d) => d.label)];
+      lines.push(headers.join(" | "));
+      lines.push("-".repeat(180));
+      for (const row of matrixRows.slice(0, 500)) {
+        const values = [
+          safeText(row.lkw_id, ""),
+          safeText(row.lkw_nummer, ""),
+          safeText(row.lkw_typ, ""),
+          ...dayDefs.map((d) => safeText(row[d.key], "")),
+        ];
+        lines.push(values.join(" | "));
+      }
+      if (matrixRows.length > 500) {
+        lines.push(`... truncated: ${matrixRows.length - 500} more rows`);
+      }
+      pdfBytes = buildSimplePdf({
+        title: `Data (Kalender) - ${valid.year}/W${pad2(valid.week)} (7 days)`,
         subtitle: `Generated at ${new Date().toISOString()} UTC, user ${auth.userId}`,
         lines,
         pageWidth: 842,

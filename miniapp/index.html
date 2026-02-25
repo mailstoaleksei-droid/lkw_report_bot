@@ -1767,7 +1767,11 @@
         hintYf: "Vehicle mileage and fuel consumption",
         hintEinnahmen: "Total revenue report for all operations",
         hintBonus: "Calculate driver bonuses",
-        hintDataPlan: "Select year and week for Data/Plan report (selected week + 3)",
+        hintDataPlan: "Select process, year and week for Data/Plan report",
+        hintDataPlanPlan: "Plan: selected week + 3 weeks",
+        hintDataPlanData: "Data: selected week only (7 days)",
+        processPlan: "Plan",
+        processData: "Data",
         
         // Common
         choose: "Choose...",
@@ -1843,7 +1847,11 @@
         hintYf: "Пробег и расход топлива транспорта",
         hintEinnahmen: "Отчет по общей выручке",
         hintBonus: "Расчет бонусов водителей",
-        hintDataPlan: "Выберите год и неделю для отчета Data/Plan (выбранная + 3 недели)",
+        hintDataPlan: "Выберите процесс, год и неделю для отчета Data/Plan",
+        hintDataPlanPlan: "Plan: выбранная неделя + 3 недели",
+        hintDataPlanData: "Data: только выбранная неделя (7 дней)",
+        processPlan: "Plan",
+        processData: "Data",
         
         // Common
         choose: "Выбрать...",
@@ -2528,41 +2536,67 @@
     }
 
     function openDataPlan() {
-      setSheetHeader("Data/Plan", L("hintDataPlan"), "Params");
-      setSegments([], "", () => {});
-      setForm(`
-        <div class="field">
-          <label>${L("year")}</label>
-          <select id="planReportYear">${buildYearOptions(2025)}</select>
-        </div>
-        <div class="field">
-          <label>${L("week")}</label>
-          <select id="planReportWeek">${buildWeekOptions()}</select>
-        </div>
-      `);
-      setNote("");
-
       const now = new Date();
-      const yearEl = $("planReportYear");
-      const weekEl = $("planReportWeek");
-      if (yearEl) {
-        const currentIsoYear = getISOYear(now);
-        const clampedYear = Math.max(2025, Math.min(2030, currentIsoYear));
-        yearEl.value = String(clampedYear);
-      }
-      if (weekEl) weekEl.value = String(getISOWeek(now));
+      let active = "plan";
+      let selectedYear = Math.max(2025, Math.min(2030, getISOYear(now)));
+      let selectedWeek = getISOWeek(now);
+      const tabs = [
+        { key: "plan", label: L("processPlan") },
+        { key: "data", label: L("processData") },
+      ];
 
-      $("btnPrimary").textContent = L("generate");
-      $("btnPrimary").onclick = async () => {
-        const year = Number($("planReportYear").value);
-        const week = Number($("planReportWeek").value);
-        if (!Number.isFinite(year) || !Number.isFinite(week) || year < 2025 || year > 2030 || week < 1 || week > 53) {
-          haptic("error");
-          showToast("Invalid year/week");
-          return;
+      const render = () => {
+        const isPlan = active === "plan";
+        setSheetHeader(
+          "Data/Plan",
+          isPlan ? L("hintDataPlanPlan") : L("hintDataPlanData"),
+          isPlan ? L("processPlan") : L("processData"),
+        );
+        setSegments(tabs, active, (k) => { active = k; render(); });
+        setForm(`
+          <div class="field">
+            <label>${L("year")}</label>
+            <select id="planReportYear">${buildYearOptions(2025, 2030)}</select>
+          </div>
+          <div class="field">
+            <label>${L("week")}</label>
+            <select id="planReportWeek">${buildWeekOptions()}</select>
+          </div>
+        `);
+        setNote(L("hintDataPlan"));
+
+        const yearEl = $("planReportYear");
+        const weekEl = $("planReportWeek");
+        if (yearEl) {
+          yearEl.value = String(selectedYear);
+          yearEl.onchange = () => {
+            const y = Number(yearEl.value);
+            if (Number.isFinite(y)) selectedYear = y;
+          };
         }
-        await sendReportGenerate("data_plan", { year, week });
+        if (weekEl) {
+          weekEl.value = String(selectedWeek);
+          weekEl.onchange = () => {
+            const w = Number(weekEl.value);
+            if (Number.isFinite(w)) selectedWeek = w;
+          };
+        }
+
+        $("btnPrimary").textContent = L("generate");
+        $("btnPrimary").onclick = async () => {
+          const year = Number($("planReportYear")?.value ?? selectedYear);
+          const week = Number($("planReportWeek")?.value ?? selectedWeek);
+          if (!Number.isFinite(year) || !Number.isFinite(week) || year < 2025 || year > 2030 || week < 1 || week > 53) {
+            haptic("error");
+            showToast("Invalid year/week");
+            return;
+          }
+          const reportType = active === "plan" ? "data_plan" : "data_data";
+          await sendReportGenerate(reportType, { year, week });
+        };
       };
+
+      render();
 
       openSheet();
     }
