@@ -278,7 +278,7 @@ WITH ref AS (
     (week_monday + (g.n * interval '1 day'))::date AS work_date
   FROM ref
   CROSS JOIN generate_series(0,6) AS g(n)
-), agg_source AS (
+), agg_day_source AS (
   SELECT
     s.truck_id,
     s.work_date::date AS work_date,
@@ -297,14 +297,40 @@ WITH ref AS (
   FROM schedules s
   JOIN days x ON x.work_date = s.work_date
   LEFT JOIN drivers d ON d.id = s.driver_id
-), agg AS (
+), agg_day AS (
   SELECT
     truck_id,
     work_date,
     string_agg(DISTINCT value_text, ' / ' ORDER BY value_text) AS day_value
-  FROM agg_source
+  FROM agg_day_source
   WHERE value_text IS NOT NULL
   GROUP BY truck_id, work_date
+), agg_week_source AS (
+  SELECT
+    s.truck_id,
+    NULLIF(
+      TRIM(
+        COALESCE(
+          NULLIF(d.full_name, ''),
+          NULLIF(s.shift_code, ''),
+          NULLIF(s.raw_payload->>'assignment_value', ''),
+          NULLIF(s.raw_payload->>'Fahrername', ''),
+          NULLIF(s.raw_payload->>'driver_name', '')
+        )
+      ),
+      ''
+    ) AS value_text
+  FROM schedules s
+  LEFT JOIN drivers d ON d.id = s.driver_id
+  WHERE s.iso_year = $1::int
+    AND s.iso_week = $2::int
+), agg_week AS (
+  SELECT
+    truck_id,
+    string_agg(DISTINCT value_text, ' / ' ORDER BY value_text) AS week_value
+  FROM agg_week_source
+  WHERE value_text IS NOT NULL
+  GROUP BY truck_id
 )
 SELECT
   t.external_id AS lkw_id,
@@ -312,12 +338,14 @@ SELECT
   COALESCE(NULLIF(t.truck_type, ''), NULLIF(t.raw_payload->>'LKW-Typ', ''), NULLIF(t.raw_payload->>'Type', '')) AS lkw_typ,
   x.day_idx,
   x.work_date,
-  COALESCE(a.day_value, '') AS day_value
+  COALESCE(ad.day_value, aw.week_value, '') AS day_value
 FROM trucks t
 CROSS JOIN days x
-LEFT JOIN agg a
-  ON a.truck_id = t.id
- AND a.work_date = x.work_date
+LEFT JOIN agg_day ad
+  ON ad.truck_id = t.id
+ AND ad.work_date = x.work_date
+LEFT JOIN agg_week aw
+  ON aw.truck_id = t.id
 WHERE COALESCE(NULLIF(t.external_id, ''), '') <> ''
 ORDER BY t.external_id, x.day_idx;
 `;
