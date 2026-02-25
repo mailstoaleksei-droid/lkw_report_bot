@@ -44,9 +44,9 @@ const REPORTS = [
       de: "Data/Plan (LKW Fahrer pro Woche)",
     },
     description: {
-      en: "Truck plan report: selected ISO week plus 4 weeks ahead",
-      ru: "План по LKW: выбранная неделя и 4 недели вперед",
-      de: "LKW-Plan: ausgewaehlte Woche plus 4 Wochen",
+      en: "Truck plan report: selected ISO week plus 3 weeks ahead",
+      ru: "План по LKW: выбранная неделя и 3 недели вперед",
+      de: "LKW-Plan: ausgewaehlte Woche plus 3 Wochen",
     },
     params: [
       {
@@ -199,7 +199,7 @@ WITH ref AS (
     extract(week FROM (week_monday + (g.n * interval '7 day')))::int AS iso_week,
     (week_monday + (g.n * interval '7 day'))::date AS week_start
   FROM ref
-  CROSS JOIN generate_series(0,4) AS g(n)
+  CROSS JOIN generate_series(0,3) AS g(n)
 ), agg_source AS (
   SELECT
     s.truck_id,
@@ -565,7 +565,7 @@ function makeBerichtFilename(year, week) {
 }
 
 function makeDataPlanFilename(year, week) {
-  return `data_plan_${Number.parseInt(String(year), 10)}_w${pad2(Number.parseInt(String(week), 10))}_plus4.pdf`;
+  return `data_plan_${Number.parseInt(String(year), 10)}_w${pad2(Number.parseInt(String(week), 10))}_plus3.pdf`;
 }
 
 function makeDockFilename(kind, at = new Date()) {
@@ -1256,14 +1256,24 @@ async function buildDataPlanPdfWithPdfLib({ year, week, userId, rows }) {
 }
 
 function fitTextToWidth(font, text, size, maxWidth) {
-  const raw = safeText(text, "");
+  const raw = normalizeAscii(safeText(text, ""));
   if (!raw) return "";
-  if (font.widthOfTextAtSize(raw, size) <= maxWidth) return raw;
+  if (measureTextWidth(font, raw, size) <= maxWidth) return raw;
   let out = raw;
-  while (out.length > 1 && font.widthOfTextAtSize(`${out}...`, size) > maxWidth) {
+  while (out.length > 1 && measureTextWidth(font, `${out}...`, size) > maxWidth) {
     out = out.slice(0, -1);
   }
   return `${out}...`;
+}
+
+function measureTextWidth(font, text, size) {
+  const cleaned = normalizeAscii(safeText(text, ""));
+  if (!cleaned) return 0;
+  try {
+    return font.widthOfTextAtSize(cleaned, size);
+  } catch {
+    return font.widthOfTextAtSize(cleaned.replace(/[^\x20-\x7E]/g, "?"), size);
+  }
 }
 
 function resolveAutoColumns({ columns, rows, font, size, maxTableWidth }) {
@@ -1283,11 +1293,11 @@ function resolveAutoColumns({ columns, rows, font, size, maxTableWidth }) {
   for (const col of resolved) {
     if (Number.isFinite(col.width) && col.width > 0) continue;
 
-    let best = font.widthOfTextAtSize(safeText(col.label, ""), size) + 12;
+    let best = measureTextWidth(font, col.label, size) + 12;
     for (const row of sampleRows) {
       const value = safeText(row?.[col.key], "");
       if (!value) continue;
-      const w = font.widthOfTextAtSize(value, size) + 12;
+      const w = measureTextWidth(font, value, size) + 12;
       if (w > best) best = w;
       if (best >= col.max_width) break;
     }
@@ -2138,7 +2148,7 @@ async function handleGenerateWithBody(body, env, enforceRateLimit = true) {
         lines.push(`... truncated: ${matrixRows.length - 500} more rows`);
       }
       pdfBytes = buildSimplePdf({
-        title: `Data/Plan - ${valid.year}/W${pad2(valid.week)} (+4 weeks)`,
+        title: `Data/Plan - ${valid.year}/W${pad2(valid.week)} (+3 weeks)`,
         subtitle: `Generated at ${new Date().toISOString()} UTC, user ${auth.userId}`,
         lines,
         pageWidth: 842,
