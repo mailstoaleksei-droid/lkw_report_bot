@@ -1196,6 +1196,310 @@ function buildDataPlanMatrixRows(rows = []) {
   return { weekDefs, matrixRows };
 }
 
+function classifyDriverAssignmentCell(value) {
+  const raw = String(value ?? "").trim();
+  if (!raw) return "without_driver";
+  const normalized = raw.toLowerCase();
+
+  if (normalized.includes("verkauft")) return "without_driver";
+  if (normalized.includes("werkstatt")) return "werkstatt";
+  if (normalized.includes("ersatzwagen")) return "ersatzwagen";
+  if (/\bo\.?\s*f\.?\b/.test(normalized)) return "of";
+  return "work";
+}
+
+function buildDriverAssignmentStats(periodDefs = [], matrixRows = []) {
+  const rows = Array.isArray(matrixRows) ? matrixRows : [];
+  const defs = Array.isArray(periodDefs) ? periodDefs : [];
+
+  return defs.map((period) => {
+    const stats = {
+      period_label: String(period.label || period.key || ""),
+      work_lkw: 0,
+      of_count: 0,
+      ersatzwagen: 0,
+      werkstatt: 0,
+      all_lkw: rows.length,
+      without_driver: 0,
+    };
+
+    for (const row of rows) {
+      const kind = classifyDriverAssignmentCell(row?.[period.key]);
+      if (kind === "work") stats.work_lkw += 1;
+      else if (kind === "of") stats.of_count += 1;
+      else if (kind === "ersatzwagen") stats.ersatzwagen += 1;
+      else if (kind === "werkstatt") stats.werkstatt += 1;
+      else stats.without_driver += 1;
+    }
+
+    return stats;
+  });
+}
+
+function compactStatsPeriodLabel(label) {
+  const text = String(label || "").trim();
+  const weekMatch = /W(\d{1,2})/i.exec(text);
+  if (weekMatch) return `W${pad2(toIntSafe(weekMatch[1], 0))}`;
+  const firstPart = text.split(/\s+/)[0];
+  return firstPart || text;
+}
+
+function drawStatsTableAndChart({
+  pdfDoc,
+  page,
+  pageSize,
+  margin,
+  y,
+  title,
+  statsRows,
+  font,
+  boldFont,
+}) {
+  const rows = Array.isArray(statsRows) ? statsRows : [];
+  if (!rows.length) return { page, y };
+
+  const textColor = rgb(0.08, 0.14, 0.24);
+  const borderColor = rgb(0.74, 0.8, 0.9);
+  const headerBg = rgb(0.93, 0.96, 1);
+  const oddBg = rgb(0.985, 0.99, 1);
+  const tableWidth = pageSize[0] - (margin * 2);
+
+  const ensureSpace = (needHeight) => {
+    if (y - needHeight >= margin) return;
+    page = pdfDoc.addPage(pageSize);
+    y = page.getHeight() - margin;
+  };
+
+  const metricDefs = [
+    { key: "work_lkw", label: "Work LKW" },
+    { key: "of_count", label: "O.F." },
+    { key: "ersatzwagen", label: "Ersatzwagen" },
+    { key: "werkstatt", label: "Werkstatt" },
+    { key: "all_lkw", label: "All LKW" },
+    { key: "without_driver", label: "LKW Ohne Fahrer" },
+  ];
+
+  const rowHeight = 15;
+  const metricColWidth = Math.max(118, Math.min(156, Math.floor(tableWidth * 0.24)));
+  const valueColWidth = Math.max(48, Math.floor((tableWidth - metricColWidth) / rows.length));
+  const fullWidth = metricColWidth + (valueColWidth * rows.length);
+  const tableHeight = rowHeight * (metricDefs.length + 1);
+  const chartHeight = 150;
+  const sectionPad = 26;
+  ensureSpace(20 + tableHeight + sectionPad + chartHeight + 24);
+
+  page.drawText(safeText(title, "Statistics"), {
+    x: margin,
+    y,
+    size: 11,
+    font: boldFont,
+    color: textColor,
+  });
+  y -= 14;
+
+  page.drawRectangle({
+    x: margin,
+    y: y - rowHeight + 2,
+    width: fullWidth,
+    height: rowHeight,
+    color: headerBg,
+    borderColor,
+    borderWidth: 1,
+  });
+
+  page.drawText("STATISTIK", {
+    x: margin + 4,
+    y: y - 9,
+    size: 8,
+    font: boldFont,
+    color: textColor,
+  });
+
+  for (let i = 0; i < rows.length; i += 1) {
+    const x = margin + metricColWidth + (i * valueColWidth);
+    const label = fitTextToWidth(boldFont, rows[i].period_label, 8, valueColWidth - 8);
+    page.drawText(label, {
+      x: x + 4,
+      y: y - 9,
+      size: 8,
+      font: boldFont,
+      color: textColor,
+    });
+    if (i > 0) {
+      page.drawLine({
+        start: { x, y: y - rowHeight + 2 },
+        end: { x, y: y + 2 },
+        thickness: 0.6,
+        color: borderColor,
+      });
+    }
+  }
+  y -= rowHeight;
+
+  let rowIdx = 0;
+  for (const metric of metricDefs) {
+    if (rowIdx % 2 === 1) {
+      page.drawRectangle({
+        x: margin,
+        y: y - rowHeight + 2,
+        width: fullWidth,
+        height: rowHeight,
+        color: oddBg,
+      });
+    }
+
+    page.drawText(metric.label, {
+      x: margin + 4,
+      y: y - 9,
+      size: 8,
+      font,
+      color: textColor,
+    });
+
+    for (let i = 0; i < rows.length; i += 1) {
+      const x = margin + metricColWidth + (i * valueColWidth);
+      const val = toIntSafe(rows[i]?.[metric.key], 0);
+      page.drawText(String(val), {
+        x: x + 4,
+        y: y - 9,
+        size: 8,
+        font,
+        color: textColor,
+      });
+      page.drawLine({
+        start: { x, y: y - rowHeight + 2 },
+        end: { x, y: y + 2 },
+        thickness: 0.45,
+        color: borderColor,
+      });
+    }
+
+    page.drawLine({
+      start: { x: margin, y: y - rowHeight + 2 },
+      end: { x: margin + fullWidth, y: y - rowHeight + 2 },
+      thickness: 0.45,
+      color: borderColor,
+    });
+    y -= rowHeight;
+    rowIdx += 1;
+  }
+
+  page.drawRectangle({
+    x: margin,
+    y: y + 2,
+    width: fullWidth,
+    height: tableHeight,
+    borderColor,
+    borderWidth: 1,
+    color: rgb(1, 1, 1),
+    opacity: 0,
+  });
+
+  y -= 10;
+  ensureSpace(chartHeight + 24);
+
+  const chartX = margin;
+  const chartY = y - chartHeight;
+  const plotPadTop = 18;
+  const plotPadBottom = 20;
+  const plotHeight = chartHeight - plotPadTop - plotPadBottom;
+  const chartSeries = [
+    { key: "work_lkw", label: "Work LKW", color: rgb(0.26, 0.52, 0.82) },
+    { key: "all_lkw", label: "All LKW", color: rgb(0.62, 0.64, 0.69) },
+    { key: "without_driver", label: "LKW Ohne Fahrer", color: rgb(1, 0.5, 0.1) },
+  ];
+
+  page.drawRectangle({
+    x: chartX,
+    y: chartY,
+    width: fullWidth,
+    height: chartHeight,
+    borderColor,
+    borderWidth: 1,
+    color: rgb(0.99, 0.995, 1),
+  });
+
+  let legendX = chartX + 8;
+  const legendY = chartY + chartHeight - 11;
+  for (const series of chartSeries) {
+    page.drawRectangle({
+      x: legendX,
+      y: legendY - 4,
+      width: 7,
+      height: 7,
+      color: series.color,
+    });
+    page.drawText(series.label, {
+      x: legendX + 10,
+      y: legendY - 3,
+      size: 7,
+      font,
+      color: textColor,
+    });
+    legendX += 82;
+  }
+
+  const maxVal = Math.max(
+    1,
+    ...rows.flatMap((row) => chartSeries.map((series) => toIntSafe(row?.[series.key], 0))),
+  );
+
+  const gridSteps = 4;
+  for (let g = 0; g <= gridSteps; g += 1) {
+    const ratio = g / gridSteps;
+    const gy = chartY + plotPadBottom + (plotHeight * ratio);
+    page.drawLine({
+      start: { x: chartX + 1, y: gy },
+      end: { x: chartX + fullWidth - 1, y: gy },
+      thickness: 0.35,
+      color: rgb(0.86, 0.9, 0.95),
+    });
+    const val = Math.round((maxVal * ratio));
+    page.drawText(String(val), {
+      x: chartX + 3,
+      y: gy + 1,
+      size: 6,
+      font,
+      color: rgb(0.4, 0.46, 0.56),
+    });
+  }
+
+  const groupWidth = fullWidth / rows.length;
+  const barGap = 3;
+  const barCount = chartSeries.length;
+  const barWidth = Math.max(4, Math.min(16, ((groupWidth - 10) - ((barCount - 1) * barGap)) / barCount));
+  const groupContentWidth = (barWidth * barCount) + ((barCount - 1) * barGap);
+  const baselineY = chartY + plotPadBottom;
+
+  for (let i = 0; i < rows.length; i += 1) {
+    const groupX = chartX + (i * groupWidth) + ((groupWidth - groupContentWidth) / 2);
+    for (let s = 0; s < chartSeries.length; s += 1) {
+      const series = chartSeries[s];
+      const value = toIntSafe(rows[i]?.[series.key], 0);
+      const barHeight = Math.max(0, Math.floor((value / maxVal) * plotHeight));
+      const x = groupX + (s * (barWidth + barGap));
+      page.drawRectangle({
+        x,
+        y: baselineY,
+        width: barWidth,
+        height: barHeight,
+        color: series.color,
+      });
+    }
+
+    page.drawText(fitTextToWidth(font, compactStatsPeriodLabel(rows[i].period_label), 7, groupWidth - 4), {
+      x: chartX + (i * groupWidth) + 2,
+      y: chartY + 4,
+      size: 7,
+      font,
+      color: textColor,
+    });
+  }
+
+  y = chartY - 14;
+  return { page, y };
+}
+
 async function buildDataPlanPdfWithPdfLib({ year, week, userId, rows }) {
   const { weekDefs, matrixRows } = buildDataPlanMatrixRows(rows);
 
@@ -1367,6 +1671,19 @@ async function buildDataPlanPdfWithPdfLib({ year, week, userId, rows }) {
       idx += 1;
     }
   }
+
+  const statsRows = buildDriverAssignmentStats(weekDefs, matrixRows);
+  ({ page, y } = drawStatsTableAndChart({
+    pdfDoc,
+    page,
+    pageSize,
+    margin,
+    y: y - 8,
+    title: "Statistics by Week",
+    statsRows,
+    font,
+    boldFont,
+  }));
 
   return pdfDoc.save();
 }
@@ -1599,6 +1916,19 @@ async function buildDataWeekPdfWithPdfLib({ year, week, userId, rows }) {
       idx += 1;
     }
   }
+
+  const statsRows = buildDriverAssignmentStats(dayDefs, matrixRows);
+  ({ page, y } = drawStatsTableAndChart({
+    pdfDoc,
+    page,
+    pageSize,
+    margin,
+    y: y - 8,
+    title: "Statistics by Day",
+    statsRows,
+    font,
+    boldFont,
+  }));
 
   return pdfDoc.save();
 }
@@ -2121,6 +2451,98 @@ async function handleHistory(request, env) {
     200,
     { "Cache-Control": "no-store" },
   );
+}
+
+function parseHistoryDeletePayload(body) {
+  if (!body || typeof body !== "object") {
+    return { ok: false, status: 400, error: "Invalid JSON body" };
+  }
+
+  const initData = String(body.initData || "").trim();
+  const deleteAll = toBoolish(body.delete_all);
+  const idsInput = Array.isArray(body.ids) ? body.ids : [];
+  const ids = [];
+  const seen = new Set();
+
+  for (const raw of idsInput) {
+    const id = toIntSafe(raw, 0);
+    if (id <= 0 || seen.has(id)) continue;
+    ids.push(id);
+    seen.add(id);
+    if (ids.length >= 200) break;
+  }
+
+  if (!initData) {
+    return { ok: false, status: 400, error: "Missing initData" };
+  }
+  if (!deleteAll && ids.length === 0) {
+    return { ok: false, status: 400, error: "Provide ids or set delete_all=true" };
+  }
+
+  return { ok: true, initData, deleteAll, ids };
+}
+
+async function handleHistoryDelete(request, env) {
+  const body = await parseJsonBody(request);
+  const parsed = parseHistoryDeletePayload(body);
+  if (!parsed.ok) {
+    return json({ ok: false, error: parsed.error }, parsed.status, { "Cache-Control": "no-store" });
+  }
+
+  const authz = await authorizeUserByInitData(parsed.initData, env);
+  if (!authz.ok) {
+    return json({ ok: false, error: authz.error }, authz.status, { "Cache-Control": "no-store" });
+  }
+
+  try {
+    let result;
+    if (parsed.deleteAll) {
+      result = await queryNeon(
+        authz.dbConnectionString,
+        `
+          DELETE FROM reports_log
+          WHERE user_id = $1
+            AND status = 'success'
+          RETURNING id
+        `,
+        [authz.userId],
+      );
+    } else {
+      const placeholders = parsed.ids.map((_, idx) => `$${idx + 2}`).join(", ");
+      result = await queryNeon(
+        authz.dbConnectionString,
+        `
+          DELETE FROM reports_log
+          WHERE user_id = $1
+            AND status = 'success'
+            AND id IN (${placeholders})
+          RETURNING id
+        `,
+        [authz.userId, ...parsed.ids],
+      );
+    }
+
+    const deletedIds = (result?.rows || []).map((r) => toIntSafe(r.id, 0)).filter((id) => id > 0);
+    return json(
+      {
+        ok: true,
+        deleted_count: deletedIds.length,
+        deleted_ids: deletedIds,
+      },
+      200,
+      { "Cache-Control": "no-store" },
+    );
+  } catch (err) {
+    return json(
+      {
+        ok: false,
+        error: "Failed to delete history entries",
+        details: String(err?.message || err || "unknown error"),
+      },
+      500,
+      { "Cache-Control": "no-store" },
+    );
+  }
 }
 
 async function handleDockPdf(request, env) {
@@ -2750,6 +3172,10 @@ export default {
 
     if (request.method === "GET" && url.pathname === "/api/history") {
       return handleHistory(request, env);
+    }
+
+    if (request.method === "POST" && url.pathname === "/api/history/delete") {
+      return handleHistoryDelete(request, env);
     }
 
     if (request.method === "GET" && url.pathname === "/api/dock-pdf") {

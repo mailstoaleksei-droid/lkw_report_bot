@@ -1484,6 +1484,45 @@
       display: grid;
       gap: 10px;
     }
+    .history-toolbar{
+      display: flex;
+      gap: 8px;
+      flex-wrap: wrap;
+      margin-bottom: 10px;
+    }
+    .history-action-btn{
+      border: 1px solid rgba(213,231,255,.56);
+      border-radius: 12px;
+      background: linear-gradient(155deg, rgba(246,252,255,.36), rgba(202,220,248,.20));
+      color: #132746;
+      padding: 8px 12px;
+      font-size: 12px;
+      font-weight: 700;
+      cursor: pointer;
+      backdrop-filter: blur(12px) saturate(112%);
+      -webkit-backdrop-filter: blur(12px) saturate(112%);
+    }
+    .history-action-btn:disabled{
+      opacity: .5;
+      cursor: default;
+    }
+    .history-action-btn.danger{
+      border-color: rgba(255,182,182,.5);
+      color: #5f1a1a;
+      background: linear-gradient(155deg, rgba(255,240,240,.62), rgba(255,214,214,.36));
+    }
+    .history-entry{
+      display: grid;
+      grid-template-columns: 24px minmax(0, 1fr);
+      gap: 8px;
+      align-items: start;
+    }
+    .history-check{
+      width: 16px;
+      height: 16px;
+      margin-top: 12px;
+      accent-color: #2e5db0;
+    }
     .history-item{
       width: 100%;
       border: 1px solid rgba(213,231,255,.56);
@@ -1745,8 +1784,16 @@
         close: "Close",
         historyTitle: "Generated Files",
         historyHint: "Tap a file to open it",
+        historySelectHint: "Select files to delete",
         historyEmpty: "No generated files yet.",
         loadingHistory: "Loading history...",
+        historyDeleteSelected: "Delete selected",
+        historyDeleteAll: "Delete all",
+        historyDeleteConfirmSelected: "Delete selected reports?",
+        historyDeleteConfirmAll: "Delete all reports?",
+        historyDeleteNoSelection: "Select at least one report",
+        historyDeleted: (count) => `Deleted: ${count}`,
+        historyDeleteFailed: "Delete failed",
         loadingPdf: "Preparing PDF...",
         lkwDockTitle: "LKW List PDF",
         driversDockTitle: "Drivers List PDF",
@@ -1825,8 +1872,16 @@
         close: "Закрыть",
         historyTitle: "Сгенерированные файлы",
         historyHint: "Нажмите на файл, чтобы открыть",
+        historySelectHint: "Отметьте файлы для удаления",
         historyEmpty: "Сгенерированных файлов пока нет.",
         loadingHistory: "Загрузка истории...",
+        historyDeleteSelected: "Удалить выбранные",
+        historyDeleteAll: "Удалить все",
+        historyDeleteConfirmSelected: "Удалить выбранные отчеты?",
+        historyDeleteConfirmAll: "Удалить все отчеты?",
+        historyDeleteNoSelection: "Выберите хотя бы один отчет",
+        historyDeleted: (count) => `Удалено: ${count}`,
+        historyDeleteFailed: "Не удалось удалить",
         loadingPdf: "Подготовка PDF...",
         lkwDockTitle: "PDF списка LKW",
         driversDockTitle: "PDF списка водителей",
@@ -1907,6 +1962,15 @@
       const value = LANG[currentLang][key];
       return typeof value === "function" ? value(...args) : value;
     }
+
+    function escapeHtml(value) {
+      return String(value ?? "")
+        .replace(/&/g, "&amp;")
+        .replace(/</g, "&lt;")
+        .replace(/>/g, "&gt;")
+        .replace(/"/g, "&quot;")
+        .replace(/'/g, "&#39;");
+    }
     
     function haptic(type = "impact") {
       try {
@@ -1978,6 +2042,22 @@
       if (type === "bericht" && item?.iso_year && item?.iso_week) {
         return buildGenerateDirectUrl(
           "bericht",
+          { year: Number(item.iso_year), week: Number(item.iso_week) },
+          initData || "",
+          disposition,
+        );
+      }
+      if (type === "data_plan" && item?.iso_year && item?.iso_week) {
+        return buildGenerateDirectUrl(
+          "data_plan",
+          { year: Number(item.iso_year), week: Number(item.iso_week) },
+          initData || "",
+          disposition,
+        );
+      }
+      if (type === "data_data" && item?.iso_year && item?.iso_week) {
+        return buildGenerateDirectUrl(
+          "data_data",
           { year: Number(item.iso_year), week: Number(item.iso_week) },
           initData || "",
           disposition,
@@ -2289,6 +2369,27 @@
       }
     }
 
+    async function deleteHistoryEntries(initData, { deleteAll = false, ids = [] } = {}) {
+      const resp = await fetch("/api/history/delete", {
+        method: "POST",
+        cache: "no-store",
+        headers: {
+          "Content-Type": "application/json",
+          "Accept": "application/json",
+        },
+        body: JSON.stringify({
+          initData: initData || "",
+          delete_all: Boolean(deleteAll),
+          ids: Array.isArray(ids) ? ids : [],
+        }),
+      });
+      const data = await resp.json().catch(() => null);
+      if (!resp.ok || !data?.ok) {
+        throw new Error(data?.error || L("historyDeleteFailed"));
+      }
+      return data;
+    }
+
     async function openHistory() {
       haptic("impact");
       setSheetHeader(L("historyTitle"), L("historyHint"), "History");
@@ -2301,54 +2402,126 @@
 
       try {
         const ctx = getTgContext();
-        const url = new URL("/api/history", window.location.origin);
-        url.searchParams.set("initData", ctx.initData || "");
-        url.searchParams.set("limit", "40");
-        const resp = await fetch(url.toString(), {
-          cache: "no-store",
-          headers: { "Accept": "application/json" },
-        });
-        const data = await resp.json().catch(() => null);
-        if (!resp.ok || !data?.ok) {
-          throw new Error(data?.error || "Failed to load history");
-        }
+        const loadHistory = async () => {
+          const url = new URL("/api/history", window.location.origin);
+          url.searchParams.set("initData", ctx.initData || "");
+          url.searchParams.set("limit", "60");
+          const resp = await fetch(url.toString(), {
+            cache: "no-store",
+            headers: { "Accept": "application/json" },
+          });
+          const data = await resp.json().catch(() => null);
+          if (!resp.ok || !data?.ok) {
+            throw new Error(data?.error || "Failed to load history");
+          }
+          return Array.isArray(data.items) ? data.items : [];
+        };
 
-        const items = Array.isArray(data.items) ? data.items : [];
-        if (!items.length) {
-          setForm(`<div class="history-empty">${L("historyEmpty")}</div>`);
-          return;
-        }
+        const render = (items) => {
+          if (!items.length) {
+            setForm(`<div class="history-empty">${L("historyEmpty")}</div>`);
+            setNote("");
+            return;
+          }
 
-        const html = `
-          <div class="history-list">
-            ${items.map((item, idx) => `
-              <button class="history-item" data-history-idx="${idx}">
-                <strong>${item.filename || "report.pdf"}</strong>
-                <small>${item.report_type || ""}</small>
-                <small>${item.completed_at || item.requested_at || ""}</small>
-              </button>
-            `).join("")}
-          </div>
-        `;
-        setForm(html);
+          const html = `
+            <div class="history-toolbar">
+              <button class="history-action-btn" id="historyDeleteSelected">${L("historyDeleteSelected")}</button>
+              <button class="history-action-btn danger" id="historyDeleteAll">${L("historyDeleteAll")}</button>
+            </div>
+            <div class="history-list">
+              ${items.map((item, idx) => `
+                <div class="history-entry">
+                  <input type="checkbox" class="history-check" data-history-id="${Number(item?.id || 0)}" ${Number(item?.id || 0) > 0 ? "" : "disabled"} />
+                  <button class="history-item" data-history-idx="${idx}">
+                    <strong>${escapeHtml(item?.filename || "report.pdf")}</strong>
+                    <small>${escapeHtml(item?.report_type || "")}</small>
+                    <small>${escapeHtml(item?.completed_at || item?.requested_at || "")}</small>
+                  </button>
+                </div>
+              `).join("")}
+            </div>
+          `;
+          setForm(html);
+          setNote(L("historySelectHint"));
 
-        document.querySelectorAll(".history-item").forEach((btn) => {
-          btn.onclick = () => {
-            const idx = Number(btn.getAttribute("data-history-idx"));
-            const item = items[idx];
-            const openUrl = buildHistoryEntryOpenUrl(item, ctx.initData || "", "inline");
-            const saveUrl = buildHistoryEntryOpenUrl(item, ctx.initData || "", "attachment");
-            if (!openUrl) {
-              showToast("Open URL not available");
-              return;
-            }
-            latestPdfOpenUrl = openUrl;
-            latestPdfSaveUrl = saveUrl;
-            latestPdfUrl = "";
-            latestPdfFilename = item?.filename || "report.pdf";
-            openDirectUrl(openUrl, "", latestPdfFilename);
+          const selected = new Set();
+          const selectedBtn = $("historyDeleteSelected");
+          const deleteAllBtn = $("historyDeleteAll");
+          const updateSelectedState = () => {
+            if (selectedBtn) selectedBtn.disabled = selected.size === 0;
           };
-        });
+          updateSelectedState();
+
+          document.querySelectorAll(".history-check").forEach((box) => {
+            box.onchange = () => {
+              const id = Number(box.getAttribute("data-history-id"));
+              if (!Number.isFinite(id) || id <= 0) return;
+              if (box.checked) selected.add(id);
+              else selected.delete(id);
+              updateSelectedState();
+            };
+          });
+
+          document.querySelectorAll(".history-item").forEach((btn) => {
+            btn.onclick = () => {
+              const idx = Number(btn.getAttribute("data-history-idx"));
+              const item = items[idx];
+              const openUrl = buildHistoryEntryOpenUrl(item, ctx.initData || "", "inline");
+              const saveUrl = buildHistoryEntryOpenUrl(item, ctx.initData || "", "attachment");
+              if (!openUrl) {
+                showToast("Open URL not available");
+                return;
+              }
+              latestPdfOpenUrl = openUrl;
+              latestPdfSaveUrl = saveUrl;
+              latestPdfUrl = "";
+              latestPdfFilename = item?.filename || "report.pdf";
+              openDirectUrl(openUrl, "", latestPdfFilename);
+            };
+          });
+
+          if (selectedBtn) {
+            selectedBtn.onclick = async () => {
+              if (selected.size === 0) {
+                showToast(L("historyDeleteNoSelection"));
+                return;
+              }
+              if (!window.confirm(L("historyDeleteConfirmSelected"))) return;
+              try {
+                const result = await deleteHistoryEntries(ctx.initData || "", {
+                  deleteAll: false,
+                  ids: Array.from(selected),
+                });
+                showToast(L("historyDeleted", Number(result?.deleted_count || 0)));
+                const refreshed = await loadHistory();
+                render(refreshed);
+              } catch (err) {
+                showToast(err?.message || L("historyDeleteFailed"));
+              }
+            };
+          }
+
+          if (deleteAllBtn) {
+            deleteAllBtn.onclick = async () => {
+              if (!window.confirm(L("historyDeleteConfirmAll"))) return;
+              try {
+                const result = await deleteHistoryEntries(ctx.initData || "", {
+                  deleteAll: true,
+                  ids: [],
+                });
+                showToast(L("historyDeleted", Number(result?.deleted_count || 0)));
+                const refreshed = await loadHistory();
+                render(refreshed);
+              } catch (err) {
+                showToast(err?.message || L("historyDeleteFailed"));
+              }
+            };
+          }
+        };
+
+        const items = await loadHistory();
+        render(items);
       } catch (err) {
         setForm(`<div class="history-empty">${err?.message || "Failed to load history"}</div>`);
       }
