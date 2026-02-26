@@ -1,6 +1,6 @@
 // Cloudflare Pages Worker (advanced mode) for API routes.
 // This file works with direct "Upload assets" deployments.
-import { PDFDocument, StandardFonts, rgb } from "./vendor/pdf-lib.esm.js";
+import { PDFDocument, StandardFonts, degrees, rgb } from "./vendor/pdf-lib.esm.js";
 
 const REPORTS = [
   {
@@ -2301,14 +2301,27 @@ async function buildEinnahmenPdfWithPdfLib({ userId, rows }) {
     });
 
     const valueLabel = formatMoneyCompact(value);
-    const vWidth = measureTextWidth(font, valueLabel, 6);
-    page.drawText(valueLabel, {
-      x: centerX - (vWidth / 2),
-      y: baselineY + barHeight + 2,
-      size: 6,
-      font,
-      color: textColor,
-    });
+    if (barHeight >= 18) {
+      const innerLabelX = barX + Math.max(1.5, (barWidth * 0.5) - 2.5);
+      const innerLabelY = baselineY + 2;
+      page.drawText(valueLabel, {
+        x: innerLabelX,
+        y: innerLabelY,
+        size: 6,
+        font,
+        color: rgb(0.96, 0.98, 1),
+        rotate: degrees(90),
+      });
+    } else {
+      const vWidth = measureTextWidth(font, valueLabel, 6);
+      page.drawText(valueLabel, {
+        x: centerX - (vWidth / 2),
+        y: baselineY + barHeight + 2,
+        size: 6,
+        font,
+        color: textColor,
+      });
+    }
 
     if (i > 0) {
       const trend = calcMonthTrendPct(value, matrixRows[i - 1]?.gesamt);
