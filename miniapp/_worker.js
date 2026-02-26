@@ -2300,27 +2300,29 @@ async function buildEinnahmenPdfWithPdfLib({ userId, rows }) {
       color: textColor,
     });
 
-    const valueLabel = formatMoneyCompact(value);
-    if (barHeight >= 18) {
-      const innerLabelX = barX + Math.max(1.5, (barWidth * 0.5) - 2.5);
-      const innerLabelY = baselineY + 2;
-      page.drawText(valueLabel, {
-        x: innerLabelX,
-        y: innerLabelY,
-        size: 6,
-        font,
-        color: rgb(0.96, 0.98, 1),
-        rotate: degrees(90),
-      });
-    } else {
-      const vWidth = measureTextWidth(font, valueLabel, 6);
-      page.drawText(valueLabel, {
-        x: centerX - (vWidth / 2),
-        y: baselineY + barHeight + 2,
-        size: 6,
-        font,
-        color: textColor,
-      });
+    if (Math.abs(value) >= 0.005) {
+      const valueLabel = formatMoneyCompact(value);
+      if (barHeight >= 18) {
+        const innerLabelX = barX + Math.max(1.5, (barWidth * 0.5) - 2.5);
+        const innerLabelY = baselineY + 2;
+        page.drawText(valueLabel, {
+          x: innerLabelX,
+          y: innerLabelY,
+          size: 6,
+          font,
+          color: rgb(0.96, 0.98, 1),
+          rotate: degrees(90),
+        });
+      } else {
+        const vWidth = measureTextWidth(font, valueLabel, 6);
+        page.drawText(valueLabel, {
+          x: centerX - (vWidth / 2),
+          y: baselineY + barHeight + 2,
+          size: 6,
+          font,
+          color: textColor,
+        });
+      }
     }
 
     if (i > 0) {
