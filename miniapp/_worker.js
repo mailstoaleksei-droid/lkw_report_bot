@@ -2006,6 +2006,17 @@ function formatMoneyCompact(value) {
   return formatMoney(n);
 }
 
+function formatMoneyInt(value) {
+  const n = toNumberSafe(value, 0);
+  const sign = n < 0 ? "-" : "";
+  const rounded = Math.round(Math.abs(n));
+  return `${sign}${String(rounded).replace(/\B(?=(\d{3})+(?!\d))/g, " ")}`;
+}
+
+function hasValueData(value) {
+  return Math.abs(toNumberSafe(value, 0)) >= 0.005;
+}
+
 function calcMonthTrendPct(current, previous) {
   const curr = toNumberSafe(current, 0);
   const prev = toNumberSafe(previous, 0);
@@ -2300,8 +2311,8 @@ async function buildEinnahmenPdfWithPdfLib({ userId, rows }) {
       color: textColor,
     });
 
-    if (Math.abs(value) >= 0.005) {
-      const valueLabel = formatMoneyCompact(value);
+    if (hasValueData(value)) {
+      const valueLabel = formatMoneyInt(value);
       if (barHeight >= 18) {
         const innerLabelX = barX + Math.max(1.5, (barWidth * 0.5) - 2.5);
         const innerLabelY = baselineY + 2;
@@ -2326,8 +2337,10 @@ async function buildEinnahmenPdfWithPdfLib({ userId, rows }) {
     }
 
     if (i > 0) {
-      const trend = calcMonthTrendPct(value, matrixRows[i - 1]?.gesamt);
-      if (trend !== null) {
+      const prevValue = toNumberSafe(matrixRows[i - 1]?.gesamt, 0);
+      if (hasValueData(value) && hasValueData(prevValue)) {
+        const trend = calcMonthTrendPct(value, prevValue);
+        if (trend === null) continue;
         const isUp = trend >= 0;
         const trendColor = isUp ? progressColor : regressColor;
         const trendLabel = `${trend >= 0 ? "+" : ""}${trend.toFixed(1)}%`;
