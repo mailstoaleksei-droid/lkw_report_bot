@@ -2063,6 +2063,9 @@
           disposition,
         );
       }
+      if (type === "einnahmen") {
+        return buildGenerateDirectUrl("einnahmen", {}, initData || "", disposition);
+      }
 
       const dockKind = item?.dock_kind || {
         lkw_list: "lkw-list",
@@ -2948,8 +2951,10 @@
       setSegments([], "", () => {});
       setForm(`<div class="note">${L("hintEinnahmen")}</div>`);
       setNote("");
-      $("btnPrimary").textContent = L("send");
-      $("btnPrimary").onclick = () => sendToBot({ action:"report", report:"einnahmen_gesamt" });
+      $("btnPrimary").textContent = L("generate");
+      $("btnPrimary").onclick = async () => {
+        await sendReportGenerate("einnahmen", {});
+      };
       openSheet();
     }
 
@@ -3024,7 +3029,7 @@
         lkw: comingSoon,
         fahrer: comingSoon,
         yf: comingSoon,
-        einnahmen: comingSoon,
+        einnahmen: openEinnahmen,
         bonus: comingSoon
       };
 

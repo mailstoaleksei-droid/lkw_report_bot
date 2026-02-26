@@ -97,6 +97,22 @@ const REPORTS = [
     ],
   },
   {
+    id: "einnahmen",
+    enabled: true,
+    icon: "money",
+    name: {
+      en: "Einnahmen (Monthly Revenue)",
+      ru: "Einnahmen (выручка по месяцам)",
+      de: "Einnahmen (Monatsumsatz)",
+    },
+    description: {
+      en: "Monthly Nahverkehr / Logistics / Gesamt with trend chart",
+      ru: "Помесячно: Nahverkehr / Logistics / Gesamt и график динамики",
+      de: "Monatlich: Nahverkehr / Logistics / Gesamt mit Trendgrafik",
+    },
+    params: [],
+  },
+  {
     id: "tankkarten",
     enabled: false,
     icon: "fuel",
@@ -348,6 +364,17 @@ LEFT JOIN agg_week aw
   ON aw.truck_id = t.id
 WHERE COALESCE(NULLIF(t.external_id, ''), '') <> ''
 ORDER BY t.external_id, x.day_idx;
+`;
+
+const EINNAHMEN_MONTHLY_SQL = `
+SELECT
+  month_index,
+  month_name,
+  COALESCE(nahverkehr, 0)::numeric AS nahverkehr,
+  COALESCE(logistics, 0)::numeric AS logistics,
+  COALESCE(gesamt, 0)::numeric AS gesamt
+FROM report_einnahmen_monthly
+ORDER BY month_index;
 `;
 
 const DOCK_KIND_TO_REPORT_TYPE = {
@@ -682,6 +709,10 @@ function makeDataPlanFilename(year, week) {
 
 function makeDataWeekFilename(year, week) {
   return `data_week_${Number.parseInt(String(year), 10)}_w${pad2(Number.parseInt(String(week), 10))}.pdf`;
+}
+
+function makeEinnahmenFilename(at = new Date()) {
+  return `einnahmen_${formatUtcDateStamp(at)}.pdf`;
 }
 
 function makeDockFilename(kind, at = new Date()) {
@@ -1933,6 +1964,389 @@ async function buildDataWeekPdfWithPdfLib({ year, week, userId, rows }) {
   return pdfDoc.save();
 }
 
+const EINNAHMEN_MONTHS_DE = [
+  "Januar",
+  "Februar",
+  "Maerz",
+  "April",
+  "Mai",
+  "Juni",
+  "Juli",
+  "August",
+  "September",
+  "Oktober",
+  "November",
+  "Dezember",
+];
+
+function toNumberSafe(value, fallback = 0) {
+  if (typeof value === "number" && Number.isFinite(value)) return value;
+  const raw = String(value ?? "").trim();
+  if (!raw) return fallback;
+  const normalized = raw.replace(/\s+/g, "").replace(",", ".");
+  const n = Number.parseFloat(normalized);
+  return Number.isFinite(n) ? n : fallback;
+}
+
+function formatMoney(value) {
+  const n = toNumberSafe(value, 0);
+  const sign = n < 0 ? "-" : "";
+  const abs = Math.abs(n);
+  const fixed = abs.toFixed(2);
+  const [intPart, decPart] = fixed.split(".");
+  const grouped = intPart.replace(/\B(?=(\d{3})+(?!\d))/g, " ");
+  return `${sign}${grouped}.${decPart}`;
+}
+
+function formatMoneyCompact(value) {
+  const n = toNumberSafe(value, 0);
+  const abs = Math.abs(n);
+  if (abs >= 1_000_000) return `${(n / 1_000_000).toFixed(2)}M`;
+  if (abs >= 10_000) return `${(n / 1_000).toFixed(1)}k`;
+  return formatMoney(n);
+}
+
+function calcMonthTrendPct(current, previous) {
+  const curr = toNumberSafe(current, 0);
+  const prev = toNumberSafe(previous, 0);
+  if (Math.abs(prev) < 0.000001) {
+    if (Math.abs(curr) < 0.000001) return 0;
+    return null;
+  }
+  return ((curr - prev) / Math.abs(prev)) * 100;
+}
+
+function buildEinnahmenMatrixRows(rows = []) {
+  const byMonth = new Map();
+  for (const row of rows || []) {
+    const idx = toIntSafe(row?.month_index, 0);
+    if (idx < 1 || idx > 12) continue;
+    byMonth.set(idx, {
+      month_index: idx,
+      month_name: safeText(row?.month_name, EINNAHMEN_MONTHS_DE[idx - 1]),
+      nahverkehr: toNumberSafe(row?.nahverkehr, 0),
+      logistics: toNumberSafe(row?.logistics, 0),
+      gesamt: toNumberSafe(row?.gesamt, 0),
+    });
+  }
+  if (!byMonth.size) return [];
+
+  const out = [];
+  for (let monthIdx = 1; monthIdx <= 12; monthIdx += 1) {
+    out.push(
+      byMonth.get(monthIdx) || {
+        month_index: monthIdx,
+        month_name: EINNAHMEN_MONTHS_DE[monthIdx - 1],
+        nahverkehr: 0,
+        logistics: 0,
+        gesamt: 0,
+      },
+    );
+  }
+  return out;
+}
+
+function drawTrendArrow({ page, x, y, isUp, color }) {
+  if (isUp) {
+    page.drawLine({ start: { x, y }, end: { x, y: y + 7 }, thickness: 1.2, color });
+    page.drawLine({ start: { x, y: y + 7 }, end: { x: x - 2.2, y: y + 4.6 }, thickness: 1.2, color });
+    page.drawLine({ start: { x, y: y + 7 }, end: { x: x + 2.2, y: y + 4.6 }, thickness: 1.2, color });
+  } else {
+    page.drawLine({ start: { x, y: y + 7 }, end: { x, y }, thickness: 1.2, color });
+    page.drawLine({ start: { x, y }, end: { x: x - 2.2, y: y + 2.2 }, thickness: 1.2, color });
+    page.drawLine({ start: { x, y }, end: { x: x + 2.2, y: y + 2.2 }, thickness: 1.2, color });
+  }
+}
+
+async function buildEinnahmenPdfWithPdfLib({ userId, rows }) {
+  const matrixRows = buildEinnahmenMatrixRows(rows);
+  const pdfDoc = await PDFDocument.create();
+  const font = await pdfDoc.embedFont(StandardFonts.Helvetica);
+  const boldFont = await pdfDoc.embedFont(StandardFonts.HelveticaBold);
+
+  const pageSize = [842, 595]; // A4 landscape
+  const margin = 24;
+  const rowHeight = 16;
+  const textSize = 8;
+  const textColor = rgb(0.08, 0.14, 0.24);
+  const borderColor = rgb(0.74, 0.8, 0.9);
+  const headerBg = rgb(0.93, 0.96, 1);
+  const oddBg = rgb(0.985, 0.99, 1);
+
+  const columns = [
+    { key: "month_name", label: "Monat", width: 170 },
+    { key: "nahverkehr", label: "Nahverkehr", width: 195 },
+    { key: "logistics", label: "Logistics", width: 195 },
+    { key: "gesamt", label: "Gesamt", width: 210 },
+  ];
+  const tableWidth = columns.reduce((sum, c) => sum + c.width, 0);
+  const tableX = margin;
+
+  let page = pdfDoc.addPage(pageSize);
+  let y = page.getHeight() - margin;
+
+  const drawPageHeader = () => {
+    page.drawText("Einnahmen (Bericht_Dispo)", {
+      x: margin,
+      y,
+      size: 13,
+      font: boldFont,
+      color: textColor,
+    });
+    y -= 16;
+    page.drawText(`Generated: ${new Date().toISOString()} UTC | User: ${userId}`, {
+      x: margin,
+      y,
+      size: 8,
+      font,
+      color: rgb(0.24, 0.3, 0.4),
+    });
+    y -= 14;
+  };
+
+  const drawHeaderRow = () => {
+    page.drawRectangle({
+      x: tableX,
+      y: y - rowHeight + 2,
+      width: tableWidth,
+      height: rowHeight,
+      color: headerBg,
+      borderColor,
+      borderWidth: 1,
+    });
+
+    let x = tableX;
+    for (const col of columns) {
+      page.drawText(col.label, {
+        x: x + 4,
+        y: y - 9,
+        size: textSize,
+        font: boldFont,
+        color: textColor,
+      });
+      x += col.width;
+      if (x < tableX + tableWidth - 0.5) {
+        page.drawLine({
+          start: { x, y: y - rowHeight + 2 },
+          end: { x, y: y + 2 },
+          thickness: 0.8,
+          color: borderColor,
+        });
+      }
+    }
+    y -= rowHeight;
+  };
+
+  const ensureSpace = (needHeight) => {
+    if (y - needHeight >= margin) return;
+    page = pdfDoc.addPage(pageSize);
+    y = page.getHeight() - margin;
+    drawPageHeader();
+    drawHeaderRow();
+  };
+
+  const drawRow = (row, idx) => {
+    if (idx % 2 === 1) {
+      page.drawRectangle({
+        x: tableX,
+        y: y - rowHeight + 2,
+        width: tableWidth,
+        height: rowHeight,
+        color: oddBg,
+      });
+    }
+
+    const values = [
+      safeText(row?.month_name, ""),
+      formatMoney(row?.nahverkehr),
+      formatMoney(row?.logistics),
+      formatMoney(row?.gesamt),
+    ];
+
+    let x = tableX;
+    for (let i = 0; i < columns.length; i += 1) {
+      const col = columns[i];
+      const value = fitTextToWidth(font, values[i], textSize, col.width - 8);
+      const isNumeric = i > 0;
+      const tx = isNumeric
+        ? x + col.width - 4 - measureTextWidth(font, value, textSize)
+        : x + 4;
+      page.drawText(value, {
+        x: tx,
+        y: y - 9,
+        size: textSize,
+        font,
+        color: textColor,
+      });
+      x += col.width;
+      if (x < tableX + tableWidth - 0.5) {
+        page.drawLine({
+          start: { x, y: y - rowHeight + 2 },
+          end: { x, y: y + 2 },
+          thickness: 0.5,
+          color: borderColor,
+        });
+      }
+    }
+    page.drawLine({
+      start: { x: tableX, y: y - rowHeight + 2 },
+      end: { x: tableX + tableWidth, y: y - rowHeight + 2 },
+      thickness: 0.5,
+      color: borderColor,
+    });
+    y -= rowHeight;
+  };
+
+  drawPageHeader();
+  drawHeaderRow();
+
+  if (!matrixRows.length) {
+    ensureSpace(20);
+    page.drawText("No rows found.", {
+      x: margin,
+      y: y - 10,
+      size: 9,
+      font,
+      color: textColor,
+    });
+    return pdfDoc.save();
+  }
+
+  for (let idx = 0; idx < matrixRows.length; idx += 1) {
+    ensureSpace(rowHeight + 2);
+    drawRow(matrixRows[idx], idx);
+  }
+
+  const chartHeight = 210;
+  y -= 12;
+  ensureSpace(chartHeight + 24);
+
+  const chartX = margin;
+  const chartY = y - chartHeight;
+  const chartWidth = tableWidth;
+  const plotPadTop = 26;
+  const plotPadBottom = 34;
+  const plotPadLeft = 38;
+  const plotPadRight = 16;
+  const plotHeight = chartHeight - plotPadTop - plotPadBottom;
+  const plotWidth = chartWidth - plotPadLeft - plotPadRight;
+  const baselineY = chartY + plotPadBottom;
+  const plotX = chartX + plotPadLeft;
+  const progressColor = rgb(0.08, 0.62, 0.2);
+  const regressColor = rgb(0.84, 0.2, 0.16);
+  const barColor = rgb(0.3, 0.56, 0.84);
+
+  page.drawRectangle({
+    x: chartX,
+    y: chartY,
+    width: chartWidth,
+    height: chartHeight,
+    borderColor,
+    borderWidth: 1,
+    color: rgb(0.99, 0.995, 1),
+  });
+  page.drawText("Einnahmen Gesamt", {
+    x: chartX + 8,
+    y: chartY + chartHeight - 12,
+    size: 9,
+    font: boldFont,
+    color: textColor,
+  });
+
+  const maxVal = Math.max(1, ...matrixRows.map((row) => toNumberSafe(row?.gesamt, 0)));
+  const gridSteps = 4;
+  for (let g = 0; g <= gridSteps; g += 1) {
+    const ratio = g / gridSteps;
+    const gy = baselineY + (plotHeight * ratio);
+    page.drawLine({
+      start: { x: plotX, y: gy },
+      end: { x: plotX + plotWidth, y: gy },
+      thickness: 0.35,
+      color: rgb(0.86, 0.9, 0.95),
+    });
+    const val = formatMoney((maxVal * ratio).toFixed(2));
+    page.drawText(val, {
+      x: chartX + 2,
+      y: gy + 1,
+      size: 6,
+      font,
+      color: rgb(0.4, 0.46, 0.56),
+    });
+  }
+
+  const groupWidth = plotWidth / matrixRows.length;
+  const barWidth = Math.max(10, Math.min(24, groupWidth * 0.48));
+
+  for (let i = 0; i < matrixRows.length; i += 1) {
+    const row = matrixRows[i];
+    const value = toNumberSafe(row?.gesamt, 0);
+    const barHeight = Math.max(0, Math.floor((value / maxVal) * plotHeight));
+    const centerX = plotX + (i * groupWidth) + (groupWidth / 2);
+    const barX = centerX - (barWidth / 2);
+    page.drawRectangle({
+      x: barX,
+      y: baselineY,
+      width: barWidth,
+      height: barHeight,
+      color: barColor,
+    });
+
+    const monthLabel = fitTextToWidth(font, String(row?.month_name || "").slice(0, 3), 7, groupWidth - 4);
+    page.drawText(monthLabel, {
+      x: centerX - (measureTextWidth(font, monthLabel, 7) / 2),
+      y: chartY + 4,
+      size: 7,
+      font,
+      color: textColor,
+    });
+
+    const valueLabel = formatMoneyCompact(value);
+    const vWidth = measureTextWidth(font, valueLabel, 6);
+    page.drawText(valueLabel, {
+      x: centerX - (vWidth / 2),
+      y: baselineY + barHeight + 2,
+      size: 6,
+      font,
+      color: textColor,
+    });
+
+    if (i > 0) {
+      const trend = calcMonthTrendPct(value, matrixRows[i - 1]?.gesamt);
+      if (trend !== null) {
+        const isUp = trend >= 0;
+        const trendColor = isUp ? progressColor : regressColor;
+        const trendLabel = `${trend >= 0 ? "+" : ""}${trend.toFixed(1)}%`;
+        const trendY = chartY + chartHeight - 26 - ((i % 2) * 10);
+        const trendTextX = centerX - (measureTextWidth(font, trendLabel, 6) / 2);
+        drawTrendArrow({
+          page,
+          x: trendTextX - 5,
+          y: trendY - 1,
+          isUp,
+          color: trendColor,
+        });
+        page.drawText(trendLabel, {
+          x: trendTextX,
+          y: trendY,
+          size: 6,
+          font,
+          color: trendColor,
+        });
+      }
+    }
+  }
+
+  page.drawText("Legend: Gesamt (blue), progress (green up), regress (red down)", {
+    x: chartX + 8,
+    y: chartY + chartHeight - 23,
+    size: 6,
+    font,
+    color: rgb(0.35, 0.42, 0.52),
+  });
+
+  return pdfDoc.save();
+}
+
 function fitTextToWidth(font, text, size, maxWidth) {
   const raw = normalizeAscii(safeText(text, ""));
   if (!raw) return "";
@@ -2424,6 +2838,8 @@ async function handleHistory(request, env) {
       filename = makeDataPlanFilename(isoYear, isoWeek);
     } else if (reportType === "data_data" && isoYear && isoWeek) {
       filename = makeDataWeekFilename(isoYear, isoWeek);
+    } else if (reportType === "einnahmen") {
+      filename = makeEinnahmenFilename();
     } else if (REPORT_TYPE_TO_DOCK_KIND[reportType]) {
       filename = makeDockFilename(REPORT_TYPE_TO_DOCK_KIND[reportType]);
     }
@@ -2748,7 +3164,12 @@ async function handleGenerateWithBody(body, env, enforceRateLimit = true) {
     });
   }
 
-  if (valid.reportType !== "bericht" && valid.reportType !== "data_plan" && valid.reportType !== "data_data") {
+  if (
+    valid.reportType !== "bericht"
+    && valid.reportType !== "data_plan"
+    && valid.reportType !== "data_data"
+    && valid.reportType !== "einnahmen"
+  ) {
     return json(
       {
         ok: false,
@@ -2824,7 +3245,7 @@ async function handleGenerateWithBody(body, env, enforceRateLimit = true) {
   let pdfBytes;
   let pdfEngine = "pdf-lib";
   let filename = `report_${formatUtcDateStamp(new Date())}.pdf`;
-  let outputKey = `${valid.reportType}:${valid.year}:W${pad2(valid.week)}`;
+  let outputKey = valid.reportType;
 
   if (valid.reportType === "bericht") {
     let rows;
@@ -2927,7 +3348,7 @@ async function handleGenerateWithBody(body, env, enforceRateLimit = true) {
         pageHeight: 595,
       });
     }
-  } else {
+  } else if (valid.reportType === "data_data") {
     let rows;
     try {
       const result = await queryNeon(dbConnectionString, DATA_WEEK_GRID_SQL, [valid.year, valid.week]);
@@ -2981,17 +3402,71 @@ async function handleGenerateWithBody(body, env, enforceRateLimit = true) {
         pageHeight: 595,
       });
     }
+  } else {
+    let rows;
+    try {
+      const result = await queryNeon(dbConnectionString, EINNAHMEN_MONTHLY_SQL, []);
+      rows = result.rows || [];
+    } catch (err) {
+      return json(
+        {
+          ok: false,
+          error: "Failed to execute SQL query",
+          code: "SQL_ERROR",
+          details: String(err?.message || err || "unknown error"),
+        },
+        500,
+        { "Cache-Control": "no-store" },
+      );
+    }
+
+    filename = makeEinnahmenFilename();
+    outputKey = `einnahmen:${formatUtcDateStamp(new Date())}`;
+    try {
+      pdfBytes = await buildEinnahmenPdfWithPdfLib({
+        userId: auth.userId,
+        rows,
+      });
+    } catch (err) {
+      pdfEngine = "legacy-fallback";
+      const matrixRows = buildEinnahmenMatrixRows(rows);
+      const lines = [];
+      lines.push("Monat | Nahverkehr | Logistics | Gesamt");
+      lines.push("-".repeat(100));
+      for (const row of matrixRows) {
+        lines.push(
+          [
+            safeText(row.month_name, ""),
+            formatMoney(row.nahverkehr),
+            formatMoney(row.logistics),
+            formatMoney(row.gesamt),
+          ].join(" | "),
+        );
+      }
+      pdfBytes = buildSimplePdf({
+        title: "Einnahmen (Bericht_Dispo)",
+        subtitle: `Generated at ${new Date().toISOString()} UTC, user ${auth.userId}`,
+        lines,
+        pageWidth: 842,
+        pageHeight: 595,
+      });
+    }
   }
 
+  const reportParams = { source: "miniapp_generate", report_type: valid.reportType };
+  if ("year" in valid && "week" in valid) {
+    reportParams.year = valid.year;
+    reportParams.week = valid.week;
+  }
   try {
     await writeReportLog(dbConnectionString, {
       userId: auth.userId,
       chatId: auth.userId,
       reportType: valid.reportType,
-      isoYear: valid.year,
-      isoWeek: valid.week,
+      isoYear: "year" in valid ? valid.year : null,
+      isoWeek: "week" in valid ? valid.week : null,
       status: "success",
-      params: { year: valid.year, week: valid.week, source: "miniapp_generate", report_type: valid.reportType },
+      params: reportParams,
       durationMs: Date.now() - startedMs,
       outputKey,
     });
