@@ -113,6 +113,42 @@ const REPORTS = [
     params: [],
   },
   {
+    id: "bonus",
+    enabled: true,
+    icon: "bonus",
+    name: {
+      en: "Bonus (Monthly Driver Bonus)",
+      ru: "Bonus (помесячный бонус водителей)",
+      de: "Bonus (Monatsbonus Fahrer)",
+    },
+    description: {
+      en: "BonusDynamik by selected year/month with optional Fahrer filter",
+      ru: "BonusDynamik за выбранный год/месяц с фильтром по Fahrer",
+      de: "BonusDynamik fuer ausgewaehltes Jahr/Monat mit Fahrer-Filter",
+    },
+    params: [
+      {
+        id: "year",
+        type: "year",
+        label: { en: "Year", ru: "Год" },
+        min: 2025,
+        max: 2035,
+      },
+      {
+        id: "month",
+        type: "month",
+        label: { en: "Month", ru: "Месяц" },
+        min: 1,
+        max: 12,
+      },
+      {
+        id: "driver_query",
+        type: "text",
+        label: { en: "Fahrer ID / Name", ru: "ID / Фамилия Fahrer" },
+      },
+    ],
+  },
+  {
     id: "tankkarten",
     enabled: false,
     icon: "fuel",
@@ -375,6 +411,33 @@ SELECT
   COALESCE(gesamt, 0)::numeric AS gesamt
 FROM report_einnahmen_monthly
 ORDER BY month_index;
+`;
+
+const BONUS_MONTHLY_SQL = `
+SELECT
+  report_year,
+  report_month,
+  month_start,
+  fahrer_id,
+  fahrer_name,
+  COALESCE(days, 0)::numeric AS days,
+  COALESCE(km, 0)::numeric AS km,
+  COALESCE(pct_km, 0)::numeric AS pct_km,
+  COALESCE(ct, 0)::numeric AS ct,
+  COALESCE(pct_ct, 0)::numeric AS pct_ct,
+  COALESCE(bonus, 0)::numeric AS bonus,
+  COALESCE(penalty, 0)::numeric AS penalty,
+  COALESCE(final, 0)::numeric AS final
+FROM report_bonus_dynamik_monthly
+WHERE report_year = $1::int
+  AND report_month = $2::int
+  AND (
+    $3::text = ''
+    OR lower(fahrer_id) = lower($3::text)
+    OR lower(fahrer_id) LIKE lower($4::text)
+    OR lower(fahrer_name) LIKE lower($4::text)
+  )
+ORDER BY final DESC, fahrer_name ASC, fahrer_id ASC;
 `;
 
 const DOCK_KIND_TO_REPORT_TYPE = {
@@ -713,6 +776,15 @@ function makeDataWeekFilename(year, week) {
 
 function makeEinnahmenFilename(at = new Date()) {
   return `einnahmen_${formatUtcDateStamp(at)}.pdf`;
+}
+
+function makeBonusFilename(year, month, at = new Date()) {
+  const y = Number.parseInt(String(year), 10);
+  const m = Number.parseInt(String(month), 10);
+  if (Number.isFinite(y) && Number.isFinite(m) && y > 0 && m >= 1 && m <= 12) {
+    return `bonus_${y}_${pad2(m)}.pdf`;
+  }
+  return `bonus_${formatUtcDateStamp(at)}.pdf`;
 }
 
 function makeDockFilename(kind, at = new Date()) {
@@ -2375,6 +2447,402 @@ async function buildEinnahmenPdfWithPdfLib({ userId, rows }) {
   return pdfDoc.save();
 }
 
+function formatPercent(value, digits = 1) {
+  const n = toNumberSafe(value, 0);
+  return `${n.toFixed(digits)}%`;
+}
+
+function monthNameDe(monthNumber) {
+  const idx = Number.parseInt(String(monthNumber || ""), 10);
+  if (Number.isFinite(idx) && idx >= 1 && idx <= 12) return EINNAHMEN_MONTHS_DE[idx - 1];
+  return String(monthNumber || "-");
+}
+
+function shortenDriverName(name, maxLen = 14) {
+  const raw = safeText(name, "");
+  if (!raw) return "";
+  const parts = raw.split(/\s+/).filter(Boolean);
+  const candidate = parts.length > 1 ? parts[parts.length - 1] : raw;
+  if (candidate.length <= maxLen) return candidate;
+  return `${candidate.slice(0, Math.max(3, maxLen - 1))}~`;
+}
+
+function buildBonusMatrixRows(rows = []) {
+  return (rows || []).map((row) => ({
+    report_year: toIntSafe(row?.report_year, 0),
+    report_month: toIntSafe(row?.report_month, 0),
+    month_start: safeText(row?.month_start, ""),
+    fahrer_id: safeText(row?.fahrer_id, ""),
+    fahrer_name: safeText(row?.fahrer_name, ""),
+    days: toIntSafe(row?.days, 0),
+    km: toNumberSafe(row?.km, 0),
+    pct_km: toNumberSafe(row?.pct_km, 0),
+    ct: toIntSafe(row?.ct, 0),
+    pct_ct: toNumberSafe(row?.pct_ct, 0),
+    bonus: toNumberSafe(row?.bonus, 0),
+    penalty: toNumberSafe(row?.penalty, 0),
+    final: toNumberSafe(row?.final, 0),
+  }));
+}
+
+function summarizeBonusRows(rows = []) {
+  const out = {
+    drivers: rows.length,
+    days_total: 0,
+    km_total: 0,
+    ct_total: 0,
+    bonus_total: 0,
+    penalty_total: 0,
+    final_total: 0,
+    pct_km_avg: 0,
+    pct_ct_avg: 0,
+  };
+  if (!rows.length) return out;
+
+  let pctKmSum = 0;
+  let pctCtSum = 0;
+  for (const row of rows) {
+    out.days_total += toIntSafe(row?.days, 0);
+    out.km_total += toNumberSafe(row?.km, 0);
+    out.ct_total += toIntSafe(row?.ct, 0);
+    out.bonus_total += toNumberSafe(row?.bonus, 0);
+    out.penalty_total += toNumberSafe(row?.penalty, 0);
+    out.final_total += toNumberSafe(row?.final, 0);
+    pctKmSum += toNumberSafe(row?.pct_km, 0);
+    pctCtSum += toNumberSafe(row?.pct_ct, 0);
+  }
+
+  out.pct_km_avg = pctKmSum / rows.length;
+  out.pct_ct_avg = pctCtSum / rows.length;
+  return out;
+}
+
+async function buildBonusPdfWithPdfLib({
+  userId, year, month, driverQuery, rows,
+}) {
+  const matrixRows = buildBonusMatrixRows(rows);
+  const summary = summarizeBonusRows(matrixRows);
+  const pdfDoc = await PDFDocument.create();
+  const font = await pdfDoc.embedFont(StandardFonts.Helvetica);
+  const boldFont = await pdfDoc.embedFont(StandardFonts.HelveticaBold);
+
+  const pageSize = [842, 595]; // A4 landscape
+  const margin = 24;
+  const rowHeight = 14;
+  const textSize = 7;
+  const textColor = rgb(0.08, 0.14, 0.24);
+  const borderColor = rgb(0.74, 0.8, 0.9);
+  const headerBg = rgb(0.93, 0.96, 1);
+  const oddBg = rgb(0.985, 0.99, 1);
+
+  const columns = [
+    { key: "fahrer_id", label: "ID", width: 52 },
+    { key: "fahrer_name", label: "Fahrer", width: 162 },
+    { key: "days", label: "Days", width: 40 },
+    { key: "km", label: "KM", width: 74 },
+    { key: "pct_km", label: "%KM", width: 46 },
+    { key: "ct", label: "CT", width: 40 },
+    { key: "pct_ct", label: "%CT", width: 46 },
+    { key: "bonus", label: "Bonus", width: 74 },
+    { key: "penalty", label: "Penalty", width: 68 },
+    { key: "final", label: "Final", width: 68 },
+  ];
+  const tableWidth = columns.reduce((sum, c) => sum + c.width, 0);
+  const tableX = margin;
+
+  let page = pdfDoc.addPage(pageSize);
+  let y = page.getHeight() - margin;
+  const monthTitle = monthNameDe(month);
+  const filterLabel = safeText(driverQuery, "").trim();
+
+  const drawPageHeader = () => {
+    page.drawText("Bonus (BonusDynamik)", {
+      x: margin,
+      y,
+      size: 13,
+      font: boldFont,
+      color: textColor,
+    });
+    y -= 16;
+    page.drawText(
+      `Period: ${monthTitle} ${year} | Filter: ${filterLabel || "all Fahrer"} | Generated: ${new Date().toISOString()} UTC | User: ${userId}`,
+      {
+        x: margin,
+        y,
+        size: 8,
+        font,
+        color: rgb(0.24, 0.3, 0.4),
+      },
+    );
+    y -= 14;
+  };
+
+  const drawHeaderRow = () => {
+    page.drawRectangle({
+      x: tableX,
+      y: y - rowHeight + 2,
+      width: tableWidth,
+      height: rowHeight,
+      color: headerBg,
+      borderColor,
+      borderWidth: 1,
+    });
+
+    let x = tableX;
+    for (const col of columns) {
+      page.drawText(col.label, {
+        x: x + 4,
+        y: y - 9,
+        size: textSize,
+        font: boldFont,
+        color: textColor,
+      });
+      x += col.width;
+      if (x < tableX + tableWidth - 0.5) {
+        page.drawLine({
+          start: { x, y: y - rowHeight + 2 },
+          end: { x, y: y + 2 },
+          thickness: 0.8,
+          color: borderColor,
+        });
+      }
+    }
+    y -= rowHeight;
+  };
+
+  const ensureSpace = (needHeight) => {
+    if (y - needHeight >= margin) return;
+    page = pdfDoc.addPage(pageSize);
+    y = page.getHeight() - margin;
+    drawPageHeader();
+    drawHeaderRow();
+  };
+
+  const drawRow = (row, idx) => {
+    if (idx % 2 === 1) {
+      page.drawRectangle({
+        x: tableX,
+        y: y - rowHeight + 2,
+        width: tableWidth,
+        height: rowHeight,
+        color: oddBg,
+      });
+    }
+
+    const values = [
+      safeText(row?.fahrer_id, ""),
+      safeText(row?.fahrer_name, ""),
+      String(toIntSafe(row?.days, 0)),
+      formatMoneyInt(row?.km),
+      formatPercent(row?.pct_km, 1),
+      String(toIntSafe(row?.ct, 0)),
+      formatPercent(row?.pct_ct, 1),
+      formatMoney(row?.bonus),
+      formatMoney(row?.penalty),
+      formatMoneyInt(row?.final),
+    ];
+
+    let x = tableX;
+    for (let i = 0; i < columns.length; i += 1) {
+      const col = columns[i];
+      const value = fitTextToWidth(font, values[i], textSize, col.width - 8);
+      const isNumeric = i >= 2;
+      const tx = isNumeric
+        ? x + col.width - 4 - measureTextWidth(font, value, textSize)
+        : x + 4;
+      page.drawText(value, {
+        x: tx,
+        y: y - 9,
+        size: textSize,
+        font,
+        color: textColor,
+      });
+      x += col.width;
+      if (x < tableX + tableWidth - 0.5) {
+        page.drawLine({
+          start: { x, y: y - rowHeight + 2 },
+          end: { x, y: y + 2 },
+          thickness: 0.5,
+          color: borderColor,
+        });
+      }
+    }
+    page.drawLine({
+      start: { x: tableX, y: y - rowHeight + 2 },
+      end: { x: tableX + tableWidth, y: y - rowHeight + 2 },
+      thickness: 0.5,
+      color: borderColor,
+    });
+    y -= rowHeight;
+  };
+
+  drawPageHeader();
+  drawHeaderRow();
+
+  if (!matrixRows.length) {
+    ensureSpace(20);
+    page.drawText("No rows found for selected period/filter.", {
+      x: margin,
+      y: y - 10,
+      size: 9,
+      font,
+      color: textColor,
+    });
+    return pdfDoc.save();
+  }
+
+  for (let idx = 0; idx < matrixRows.length; idx += 1) {
+    ensureSpace(rowHeight + 2);
+    drawRow(matrixRows[idx], idx);
+  }
+
+  y -= 8;
+  const statsBoxHeight = 56;
+  ensureSpace(statsBoxHeight + 8);
+  page.drawRectangle({
+    x: margin,
+    y: y - statsBoxHeight,
+    width: tableWidth,
+    height: statsBoxHeight,
+    color: rgb(0.985, 0.99, 1),
+    borderColor,
+    borderWidth: 1,
+  });
+  page.drawText("Key Metrics", {
+    x: margin + 8,
+    y: y - 12,
+    size: 9,
+    font: boldFont,
+    color: textColor,
+  });
+  const statsLine1 = [
+    `Drivers: ${summary.drivers}`,
+    `Days total: ${summary.days_total}`,
+    `KM total: ${formatMoneyInt(summary.km_total)}`,
+    `CT total: ${summary.ct_total}`,
+  ].join(" | ");
+  const statsLine2 = [
+    `Avg %KM: ${formatPercent(summary.pct_km_avg, 1)}`,
+    `Avg %CT: ${formatPercent(summary.pct_ct_avg, 1)}`,
+    `Bonus sum: ${formatMoney(summary.bonus_total)}`,
+    `Penalty sum: ${formatMoney(summary.penalty_total)}`,
+    `Final sum: ${formatMoney(summary.final_total)}`,
+  ].join(" | ");
+  page.drawText(statsLine1, {
+    x: margin + 8,
+    y: y - 26,
+    size: 7,
+    font,
+    color: rgb(0.2, 0.28, 0.38),
+  });
+  page.drawText(statsLine2, {
+    x: margin + 8,
+    y: y - 39,
+    size: 7,
+    font,
+    color: rgb(0.2, 0.28, 0.38),
+  });
+  y -= statsBoxHeight + 8;
+
+  const chartHeight = 170;
+  ensureSpace(chartHeight + 6);
+  const chartX = margin;
+  const chartY = y - chartHeight;
+  const chartWidth = tableWidth;
+  const plotPadTop = 24;
+  const plotPadBottom = 30;
+  const plotPadLeft = 38;
+  const plotPadRight = 12;
+  const plotHeight = chartHeight - plotPadTop - plotPadBottom;
+  const plotWidth = chartWidth - plotPadLeft - plotPadRight;
+  const baselineY = chartY + plotPadBottom;
+  const plotX = chartX + plotPadLeft;
+  const barColor = rgb(0.3, 0.56, 0.84);
+
+  page.drawRectangle({
+    x: chartX,
+    y: chartY,
+    width: chartWidth,
+    height: chartHeight,
+    borderColor,
+    borderWidth: 1,
+    color: rgb(0.99, 0.995, 1),
+  });
+  page.drawText("Top Fahrer by Final", {
+    x: chartX + 8,
+    y: chartY + chartHeight - 12,
+    size: 9,
+    font: boldFont,
+    color: textColor,
+  });
+
+  const topRows = matrixRows
+    .slice()
+    .sort((a, b) => toNumberSafe(b.final, 0) - toNumberSafe(a.final, 0))
+    .slice(0, 10);
+  const maxFinal = Math.max(1, ...topRows.map((row) => Math.max(0, toNumberSafe(row.final, 0))));
+
+  for (let g = 0; g <= 4; g += 1) {
+    const ratio = g / 4;
+    const gy = baselineY + (plotHeight * ratio);
+    page.drawLine({
+      start: { x: plotX, y: gy },
+      end: { x: plotX + plotWidth, y: gy },
+      thickness: 0.35,
+      color: rgb(0.86, 0.9, 0.95),
+    });
+  }
+
+  const groupWidth = plotWidth / Math.max(1, topRows.length);
+  const barWidth = Math.max(10, Math.min(20, groupWidth * 0.55));
+  for (let i = 0; i < topRows.length; i += 1) {
+    const row = topRows[i];
+    const value = Math.max(0, toNumberSafe(row?.final, 0));
+    const barHeight = Math.max(0, Math.floor((value / maxFinal) * plotHeight));
+    const centerX = plotX + (i * groupWidth) + (groupWidth / 2);
+    const barX = centerX - (barWidth / 2);
+    page.drawRectangle({
+      x: barX,
+      y: baselineY,
+      width: barWidth,
+      height: barHeight,
+      color: barColor,
+    });
+
+    const label = fitTextToWidth(font, shortenDriverName(row?.fahrer_name, 12), 6, groupWidth - 2);
+    page.drawText(label, {
+      x: centerX - (measureTextWidth(font, label, 6) / 2),
+      y: chartY + 3,
+      size: 6,
+      font,
+      color: textColor,
+    });
+
+    const vLabel = formatMoneyInt(value);
+    if (barHeight >= 18) {
+      const innerLabelX = barX + Math.max(1.5, (barWidth * 0.5) - 2.5);
+      page.drawText(vLabel, {
+        x: innerLabelX,
+        y: baselineY + 2,
+        size: 6,
+        font,
+        color: rgb(0.96, 0.98, 1),
+        rotate: degrees(90),
+      });
+    } else {
+      page.drawText(vLabel, {
+        x: centerX - (measureTextWidth(font, vLabel, 6) / 2),
+        y: baselineY + barHeight + 2,
+        size: 6,
+        font,
+        color: textColor,
+      });
+    }
+  }
+
+  return pdfDoc.save();
+}
+
 function fitTextToWidth(font, text, size, maxWidth) {
   const raw = normalizeAscii(safeText(text, ""));
   if (!raw) return "";
@@ -2868,6 +3336,8 @@ async function handleHistory(request, env) {
       filename = makeDataWeekFilename(isoYear, isoWeek);
     } else if (reportType === "einnahmen") {
       filename = makeEinnahmenFilename();
+    } else if (reportType === "bonus") {
+      filename = makeBonusFilename(params?.year, params?.month);
     } else if (REPORT_TYPE_TO_DOCK_KIND[reportType]) {
       filename = makeDockFilename(REPORT_TYPE_TO_DOCK_KIND[reportType]);
     }
@@ -3174,6 +3644,25 @@ function validateGeneratePayload(body) {
     return { ok: true, reportType, year, week };
   }
 
+  if (reportType === "bonus") {
+    const year = Number.parseInt(String(body.year ?? ""), 10);
+    const month = Number.parseInt(String(body.month ?? ""), 10);
+    const yearParam = report.params.find((p) => p.id === "year");
+    const monthParam = report.params.find((p) => p.id === "month");
+    const minYear = toInt(yearParam?.min, 2020);
+    const maxYear = toInt(yearParam?.max, 2100);
+    const minMonth = toInt(monthParam?.min, 1);
+    const maxMonth = toInt(monthParam?.max, 12);
+    if (!Number.isFinite(year) || !Number.isFinite(month)) {
+      return { ok: false, status: 400, error: "Invalid year/month" };
+    }
+    if (!(year >= minYear && year <= maxYear && month >= minMonth && month <= maxMonth)) {
+      return { ok: false, status: 400, error: "Year/month out of range" };
+    }
+    const driverQuery = String(body.driver_query || "").trim().slice(0, 120);
+    return { ok: true, reportType, year, month, driverQuery };
+  }
+
   return { ok: true, reportType };
 }
 
@@ -3197,6 +3686,7 @@ async function handleGenerateWithBody(body, env, enforceRateLimit = true) {
     && valid.reportType !== "data_plan"
     && valid.reportType !== "data_data"
     && valid.reportType !== "einnahmen"
+    && valid.reportType !== "bonus"
   ) {
     return json(
       {
@@ -3430,7 +3920,7 @@ async function handleGenerateWithBody(body, env, enforceRateLimit = true) {
         pageHeight: 595,
       });
     }
-  } else {
+  } else if (valid.reportType === "einnahmen") {
     let rows;
     try {
       const result = await queryNeon(dbConnectionString, EINNAHMEN_MONTHLY_SQL, []);
@@ -3479,12 +3969,83 @@ async function handleGenerateWithBody(body, env, enforceRateLimit = true) {
         pageHeight: 595,
       });
     }
+  } else {
+    let rows;
+    const driverQuery = safeText(valid.driverQuery, "").trim();
+    const likeQuery = driverQuery ? `%${driverQuery}%` : "";
+    try {
+      const result = await queryNeon(
+        dbConnectionString,
+        BONUS_MONTHLY_SQL,
+        [valid.year, valid.month, driverQuery, likeQuery],
+      );
+      rows = result.rows || [];
+    } catch (err) {
+      return json(
+        {
+          ok: false,
+          error: "Failed to execute SQL query",
+          code: "SQL_ERROR",
+          details: String(err?.message || err || "unknown error"),
+        },
+        500,
+        { "Cache-Control": "no-store" },
+      );
+    }
+
+    filename = makeBonusFilename(valid.year, valid.month);
+    outputKey = `bonus:${valid.year}:${pad2(valid.month)}:${driverQuery || "all"}`;
+    try {
+      pdfBytes = await buildBonusPdfWithPdfLib({
+        userId: auth.userId,
+        year: valid.year,
+        month: valid.month,
+        driverQuery,
+        rows,
+      });
+    } catch (err) {
+      pdfEngine = "legacy-fallback";
+      const matrixRows = buildBonusMatrixRows(rows);
+      const lines = [];
+      lines.push("ID | Fahrer | Days | KM | %KM | CT | %CT | Bonus | Penalty | Final");
+      lines.push("-".repeat(140));
+      for (const row of matrixRows) {
+        lines.push(
+          [
+            safeText(row.fahrer_id, ""),
+            safeText(row.fahrer_name, ""),
+            String(toIntSafe(row.days, 0)),
+            formatMoneyInt(row.km),
+            formatPercent(row.pct_km, 1),
+            String(toIntSafe(row.ct, 0)),
+            formatPercent(row.pct_ct, 1),
+            formatMoney(row.bonus),
+            formatMoney(row.penalty),
+            formatMoneyInt(row.final),
+          ].join(" | "),
+        );
+      }
+      pdfBytes = buildSimplePdf({
+        title: `Bonus - ${valid.year}/${pad2(valid.month)}`,
+        subtitle: `Generated at ${new Date().toISOString()} UTC, user ${auth.userId}`,
+        lines,
+        pageWidth: 842,
+        pageHeight: 595,
+      });
+    }
   }
 
   const reportParams = { source: "miniapp_generate", report_type: valid.reportType };
   if ("year" in valid && "week" in valid) {
     reportParams.year = valid.year;
     reportParams.week = valid.week;
+  }
+  if ("year" in valid && "month" in valid) {
+    reportParams.year = valid.year;
+    reportParams.month = valid.month;
+    if (safeText(valid.driverQuery, "").trim()) {
+      reportParams.driver_query = safeText(valid.driverQuery, "").trim();
+    }
   }
   try {
     await writeReportLog(dbConnectionString, {
@@ -3527,6 +4088,8 @@ async function handleGenerateGet(request, env) {
     report_type: url.searchParams.get("report_type") || "",
     year: url.searchParams.get("year"),
     week: url.searchParams.get("week"),
+    month: url.searchParams.get("month"),
+    driver_query: url.searchParams.get("driver_query") || "",
     disposition: url.searchParams.get("disposition") || "",
   };
   return handleGenerateWithBody(body, env, false);

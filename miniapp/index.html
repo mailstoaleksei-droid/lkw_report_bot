@@ -1813,7 +1813,7 @@
         hintFahrer: "Driver information and vacation data",
         hintYf: "Vehicle mileage and fuel consumption",
         hintEinnahmen: "Total revenue report for all operations",
-        hintBonus: "Calculate driver bonuses",
+        hintBonus: "Select year/month and optional Fahrer filter",
         hintDataPlan: "Select process, year and week for Data/Plan report",
         hintDataPlanPlan: "Plan: selected week + 3 weeks",
         hintDataPlanData: "Data: selected week only (7 days)",
@@ -1827,6 +1827,7 @@
         year: "Year",
         week: "Week",
         month: "Month",
+        fahrerFilter: "Fahrer ID or surname (optional)",
         allTime: "All time",
         driver: "Driver",
         generate: "Generate",
@@ -1844,6 +1845,7 @@
         toastPdfReady: "PDF is ready. Tap Open PDF",
         toastComingSoon: "Feature coming soon",
         backendNotReady: "Backend is not connected yet",
+        invalidYearMonth: "Invalid year/month",
         fullscreenRequested: "Switched to full screen",
         pdfReadyNote: "PDF generated successfully.",
         openPdf: "Open PDF",
@@ -1901,7 +1903,7 @@
         hintFahrer: "Информация о водителях и отпусках",
         hintYf: "Пробег и расход топлива транспорта",
         hintEinnahmen: "Отчет по общей выручке",
-        hintBonus: "Расчет бонусов водителей",
+        hintBonus: "Выберите год/месяц и при необходимости фильтр Fahrer",
         hintDataPlan: "Выберите процесс, год и неделю для отчета Data/Plan",
         hintDataPlanPlan: "Plan: выбранная неделя + 3 недели",
         hintDataPlanData: "Data: только выбранная неделя (7 дней)",
@@ -1915,6 +1917,7 @@
         year: "Год",
         week: "Неделя",
         month: "Месяц",
+        fahrerFilter: "ID Fahrer или фамилия (необязательно)",
         allTime: "За все время",
         driver: "Водитель",
         generate: "Сформировать",
@@ -1932,6 +1935,7 @@
         toastPdfReady: "PDF готов. Нажмите «Открыть PDF»",
         toastComingSoon: "Функция скоро будет доступна",
         backendNotReady: "Backend пока не подключен",
+        invalidYearMonth: "Некорректный год/месяц",
         fullscreenRequested: "Открываю на весь экран",
         pdfReadyNote: "PDF успешно сформирован.",
         openPdf: "Открыть PDF",
@@ -2025,6 +2029,10 @@
       u.searchParams.set("report_type", reportType || "");
       if (payload && payload.year !== undefined) u.searchParams.set("year", String(payload.year));
       if (payload && payload.week !== undefined) u.searchParams.set("week", String(payload.week));
+      if (payload && payload.month !== undefined) u.searchParams.set("month", String(payload.month));
+      if (payload && payload.driver_query !== undefined && String(payload.driver_query).trim()) {
+        u.searchParams.set("driver_query", String(payload.driver_query).trim());
+      }
       if (disposition) u.searchParams.set("disposition", disposition);
       return u.toString();
     }
@@ -2065,6 +2073,19 @@
       }
       if (type === "einnahmen") {
         return buildGenerateDirectUrl("einnahmen", {}, initData || "", disposition);
+      }
+      if (type === "bonus") {
+        const params = item?.params || {};
+        return buildGenerateDirectUrl(
+          "bonus",
+          {
+            year: Number(params.year || 0),
+            month: Number(params.month || 0),
+            driver_query: String(params.driver_query || ""),
+          },
+          initData || "",
+          disposition,
+        );
       }
 
       const dockKind = item?.dock_kind || {
@@ -2959,61 +2980,48 @@
     }
 
     function openBonus() {
-      let active = "current";
-      const tabs = [
-        { key:"current", label: "Current month" },
-        { key:"month", label: "Choose month" },
-        { key:"year", label: "Year" },
-      ];
+      setSheetHeader("Bonus", L("hintBonus"), "Params");
+      setSegments([], "", () => {});
 
-      const render = () => {
-        setSheetHeader("Bonus", L("hintBonus"), "Quick/Params");
-        setSegments(tabs, active, (k) => { active = k; render(); });
+      setForm(`
+        <div class="field">
+          <label>${L("year")}</label>
+          <select id="bonusYear">${buildYearOptions(2025, 2035)}</select>
+        </div>
+        <div class="field">
+          <label>${L("month")}</label>
+          <select id="bonusMonth">${buildMonthOptions()}</select>
+        </div>
+        <div class="field">
+          <label>${L("fahrerFilter")}</label>
+          <input id="bonusDriverQuery" type="text" placeholder="${L("fahrerFilter")}" />
+        </div>
+      `);
+      setNote(L("hintBonus"));
 
-        if (active === "current") {
-          setForm(`<div class="note">${L("hintBonus")}</div>`);
-          setNote("");
-          $("btnPrimary").textContent = L("send");
-          $("btnPrimary").onclick = () => sendToBot({ action:"report", report:"bonus_current_month" });
+      const now = new Date();
+      const yEl = $("bonusYear");
+      const mEl = $("bonusMonth");
+      if (yEl) yEl.value = String(now.getFullYear());
+      if (mEl) mEl.value = String(now.getMonth() + 1);
+
+      $("btnPrimary").textContent = L("generate");
+      $("btnPrimary").onclick = async () => {
+        const year = Number($("bonusYear")?.value);
+        const month = Number($("bonusMonth")?.value);
+        const driverQuery = String($("bonusDriverQuery")?.value || "").trim();
+        if (!Number.isFinite(year) || !Number.isFinite(month) || year < 2025 || year > 2035 || month < 1 || month > 12) {
+          haptic("error");
+          showToast(L("invalidYearMonth"));
           return;
         }
-
-        if (active === "month") {
-          setForm(`
-            <div class="field">
-              <label>${L("year")}</label>
-              <select id="bYear">${buildYearOptions(2020)}</select>
-            </div>
-            <div class="field">
-              <label>${L("month")}</label>
-              <select id="bMonth">${buildMonthOptions()}</select>
-            </div>
-          `);
-          setNote("");
-          $("btnPrimary").textContent = L("send");
-          $("btnPrimary").onclick = () => {
-            const y = Number($("bYear").value);
-            const m = Number($("bMonth").value);
-            sendToBot({ action:"report", report:"bonus_month", year:y, month:m });
-          };
-          return;
-        }
-
-        setForm(`
-          <div class="field">
-            <label>${L("year")}</label>
-            <select id="bYear2">${buildYearOptions(2020)}</select>
-          </div>
-        `);
-        setNote("");
-        $("btnPrimary").textContent = L("send");
-        $("btnPrimary").onclick = () => {
-          const y = Number($("bYear2").value);
-          sendToBot({ action:"report", report:"bonus_year", year:y });
-        };
+        await sendReportGenerate("bonus", {
+          year,
+          month,
+          driver_query: driverQuery,
+        });
       };
 
-      render();
       openSheet();
     }
 
@@ -3030,7 +3038,7 @@
         fahrer: comingSoon,
         yf: comingSoon,
         einnahmen: openEinnahmen,
-        bonus: comingSoon
+        bonus: openBonus
       };
 
       document.querySelectorAll(".tile").forEach(tile => {

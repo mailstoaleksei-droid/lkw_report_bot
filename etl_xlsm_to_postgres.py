@@ -4,6 +4,7 @@ ETL: LKW_Fahrer_Data.xlsm -> PostgreSQL (Neon)
 Phase 1.3 MVP:
 - reads master data from sheets "LKW" and "Fahrer"
 - reads monthly revenue data from sheet "Bericht_Dispo"
+- reads monthly bonus dynamics from sheet "BonusDynamik"
 - upserts companies, trucks, drivers
 - writes run metadata to etl_log
 """
@@ -42,6 +43,7 @@ def _lazy_import_psycopg():
 REQUIRED_TRUCK_KEYS = ("lkwid", "lkwnummer")
 REQUIRED_DRIVER_KEYS = ("fahrerid", "fahrername")
 BERICHT_DISPO_SHEET = "Bericht_Dispo"
+BONUS_DYNAMIK_SHEET = "BonusDynamik"
 MONTHS_DE = {
     "januar": (1, "Januar"),
     "jan": (1, "Januar"),
@@ -262,6 +264,24 @@ class EinnahmenMonthRow:
     raw_payload: dict[str, object]
 
 
+@dataclass
+class BonusDynamikRow:
+    report_year: int
+    report_month: int
+    month_start: date
+    fahrer_id: str
+    fahrer_name: str
+    days: int
+    km: Decimal
+    pct_km: Decimal
+    ct: int
+    pct_ct: Decimal
+    bonus: Decimal
+    penalty: Decimal
+    final: Decimal
+    raw_payload: dict[str, object]
+
+
 def _iter_sheet_rows(ws, header_row_idx: int):
     for row in ws.iter_rows(min_row=header_row_idx + 1, values_only=True):
         yield list(row)
@@ -400,6 +420,120 @@ def extract_einnahmen_months(wb) -> list[EinnahmenMonthRow]:
     return rows
 
 
+def _bonus_header_token(value: object) -> str:
+    return str(value or "").strip().upper().replace("\u00a0", "").replace(" ", "").replace("％", "%")
+
+
+def _parse_month_start(value: object) -> date | None:
+    if value is None:
+        return None
+    if isinstance(value, datetime):
+        return date(value.year, value.month, 1)
+    if isinstance(value, date):
+        return date(value.year, value.month, 1)
+
+    raw = str(value).strip()
+    if not raw:
+        return None
+
+    for fmt in ("%d/%m/%Y", "%m/%d/%Y", "%d.%m.%Y", "%Y-%m-%d"):
+        try:
+            d = datetime.strptime(raw, fmt).date()
+            return date(d.year, d.month, 1)
+        except ValueError:
+            pass
+
+    m = re.match(r"^\s*([A-Za-zА-Яа-яÄÖÜäöü]+)\s*[-./ ]\s*(\d{2,4})\s*$", raw)
+    if m:
+        month_token, year_token = m.group(1), m.group(2)
+        parsed_month = _parse_month_token(month_token)
+        if parsed_month:
+            month_idx = parsed_month[0]
+            year_num = int(year_token)
+            if year_num < 100:
+                year_num += 2000
+            if 1970 <= year_num <= 2100:
+                return date(year_num, month_idx, 1)
+
+    return None
+
+
+def _parse_percent_cell(ws, row_idx: int, col_idx: int) -> Decimal:
+    cell = ws.cell(row=row_idx, column=col_idx)
+    parsed = _parse_decimal(cell.value)
+    if "%" in str(cell.number_format or "") and abs(parsed) <= Decimal("3"):
+        parsed = (parsed * Decimal("100")).quantize(Decimal("0.01"), rounding=ROUND_HALF_UP)
+    return parsed
+
+
+def _parse_int_cell(ws, row_idx: int, col_idx: int) -> int:
+    parsed = _parse_decimal(ws.cell(row=row_idx, column=col_idx).value)
+    return int(parsed.to_integral_value(rounding=ROUND_HALF_UP))
+
+
+def extract_bonus_dynamik_months(wb) -> list[BonusDynamikRow]:
+    if BONUS_DYNAMIK_SHEET not in wb.sheetnames:
+        return []
+
+    ws = wb[BONUS_DYNAMIK_SHEET]
+    max_col = int(ws.max_column or 0)
+    max_row = int(ws.max_row or 0)
+    if max_col < 10 or max_row < 3:
+        return []
+
+    expected_headers = ["DAYS", "KM", "%KM", "CT", "%CT", "BONUS", "PENALTY", "FINAL"]
+    month_blocks: list[tuple[int, date]] = []
+    seen_months: set[tuple[int, int]] = set()
+    for start_col in range(3, max_col - 7 + 1):
+        sequence = [_bonus_header_token(ws.cell(row=2, column=start_col + off).value) for off in range(8)]
+        if sequence != expected_headers:
+            continue
+        month_start = _parse_month_start(ws.cell(row=1, column=start_col).value)
+        if not month_start:
+            continue
+        month_key = (month_start.year, month_start.month)
+        if month_key in seen_months:
+            continue
+        seen_months.add(month_key)
+        month_blocks.append((start_col, month_start))
+
+    if not month_blocks:
+        return []
+
+    by_key: dict[tuple[int, int, str], BonusDynamikRow] = {}
+    for row_idx in range(3, max_row + 1):
+        fahrer_id = _clean_text(ws.cell(row=row_idx, column=1).value) or ""
+        fahrer_name = _clean_text(ws.cell(row=row_idx, column=2).value) or ""
+        if not fahrer_id and not fahrer_name:
+            continue
+        if not fahrer_id:
+            continue
+
+        for start_col, month_start in month_blocks:
+            key = (month_start.year, month_start.month, fahrer_id.upper())
+            by_key[key] = BonusDynamikRow(
+                report_year=month_start.year,
+                report_month=month_start.month,
+                month_start=month_start,
+                fahrer_id=fahrer_id,
+                fahrer_name=fahrer_name,
+                days=_parse_int_cell(ws, row_idx, start_col),
+                km=_parse_decimal(ws.cell(row=row_idx, column=start_col + 1).value),
+                pct_km=_parse_percent_cell(ws, row_idx, start_col + 2),
+                ct=_parse_int_cell(ws, row_idx, start_col + 3),
+                pct_ct=_parse_percent_cell(ws, row_idx, start_col + 4),
+                bonus=_parse_decimal(ws.cell(row=row_idx, column=start_col + 5).value),
+                penalty=_parse_decimal(ws.cell(row=row_idx, column=start_col + 6).value),
+                final=_parse_decimal(ws.cell(row=row_idx, column=start_col + 7).value),
+                raw_payload={
+                    "sheet": BONUS_DYNAMIK_SHEET,
+                    "row": row_idx,
+                    "month_col": start_col,
+                },
+            )
+    return [by_key[k] for k in sorted(by_key.keys())]
+
+
 def _prepare_readable_xlsm(source_path: Path) -> tuple[Path, bool]:
     """
     Returns (path, is_temp_copy_created_by_this_run).
@@ -457,6 +591,37 @@ def _ensure_einnahmen_table(cur) -> None:
     )
 
 
+def _ensure_bonus_table(cur) -> None:
+    cur.execute(
+        """
+        CREATE TABLE IF NOT EXISTS report_bonus_dynamik_monthly (
+            report_year SMALLINT NOT NULL CHECK (report_year BETWEEN 2020 AND 2100),
+            report_month SMALLINT NOT NULL CHECK (report_month BETWEEN 1 AND 12),
+            month_start DATE NOT NULL,
+            fahrer_id TEXT NOT NULL,
+            fahrer_name TEXT NOT NULL,
+            days INTEGER NOT NULL DEFAULT 0,
+            km NUMERIC(14, 2) NOT NULL DEFAULT 0,
+            pct_km NUMERIC(8, 2) NOT NULL DEFAULT 0,
+            ct INTEGER NOT NULL DEFAULT 0,
+            pct_ct NUMERIC(8, 2) NOT NULL DEFAULT 0,
+            bonus NUMERIC(14, 2) NOT NULL DEFAULT 0,
+            penalty NUMERIC(14, 2) NOT NULL DEFAULT 0,
+            final NUMERIC(14, 2) NOT NULL DEFAULT 0,
+            raw_payload JSONB NOT NULL DEFAULT '{}'::jsonb,
+            updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+            PRIMARY KEY (report_year, report_month, fahrer_id)
+        )
+        """
+    )
+    cur.execute(
+        """
+        CREATE INDEX IF NOT EXISTS idx_report_bonus_dynamik_lookup
+            ON report_bonus_dynamik_monthly (report_year, report_month, fahrer_name)
+        """
+    )
+
+
 def run_etl(database_url: str, xlsm_path: Path) -> dict[str, int]:
     psycopg = _lazy_import_psycopg()
     created_copy = False
@@ -482,6 +647,7 @@ def run_etl(database_url: str, xlsm_path: Path) -> dict[str, int]:
             trucks = extract_trucks(wb)
             drivers = extract_drivers(wb)
             einnahmen_rows = extract_einnahmen_months(wb)
+            bonus_rows = extract_bonus_dynamik_months(wb)
             wb.close()
 
             company_names = sorted(
@@ -498,6 +664,7 @@ def run_etl(database_url: str, xlsm_path: Path) -> dict[str, int]:
                     company_ids[name] = _upsert_company(cur, name)
 
                 _ensure_einnahmen_table(cur)
+                _ensure_bonus_table(cur)
 
                 rows_inserted = 0
                 rows_updated = 0
@@ -596,6 +763,51 @@ def run_etl(database_url: str, xlsm_path: Path) -> dict[str, int]:
                     )
                     rows_inserted += 1
 
+                cur.execute("DELETE FROM report_bonus_dynamik_monthly")
+                rows_deleted += int(cur.rowcount or 0)
+                for rec in bonus_rows:
+                    cur.execute(
+                        """
+                        INSERT INTO report_bonus_dynamik_monthly (
+                            report_year,
+                            report_month,
+                            month_start,
+                            fahrer_id,
+                            fahrer_name,
+                            days,
+                            km,
+                            pct_km,
+                            ct,
+                            pct_ct,
+                            bonus,
+                            penalty,
+                            final,
+                            raw_payload,
+                            updated_at
+                        )
+                        VALUES (
+                            %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s::jsonb, NOW()
+                        )
+                        """,
+                        (
+                            rec.report_year,
+                            rec.report_month,
+                            rec.month_start,
+                            rec.fahrer_id,
+                            rec.fahrer_name,
+                            rec.days,
+                            rec.km,
+                            rec.pct_km,
+                            rec.ct,
+                            rec.pct_ct,
+                            rec.bonus,
+                            rec.penalty,
+                            rec.final,
+                            json.dumps(rec.raw_payload, ensure_ascii=False),
+                        ),
+                    )
+                    rows_inserted += 1
+
                 cur.execute(
                     """
                     UPDATE etl_log
@@ -610,7 +822,7 @@ def run_etl(database_url: str, xlsm_path: Path) -> dict[str, int]:
                     WHERE id = %s
                     """,
                     (
-                        len(trucks) + len(drivers) + len(einnahmen_rows),
+                        len(trucks) + len(drivers) + len(einnahmen_rows) + len(bonus_rows),
                         rows_inserted,
                         rows_updated,
                         rows_deleted,
@@ -620,6 +832,7 @@ def run_etl(database_url: str, xlsm_path: Path) -> dict[str, int]:
                                 "trucks": len(trucks),
                                 "drivers": len(drivers),
                                 "einnahmen_months": len(einnahmen_rows),
+                                "bonus_rows": len(bonus_rows),
                                 "workbook_used": str(readable_path),
                             },
                             ensure_ascii=False,
@@ -634,6 +847,7 @@ def run_etl(database_url: str, xlsm_path: Path) -> dict[str, int]:
                 "trucks": len(trucks),
                 "drivers": len(drivers),
                 "einnahmen_months": len(einnahmen_rows),
+                "bonus_rows": len(bonus_rows),
             }
 
         except Exception as exc:
@@ -675,7 +889,8 @@ def main() -> int:
     print(
         f"ETL success: companies={result['companies']} "
         f"trucks={result['trucks']} drivers={result['drivers']} "
-        f"einnahmen_months={result['einnahmen_months']}"
+        f"einnahmen_months={result['einnahmen_months']} "
+        f"bonus_rows={result['bonus_rows']}"
     )
     return 0
 
