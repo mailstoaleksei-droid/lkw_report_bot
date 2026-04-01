@@ -2698,12 +2698,14 @@ async function buildDieselPdfWithPdfLib({ userId, year, rows }) {
     y -= subHeaderHeight;
   };
 
-  const ensureSpace = (needHeight) => {
+  const ensureSpace = (needHeight, withTableHeaders = true) => {
     if (y - needHeight >= margin) return;
     page = pdfDoc.addPage(pageSize);
     y = page.getHeight() - margin;
     drawPageHeader();
-    drawHeaderRows();
+    if (withTableHeaders) {
+      drawHeaderRows();
+    }
   };
 
   const drawRow = (row, idx) => {
@@ -2792,64 +2794,10 @@ async function buildDieselPdfWithPdfLib({ userId, year, rows }) {
     drawRow(matrixRows[idx], idx);
   }
 
-  const dataRows = matrixRows.filter((row) => hasValueData(row.liter_total) || hasValueData(row.euro_total));
-  const totalLiters = dataRows.reduce((sum, row) => sum + toNumberSafe(row.liter_total, 0), 0);
-  const totalEuro = dataRows.reduce((sum, row) => sum + toNumberSafe(row.euro_total, 0), 0);
-  const weightedAvg = totalLiters > 0 ? totalEuro / totalLiters : 0;
-  const bestPriceRow = dataRows.reduce((best, row) => {
-    const value = toNumberSafe(row.euro_per_liter_avg, 0);
-    if (!hasValueData(value)) return best;
-    if (!best || value < toNumberSafe(best.euro_per_liter_avg, 0)) return row;
-    return best;
-  }, null);
-  const peakVolumeRow = dataRows.reduce((best, row) => {
-    if (!best || toNumberSafe(row.liter_total, 0) > toNumberSafe(best.liter_total, 0)) return row;
-    return best;
-  }, null);
-
   y -= 12;
-  ensureSpace(76);
-  page.drawRectangle({
-    x: margin,
-    y: y - 60,
-    width: tableWidth,
-    height: 60,
-    color: rgb(0.97, 0.995, 0.985),
-    borderColor,
-    borderWidth: 1,
-  });
-  page.drawText("Key Metrics", {
-    x: margin + 8,
-    y: y - 14,
-    size: 10,
-    font: boldFont,
-    color: textColor,
-  });
-  page.drawText(
-    `Total Liter: ${formatMoneyInt(totalLiters)} | Total Euro: ${formatMoney(totalEuro)} | Weighted Avg EUR/L: ${formatPricePerLiter(weightedAvg)}`,
-    {
-      x: margin + 8,
-      y: y - 32,
-      size: 8,
-      font,
-      color: textColor,
-    },
-  );
-  page.drawText(
-    `Best price month: ${bestPriceRow ? `${safeText(bestPriceRow.month_name, "")} (${formatPricePerLiter(bestPriceRow.euro_per_liter_avg)})` : "-"}` +
-      ` | Peak liters month: ${peakVolumeRow ? `${safeText(peakVolumeRow.month_name, "")} (${formatMoneyInt(peakVolumeRow.liter_total)})` : "-"}`,
-    {
-      x: margin + 8,
-      y: y - 46,
-      size: 8,
-      font,
-      color: textColor,
-    },
-  );
-  y -= 72;
 
   const chartHeight = 180;
-  ensureSpace(chartHeight + 10);
+  ensureSpace(chartHeight + 10, false);
   const chartX = margin;
   const chartY = y - chartHeight;
   const chartWidth = tableWidth;
