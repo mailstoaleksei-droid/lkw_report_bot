@@ -2571,6 +2571,7 @@ async function buildDieselPdfWithPdfLib({ userId, year, rows }) {
   const textColor = rgb(0.08, 0.14, 0.24);
   const borderColor = rgb(0.74, 0.8, 0.9);
   const oddBg = rgb(0.985, 1, 0.99);
+  const totalLiterBg = rgb(0.89, 0.95, 0.92);
   const totalEuroBg = rgb(1, 0.975, 0.9);
   const groupConfigs = {
     meta: { fill: rgb(0.2, 0.34, 0.64), text: rgb(0.98, 0.99, 1) },
@@ -2591,6 +2592,7 @@ async function buildDieselPdfWithPdfLib({ userId, year, rows }) {
     { key: "liter_staack", label: "Staack", width: 60, group: "liter", numeric: true },
     { key: "liter_shell", label: "Shell", width: 60, group: "liter", numeric: true },
     { key: "liter_dkv", label: "DKV", width: 58, group: "liter", numeric: true },
+    { key: "liter_total", label: "Total Liter", width: 80, group: "liter", numeric: true, isTotalLiter: true },
     { key: "euro_staack", label: "Staack", width: 66, group: "euro", numeric: true },
     { key: "euro_shell", label: "Shell", width: 66, group: "euro", numeric: true },
     { key: "euro_dkv", label: "DKV", width: 62, group: "euro", numeric: true },
@@ -2600,9 +2602,9 @@ async function buildDieselPdfWithPdfLib({ userId, year, rows }) {
   ];
   const groups = [
     { label: "Month / Year", group: "meta", from: 0, to: 1 },
-    { label: "Liter", group: "liter", from: 2, to: 4 },
-    { label: "Euro", group: "euro", from: 5, to: 8 },
-    { label: "Euro/Liter", group: "avg", from: 9, to: 10 },
+    { label: "Liter", group: "liter", from: 2, to: 5 },
+    { label: "Euro", group: "euro", from: 6, to: 9 },
+    { label: "Euro/Liter", group: "avg", from: 10, to: 11 },
   ];
   const tableWidth = columns.reduce((sum, c) => sum + c.width, 0);
   const tableX = margin;
@@ -2669,16 +2671,16 @@ async function buildDieselPdfWithPdfLib({ userId, year, rows }) {
         y: y - subHeaderHeight + 2,
         width: col.width,
         height: subHeaderHeight,
-        color: col.isTotalEuro ? totalEuroBg : subHeaderFill[col.group],
+        color: col.isTotalEuro ? totalEuroBg : col.isTotalLiter ? totalLiterBg : subHeaderFill[col.group],
         borderColor,
         borderWidth: 0.8,
       });
       const headerFont = col.isTotalEuro ? boldFont : boldFont;
-      const headerSize = col.isTotalEuro ? textSize + 2 : textSize;
+      const headerSize = (col.isTotalEuro || col.isTotalLiter) ? textSize + 2 : textSize;
       const headerText = fitTextToWidth(headerFont, col.label, headerSize, col.width - 6);
       page.drawText(headerText, {
         x: x + (col.width / 2) - (measureTextWidth(headerFont, headerText, headerSize) / 2),
-        y: y - (col.isTotalEuro ? 12 : 10),
+        y: y - ((col.isTotalEuro || col.isTotalLiter) ? 12 : 10),
         size: headerSize,
         font: headerFont,
         color: textColor,
@@ -2726,16 +2728,19 @@ async function buildDieselPdfWithPdfLib({ userId, year, rows }) {
       } else {
         renderedValue = formatMoneyInt(rawValue);
       }
-      const cellFont = col.isTotalEuro ? boldFont : font;
-      const cellSize = col.isTotalEuro ? textSize + 2 : textSize;
+      const isEmphasis = col.isTotalEuro || col.isTotalLiter;
+      const cellFont = isEmphasis ? boldFont : font;
+      const cellSize = isEmphasis ? textSize + 2 : textSize;
       const value = fitTextToWidth(cellFont, renderedValue, cellSize, col.width - 6);
-      if (col.isTotalEuro) {
+      if (col.isTotalEuro || col.isTotalLiter) {
         page.drawRectangle({
           x,
           y: y - rowHeight + 2,
           width: col.width,
           height: rowHeight,
-          color: idx % 2 === 1 ? rgb(1, 0.965, 0.87) : totalEuroBg,
+          color: col.isTotalEuro
+            ? (idx % 2 === 1 ? rgb(1, 0.965, 0.87) : totalEuroBg)
+            : (idx % 2 === 1 ? rgb(0.84, 0.93, 0.88) : totalLiterBg),
         });
       }
       const tx = col.numeric
@@ -2743,7 +2748,7 @@ async function buildDieselPdfWithPdfLib({ userId, year, rows }) {
         : x + 3;
       page.drawText(value, {
         x: tx,
-        y: y - (col.isTotalEuro ? 12 : 10),
+        y: y - (isEmphasis ? 12 : 10),
         size: cellSize,
         font: cellFont,
         color: textColor,
@@ -2843,15 +2848,15 @@ async function buildDieselPdfWithPdfLib({ userId, year, rows }) {
   );
   y -= 72;
 
-  const chartHeight = 176;
+  const chartHeight = 180;
   ensureSpace(chartHeight + 10);
   const chartX = margin;
   const chartY = y - chartHeight;
   const chartWidth = tableWidth;
-  const plotPadTop = 28;
-  const plotPadBottom = 30;
-  const plotPadLeft = 40;
-  const plotPadRight = 42;
+  const plotPadTop = 30;
+  const plotPadBottom = 28;
+  const plotPadLeft = 16;
+  const plotPadRight = 16;
   const plotHeight = chartHeight - plotPadTop - plotPadBottom;
   const plotWidth = chartWidth - plotPadLeft - plotPadRight;
   const baselineY = chartY + plotPadBottom;
@@ -2868,68 +2873,27 @@ async function buildDieselPdfWithPdfLib({ userId, year, rows }) {
     borderWidth: 1,
     color: rgb(0.99, 1, 0.995),
   });
-  page.drawText("Total Liter + Total Euro per month", {
+  const chartTitle = `Diesel ${year}`;
+  page.drawText(chartTitle, {
     x: chartX + 8,
-    y: chartY + chartHeight - 12,
-    size: 9,
+    y: chartY + chartHeight - 14,
+    size: 10,
     font: boldFont,
-    color: textColor,
-  });
-  page.drawText("Legend:", {
-    x: chartX + 8,
-    y: chartY + chartHeight - 24,
-    size: 6,
-    font,
-    color: rgb(0.35, 0.42, 0.52),
-  });
-  page.drawRectangle({ x: chartX + 36, y: chartY + chartHeight - 24, width: 8, height: 8, color: litersColor });
-  page.drawText("Total Liter", {
-    x: chartX + 48,
-    y: chartY + chartHeight - 22,
-    size: 6,
-    font,
-    color: textColor,
-  });
-  page.drawRectangle({ x: chartX + 100, y: chartY + chartHeight - 24, width: 8, height: 8, color: euroColor });
-  page.drawText("Total Euro", {
-    x: chartX + 112,
-    y: chartY + chartHeight - 22,
-    size: 6,
-    font,
     color: textColor,
   });
 
   const maxLiter = Math.max(1, ...matrixRows.map((row) => toNumberSafe(row?.liter_total, 0)));
   const maxEuro = Math.max(1, ...matrixRows.map((row) => toNumberSafe(row?.euro_total, 0)));
-  for (let g = 0; g <= 4; g += 1) {
-    const ratio = g / 4;
-    const gy = baselineY + (plotHeight * ratio);
-    page.drawLine({
-      start: { x: plotX, y: gy },
-      end: { x: plotX + plotWidth, y: gy },
-      thickness: 0.35,
-      color: rgb(0.86, 0.92, 0.9),
-    });
-    page.drawText(formatMoneyInt(maxLiter * ratio), {
-      x: chartX + 2,
-      y: gy + 1,
-      size: 6,
-      font,
-      color: rgb(0.4, 0.46, 0.56),
-    });
-    const euroLabel = formatMoneyInt(maxEuro * ratio);
-    page.drawText(euroLabel, {
-      x: chartX + chartWidth - plotPadRight + 4,
-      y: gy + 1,
-      size: 6,
-      font,
-      color: rgb(0.4, 0.46, 0.56),
-    });
-  }
+  page.drawLine({
+    start: { x: plotX, y: baselineY },
+    end: { x: plotX + plotWidth, y: baselineY },
+    thickness: 0.6,
+    color: rgb(0.84, 0.9, 0.88),
+  });
 
   const groupWidth = plotWidth / matrixRows.length;
-  const barGap = Math.max(2, groupWidth * 0.06);
-  const barWidth = Math.max(7, Math.min(14, (groupWidth - barGap - 4) / 2));
+  const barGap = Math.max(3, groupWidth * 0.08);
+  const barWidth = Math.max(7, Math.min(16, (groupWidth - barGap - 8) / 2));
   for (let i = 0; i < matrixRows.length; i += 1) {
     const row = matrixRows[i];
     const liters = toNumberSafe(row?.liter_total, 0);
@@ -2954,12 +2918,12 @@ async function buildDieselPdfWithPdfLib({ userId, year, rows }) {
       color: euroColor,
     });
 
-    const monthLabel = fitTextToWidth(font, String(row?.month_name || "").slice(0, 3), 7, groupWidth - 4);
+    const monthLabel = fitTextToWidth(boldFont, String(row?.month_name || "").slice(0, 3), 7, groupWidth - 4);
     page.drawText(monthLabel, {
-      x: centerX - (measureTextWidth(font, monthLabel, 7) / 2),
-      y: chartY + 4,
+      x: centerX - (measureTextWidth(boldFont, monthLabel, 7) / 2),
+      y: chartY + 6,
       size: 7,
-      font,
+      font: boldFont,
       color: textColor,
     });
 
@@ -2968,7 +2932,7 @@ async function buildDieselPdfWithPdfLib({ userId, year, rows }) {
       const vWidth = measureTextWidth(font, litersLabel, 6);
       page.drawText(litersLabel, {
         x: litersX + (barWidth / 2) - (vWidth / 2),
-        y: baselineY + litersBarHeight + 2,
+        y: baselineY + litersBarHeight + 3,
         size: 6,
         font,
         color: rgb(0.16, 0.32, 0.24),
@@ -2980,7 +2944,7 @@ async function buildDieselPdfWithPdfLib({ userId, year, rows }) {
       const euroWidth = measureTextWidth(font, euroLabel, 6);
       page.drawText(euroLabel, {
         x: euroX + (barWidth / 2) - (euroWidth / 2),
-        y: baselineY + euroBarHeight + 2,
+        y: baselineY + euroBarHeight + 3,
         size: 6,
         font,
         color: rgb(0.2, 0.29, 0.5),
