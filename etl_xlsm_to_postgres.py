@@ -5,6 +5,7 @@ Phase 1.3 MVP:
 - reads master data from sheets "LKW" and "Fahrer"
 - reads monthly revenue data from sheet "Bericht_Dispo"
 - reads monthly bonus dynamics from sheet "BonusDynamik"
+- reads monthly diesel data from sheet "Diesel"
 - upserts companies, trucks, drivers
 - writes run metadata to etl_log
 """
@@ -44,6 +45,7 @@ REQUIRED_TRUCK_KEYS = ("lkwid", "lkwnummer")
 REQUIRED_DRIVER_KEYS = ("fahrerid", "fahrername")
 BERICHT_DISPO_SHEET = "Bericht_Dispo"
 BONUS_DYNAMIK_SHEET = "BonusDynamik"
+DIESEL_SHEET = "Diesel"
 MONTHS_DE = {
     "januar": (1, "Januar"),
     "jan": (1, "Januar"),
@@ -80,6 +82,20 @@ MONTHS_DE = {
     "december": (12, "Dezember"),
     "dec": (12, "Dezember"),
 }
+MONTH_NAMES_DE = [
+    "Januar",
+    "Februar",
+    "Maerz",
+    "April",
+    "Mai",
+    "Juni",
+    "Juli",
+    "August",
+    "September",
+    "Oktober",
+    "November",
+    "Dezember",
+]
 
 
 def _norm(value: object) -> str:
@@ -279,6 +295,26 @@ class BonusDynamikRow:
     bonus: Decimal
     penalty: Decimal
     final: Decimal
+    raw_payload: dict[str, object]
+
+
+@dataclass
+class DieselMonthRow:
+    report_year: int
+    month_index: int
+    month_name: str
+    liter_staack: Decimal
+    liter_shell: Decimal
+    liter_dkv: Decimal
+    liter_total: Decimal
+    euro_staack: Decimal
+    euro_shell: Decimal
+    euro_dkv: Decimal
+    euro_total: Decimal
+    euro_per_liter_staack: Decimal
+    euro_per_liter_shell: Decimal
+    euro_per_liter_dkv: Decimal
+    euro_per_liter_avg: Decimal
     raw_payload: dict[str, object]
 
 
@@ -534,6 +570,135 @@ def extract_bonus_dynamik_months(wb) -> list[BonusDynamikRow]:
     return [by_key[k] for k in sorted(by_key.keys())]
 
 
+def _effective_header_values(ws, row_idx: int) -> list[str]:
+    values: list[str] = []
+    last = ""
+    for col_idx in range(1, int(ws.max_column or 0) + 1):
+        raw = _clean_text(ws.cell(row=row_idx, column=col_idx).value) or ""
+        if raw:
+            last = raw
+        values.append(last)
+    return values
+
+
+def _find_first_diesel_column(top_headers: list[str], sub_headers: list[str], top_name: str, sub_name: str) -> int | None:
+    target_top = _norm(top_name)
+    target_sub = _norm(sub_name)
+    for idx, (top, sub) in enumerate(zip(top_headers, sub_headers), start=1):
+        if _norm(top) == target_top and _norm(sub) == target_sub:
+            return idx
+    return None
+
+
+def _parse_int_like(value: object) -> int | None:
+    parsed = _parse_decimal(value)
+    out = int(parsed.to_integral_value(rounding=ROUND_HALF_UP))
+    return out if out > 0 else None
+
+
+def extract_diesel_months(wb) -> list[DieselMonthRow]:
+    if DIESEL_SHEET not in wb.sheetnames:
+        return []
+
+    ws = wb[DIESEL_SHEET]
+    max_row = int(ws.max_row or 0)
+    max_col = int(ws.max_column or 0)
+    if max_row < 3 or max_col < 17:
+        return []
+
+    top_headers = _effective_header_values(ws, 1)
+    sub_headers = [str(ws.cell(row=2, column=col_idx).value or "").strip() for col_idx in range(1, max_col + 1)]
+
+    col_month = _find_first_diesel_column(top_headers, sub_headers, "Diesel", "Month")
+    col_year = _find_first_diesel_column(top_headers, sub_headers, "Diesel", "Year")
+    col_liter_staack = _find_first_diesel_column(top_headers, sub_headers, "Liter", "Staack")
+    col_liter_shell = _find_first_diesel_column(top_headers, sub_headers, "Liter", "Shell")
+    col_liter_dkv = _find_first_diesel_column(top_headers, sub_headers, "Liter", "DKV")
+    col_liter_total = _find_first_diesel_column(top_headers, sub_headers, "Liter", "Total")
+    col_euro_staack = _find_first_diesel_column(top_headers, sub_headers, "Euro", "Staack")
+    col_euro_shell = _find_first_diesel_column(top_headers, sub_headers, "Euro", "Shell")
+    col_euro_dkv = _find_first_diesel_column(top_headers, sub_headers, "Euro", "DKV")
+    col_euro_total = _find_first_diesel_column(top_headers, sub_headers, "Euro", "Total")
+    col_eurpl_staack = _find_first_diesel_column(top_headers, sub_headers, "Euro/Liter", "Staack")
+    col_eurpl_shell = _find_first_diesel_column(top_headers, sub_headers, "Euro/Liter", "Shell")
+    col_eurpl_dkv = _find_first_diesel_column(top_headers, sub_headers, "Euro/Liter", "DKV")
+    col_eurpl_avg = _find_first_diesel_column(top_headers, sub_headers, "Euro/Liter", "Average")
+
+    required_cols = (
+        col_month,
+        col_year,
+        col_liter_staack,
+        col_liter_shell,
+        col_liter_dkv,
+        col_liter_total,
+        col_euro_staack,
+        col_euro_shell,
+        col_euro_dkv,
+        col_euro_total,
+        col_eurpl_staack,
+        col_eurpl_shell,
+        col_eurpl_dkv,
+        col_eurpl_avg,
+    )
+    if any(col is None for col in required_cols):
+        return []
+
+    metric_cols = [
+        col_liter_staack,
+        col_liter_shell,
+        col_liter_dkv,
+        col_liter_total,
+        col_euro_staack,
+        col_euro_shell,
+        col_euro_dkv,
+        col_euro_total,
+        col_eurpl_staack,
+        col_eurpl_shell,
+        col_eurpl_dkv,
+        col_eurpl_avg,
+    ]
+
+    rows: list[DieselMonthRow] = []
+    for row_idx in range(3, max_row + 1):
+        month_index = _parse_int_like(ws.cell(row=row_idx, column=col_month).value)
+        report_year = _parse_int_like(ws.cell(row=row_idx, column=col_year).value)
+        if not month_index or not report_year or month_index < 1 or month_index > 12:
+            continue
+
+        has_any_metric = any(_clean_text(ws.cell(row=row_idx, column=col_idx).value) is not None for col_idx in metric_cols)
+        if not has_any_metric:
+            continue
+
+        raw_payload = {"sheet": DIESEL_SHEET, "row": row_idx}
+        for col_idx in range(1, max_col + 1):
+            top_label = top_headers[col_idx - 1] or "col"
+            sub_label = sub_headers[col_idx - 1] or str(col_idx)
+            raw_payload[f"c{col_idx}:{top_label}::{sub_label}"] = ws.cell(row=row_idx, column=col_idx).value
+
+        rows.append(
+            DieselMonthRow(
+                report_year=report_year,
+                month_index=month_index,
+                month_name=MONTH_NAMES_DE[month_index - 1],
+                liter_staack=_parse_decimal(ws.cell(row=row_idx, column=col_liter_staack).value),
+                liter_shell=_parse_decimal(ws.cell(row=row_idx, column=col_liter_shell).value),
+                liter_dkv=_parse_decimal(ws.cell(row=row_idx, column=col_liter_dkv).value),
+                liter_total=_parse_decimal(ws.cell(row=row_idx, column=col_liter_total).value),
+                euro_staack=_parse_decimal(ws.cell(row=row_idx, column=col_euro_staack).value),
+                euro_shell=_parse_decimal(ws.cell(row=row_idx, column=col_euro_shell).value),
+                euro_dkv=_parse_decimal(ws.cell(row=row_idx, column=col_euro_dkv).value),
+                euro_total=_parse_decimal(ws.cell(row=row_idx, column=col_euro_total).value),
+                euro_per_liter_staack=_parse_decimal(ws.cell(row=row_idx, column=col_eurpl_staack).value),
+                euro_per_liter_shell=_parse_decimal(ws.cell(row=row_idx, column=col_eurpl_shell).value),
+                euro_per_liter_dkv=_parse_decimal(ws.cell(row=row_idx, column=col_eurpl_dkv).value),
+                euro_per_liter_avg=_parse_decimal(ws.cell(row=row_idx, column=col_eurpl_avg).value),
+                raw_payload=raw_payload,
+            )
+        )
+
+    return sorted(rows, key=lambda r: (r.report_year, r.month_index))
+
+
 def _prepare_readable_xlsm(source_path: Path) -> tuple[Path, bool]:
     """
     Returns (path, is_temp_copy_created_by_this_run).
@@ -622,6 +787,33 @@ def _ensure_bonus_table(cur) -> None:
     )
 
 
+def _ensure_diesel_table(cur) -> None:
+    cur.execute(
+        """
+        CREATE TABLE IF NOT EXISTS report_diesel_monthly (
+            report_year SMALLINT NOT NULL CHECK (report_year BETWEEN 2020 AND 2100),
+            month_index SMALLINT NOT NULL CHECK (month_index BETWEEN 1 AND 12),
+            month_name TEXT NOT NULL,
+            liter_staack NUMERIC(14, 2) NOT NULL DEFAULT 0,
+            liter_shell NUMERIC(14, 2) NOT NULL DEFAULT 0,
+            liter_dkv NUMERIC(14, 2) NOT NULL DEFAULT 0,
+            liter_total NUMERIC(14, 2) NOT NULL DEFAULT 0,
+            euro_staack NUMERIC(14, 2) NOT NULL DEFAULT 0,
+            euro_shell NUMERIC(14, 2) NOT NULL DEFAULT 0,
+            euro_dkv NUMERIC(14, 2) NOT NULL DEFAULT 0,
+            euro_total NUMERIC(14, 2) NOT NULL DEFAULT 0,
+            euro_per_liter_staack NUMERIC(10, 4) NOT NULL DEFAULT 0,
+            euro_per_liter_shell NUMERIC(10, 4) NOT NULL DEFAULT 0,
+            euro_per_liter_dkv NUMERIC(10, 4) NOT NULL DEFAULT 0,
+            euro_per_liter_avg NUMERIC(10, 4) NOT NULL DEFAULT 0,
+            raw_payload JSONB NOT NULL DEFAULT '{}'::jsonb,
+            updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+            PRIMARY KEY (report_year, month_index)
+        )
+        """
+    )
+
+
 def run_etl(database_url: str, xlsm_path: Path) -> dict[str, int]:
     psycopg = _lazy_import_psycopg()
     created_copy = False
@@ -648,6 +840,7 @@ def run_etl(database_url: str, xlsm_path: Path) -> dict[str, int]:
             drivers = extract_drivers(wb)
             einnahmen_rows = extract_einnahmen_months(wb)
             bonus_rows = extract_bonus_dynamik_months(wb)
+            diesel_rows = extract_diesel_months(wb)
             wb.close()
 
             company_names = sorted(
@@ -665,6 +858,7 @@ def run_etl(database_url: str, xlsm_path: Path) -> dict[str, int]:
 
                 _ensure_einnahmen_table(cur)
                 _ensure_bonus_table(cur)
+                _ensure_diesel_table(cur)
 
                 rows_inserted = 0
                 rows_updated = 0
@@ -808,6 +1002,55 @@ def run_etl(database_url: str, xlsm_path: Path) -> dict[str, int]:
                     )
                     rows_inserted += 1
 
+                cur.execute("DELETE FROM report_diesel_monthly")
+                rows_deleted += int(cur.rowcount or 0)
+                for rec in diesel_rows:
+                    cur.execute(
+                        """
+                        INSERT INTO report_diesel_monthly (
+                            report_year,
+                            month_index,
+                            month_name,
+                            liter_staack,
+                            liter_shell,
+                            liter_dkv,
+                            liter_total,
+                            euro_staack,
+                            euro_shell,
+                            euro_dkv,
+                            euro_total,
+                            euro_per_liter_staack,
+                            euro_per_liter_shell,
+                            euro_per_liter_dkv,
+                            euro_per_liter_avg,
+                            raw_payload,
+                            updated_at
+                        )
+                        VALUES (
+                            %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s::jsonb, NOW()
+                        )
+                        """,
+                        (
+                            rec.report_year,
+                            rec.month_index,
+                            rec.month_name,
+                            rec.liter_staack,
+                            rec.liter_shell,
+                            rec.liter_dkv,
+                            rec.liter_total,
+                            rec.euro_staack,
+                            rec.euro_shell,
+                            rec.euro_dkv,
+                            rec.euro_total,
+                            rec.euro_per_liter_staack,
+                            rec.euro_per_liter_shell,
+                            rec.euro_per_liter_dkv,
+                            rec.euro_per_liter_avg,
+                            json.dumps(rec.raw_payload, ensure_ascii=False),
+                        ),
+                    )
+                    rows_inserted += 1
+
                 cur.execute(
                     """
                     UPDATE etl_log
@@ -822,7 +1065,7 @@ def run_etl(database_url: str, xlsm_path: Path) -> dict[str, int]:
                     WHERE id = %s
                     """,
                     (
-                        len(trucks) + len(drivers) + len(einnahmen_rows) + len(bonus_rows),
+                        len(trucks) + len(drivers) + len(einnahmen_rows) + len(bonus_rows) + len(diesel_rows),
                         rows_inserted,
                         rows_updated,
                         rows_deleted,
@@ -833,6 +1076,7 @@ def run_etl(database_url: str, xlsm_path: Path) -> dict[str, int]:
                                 "drivers": len(drivers),
                                 "einnahmen_months": len(einnahmen_rows),
                                 "bonus_rows": len(bonus_rows),
+                                "diesel_months": len(diesel_rows),
                                 "workbook_used": str(readable_path),
                             },
                             ensure_ascii=False,
@@ -848,6 +1092,7 @@ def run_etl(database_url: str, xlsm_path: Path) -> dict[str, int]:
                 "drivers": len(drivers),
                 "einnahmen_months": len(einnahmen_rows),
                 "bonus_rows": len(bonus_rows),
+                "diesel_months": len(diesel_rows),
             }
 
         except Exception as exc:
@@ -890,7 +1135,8 @@ def main() -> int:
         f"ETL success: companies={result['companies']} "
         f"trucks={result['trucks']} drivers={result['drivers']} "
         f"einnahmen_months={result['einnahmen_months']} "
-        f"bonus_rows={result['bonus_rows']}"
+        f"bonus_rows={result['bonus_rows']} "
+        f"diesel_months={result['diesel_months']}"
     )
     return 0
 

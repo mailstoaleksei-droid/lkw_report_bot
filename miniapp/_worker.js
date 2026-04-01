@@ -113,6 +113,30 @@ const REPORTS = [
     params: [],
   },
   {
+    id: "diesel",
+    enabled: true,
+    icon: "fuel",
+    name: {
+      en: "Diesel (Monthly Fuel Costs)",
+      ru: "Diesel (помесячный дизель)",
+      de: "Diesel (Monatsverbrauch)",
+    },
+    description: {
+      en: "Monthly liters, euro totals and EUR/L average for selected year",
+      ru: "Помесячно: литры, евро и средний EUR/L за выбранный год",
+      de: "Monatlich: Liter, Euro und EUR/L Durchschnitt fuer ausgewaehltes Jahr",
+    },
+    params: [
+      {
+        id: "year",
+        type: "year",
+        label: { en: "Year", ru: "Год" },
+        min: 2025,
+        max: 2035,
+      },
+    ],
+  },
+  {
     id: "bonus",
     enabled: true,
     icon: "bonus",
@@ -410,6 +434,28 @@ SELECT
   COALESCE(logistics, 0)::numeric AS logistics,
   COALESCE(gesamt, 0)::numeric AS gesamt
 FROM report_einnahmen_monthly
+ORDER BY month_index;
+`;
+
+const DIESEL_MONTHLY_SQL = `
+SELECT
+  report_year,
+  month_index,
+  month_name,
+  COALESCE(liter_staack, 0)::numeric AS liter_staack,
+  COALESCE(liter_shell, 0)::numeric AS liter_shell,
+  COALESCE(liter_dkv, 0)::numeric AS liter_dkv,
+  COALESCE(liter_total, 0)::numeric AS liter_total,
+  COALESCE(euro_staack, 0)::numeric AS euro_staack,
+  COALESCE(euro_shell, 0)::numeric AS euro_shell,
+  COALESCE(euro_dkv, 0)::numeric AS euro_dkv,
+  COALESCE(euro_total, 0)::numeric AS euro_total,
+  COALESCE(euro_per_liter_staack, 0)::numeric AS euro_per_liter_staack,
+  COALESCE(euro_per_liter_shell, 0)::numeric AS euro_per_liter_shell,
+  COALESCE(euro_per_liter_dkv, 0)::numeric AS euro_per_liter_dkv,
+  COALESCE(euro_per_liter_avg, 0)::numeric AS euro_per_liter_avg
+FROM report_diesel_monthly
+WHERE report_year = $1::int
 ORDER BY month_index;
 `;
 
@@ -776,6 +822,14 @@ function makeDataWeekFilename(year, week) {
 
 function makeEinnahmenFilename(at = new Date()) {
   return `einnahmen_${formatUtcDateStamp(at)}.pdf`;
+}
+
+function makeDieselFilename(year, at = new Date()) {
+  const y = Number.parseInt(String(year), 10);
+  if (Number.isFinite(y) && y > 0) {
+    return `diesel_${y}.pdf`;
+  }
+  return `diesel_${formatUtcDateStamp(at)}.pdf`;
 }
 
 function makeBonusFilename(year, month, at = new Date()) {
@@ -2447,6 +2501,430 @@ async function buildEinnahmenPdfWithPdfLib({ userId, rows }) {
   return pdfDoc.save();
 }
 
+function formatPricePerLiter(value) {
+  const n = toNumberSafe(value, 0);
+  return n.toFixed(2);
+}
+
+function buildDieselMatrixRows(rows = [], year = 0) {
+  const byMonth = new Map();
+  for (const row of rows || []) {
+    const monthIndex = toIntSafe(row?.month_index, 0);
+    if (monthIndex < 1 || monthIndex > 12) continue;
+    byMonth.set(monthIndex, {
+      report_year: toIntSafe(row?.report_year, year || 0),
+      month_index: monthIndex,
+      month_name: safeText(row?.month_name, EINNAHMEN_MONTHS_DE[monthIndex - 1]),
+      liter_staack: toNumberSafe(row?.liter_staack, 0),
+      liter_shell: toNumberSafe(row?.liter_shell, 0),
+      liter_dkv: toNumberSafe(row?.liter_dkv, 0),
+      liter_total: toNumberSafe(row?.liter_total, 0),
+      euro_staack: toNumberSafe(row?.euro_staack, 0),
+      euro_shell: toNumberSafe(row?.euro_shell, 0),
+      euro_dkv: toNumberSafe(row?.euro_dkv, 0),
+      euro_total: toNumberSafe(row?.euro_total, 0),
+      euro_per_liter_staack: toNumberSafe(row?.euro_per_liter_staack, 0),
+      euro_per_liter_shell: toNumberSafe(row?.euro_per_liter_shell, 0),
+      euro_per_liter_dkv: toNumberSafe(row?.euro_per_liter_dkv, 0),
+      euro_per_liter_avg: toNumberSafe(row?.euro_per_liter_avg, 0),
+    });
+  }
+  if (!byMonth.size) return [];
+
+  const out = [];
+  for (let monthIdx = 1; monthIdx <= 12; monthIdx += 1) {
+    out.push(
+      byMonth.get(monthIdx) || {
+        report_year: year || 0,
+        month_index: monthIdx,
+        month_name: EINNAHMEN_MONTHS_DE[monthIdx - 1],
+        liter_staack: 0,
+        liter_shell: 0,
+        liter_dkv: 0,
+        liter_total: 0,
+        euro_staack: 0,
+        euro_shell: 0,
+        euro_dkv: 0,
+        euro_total: 0,
+        euro_per_liter_staack: 0,
+        euro_per_liter_shell: 0,
+        euro_per_liter_dkv: 0,
+        euro_per_liter_avg: 0,
+      },
+    );
+  }
+  return out;
+}
+
+async function buildDieselPdfWithPdfLib({ userId, year, rows }) {
+  const matrixRows = buildDieselMatrixRows(rows, year);
+  const pdfDoc = await PDFDocument.create();
+  const font = await pdfDoc.embedFont(StandardFonts.Helvetica);
+  const boldFont = await pdfDoc.embedFont(StandardFonts.HelveticaBold);
+
+  const pageSize = [842, 595];
+  const margin = 24;
+  const rowHeight = 16;
+  const textSize = 7;
+  const textColor = rgb(0.08, 0.14, 0.24);
+  const borderColor = rgb(0.74, 0.8, 0.9);
+  const headerBg = rgb(0.92, 0.97, 0.95);
+  const oddBg = rgb(0.985, 1, 0.99);
+
+  const columns = [
+    { key: "month_name", label: "Monat", width: 82 },
+    { key: "liter_staack", label: "L Staack", width: 58 },
+    { key: "liter_shell", label: "L Shell", width: 58 },
+    { key: "liter_dkv", label: "L DKV", width: 56 },
+    { key: "liter_total", label: "L Total", width: 62 },
+    { key: "euro_staack", label: "EUR Staack", width: 66 },
+    { key: "euro_shell", label: "EUR Shell", width: 66 },
+    { key: "euro_dkv", label: "EUR DKV", width: 62 },
+    { key: "euro_total", label: "EUR Total", width: 68 },
+    { key: "euro_per_liter_avg", label: "EUR/L Avg", width: 68 },
+  ];
+  const tableWidth = columns.reduce((sum, c) => sum + c.width, 0);
+  const tableX = margin;
+
+  let page = pdfDoc.addPage(pageSize);
+  let y = page.getHeight() - margin;
+
+  const drawPageHeader = () => {
+    page.drawText(`Diesel (${year})`, {
+      x: margin,
+      y,
+      size: 13,
+      font: boldFont,
+      color: textColor,
+    });
+    y -= 16;
+    page.drawText(`Generated: ${new Date().toISOString()} UTC | User: ${userId}`, {
+      x: margin,
+      y,
+      size: 8,
+      font,
+      color: rgb(0.24, 0.3, 0.4),
+    });
+    y -= 14;
+  };
+
+  const drawHeaderRow = () => {
+    page.drawRectangle({
+      x: tableX,
+      y: y - rowHeight + 2,
+      width: tableWidth,
+      height: rowHeight,
+      color: headerBg,
+      borderColor,
+      borderWidth: 1,
+    });
+
+    let x = tableX;
+    for (const col of columns) {
+      page.drawText(col.label, {
+        x: x + 3,
+        y: y - 9,
+        size: textSize,
+        font: boldFont,
+        color: textColor,
+      });
+      x += col.width;
+      if (x < tableX + tableWidth - 0.5) {
+        page.drawLine({
+          start: { x, y: y - rowHeight + 2 },
+          end: { x, y: y + 2 },
+          thickness: 0.8,
+          color: borderColor,
+        });
+      }
+    }
+    y -= rowHeight;
+  };
+
+  const ensureSpace = (needHeight) => {
+    if (y - needHeight >= margin) return;
+    page = pdfDoc.addPage(pageSize);
+    y = page.getHeight() - margin;
+    drawPageHeader();
+    drawHeaderRow();
+  };
+
+  const drawRow = (row, idx) => {
+    if (idx % 2 === 1) {
+      page.drawRectangle({
+        x: tableX,
+        y: y - rowHeight + 2,
+        width: tableWidth,
+        height: rowHeight,
+        color: oddBg,
+      });
+    }
+
+    const values = [
+      safeText(row?.month_name, ""),
+      formatMoneyInt(row?.liter_staack),
+      formatMoneyInt(row?.liter_shell),
+      formatMoneyInt(row?.liter_dkv),
+      formatMoneyInt(row?.liter_total),
+      formatMoney(row?.euro_staack),
+      formatMoney(row?.euro_shell),
+      formatMoney(row?.euro_dkv),
+      formatMoney(row?.euro_total),
+      formatPricePerLiter(row?.euro_per_liter_avg),
+    ];
+
+    let x = tableX;
+    for (let i = 0; i < columns.length; i += 1) {
+      const col = columns[i];
+      const value = fitTextToWidth(font, values[i], textSize, col.width - 6);
+      const isNumeric = i > 0;
+      const tx = isNumeric
+        ? x + col.width - 3 - measureTextWidth(font, value, textSize)
+        : x + 3;
+      page.drawText(value, {
+        x: tx,
+        y: y - 9,
+        size: textSize,
+        font,
+        color: textColor,
+      });
+      x += col.width;
+      if (x < tableX + tableWidth - 0.5) {
+        page.drawLine({
+          start: { x, y: y - rowHeight + 2 },
+          end: { x, y: y + 2 },
+          thickness: 0.5,
+          color: borderColor,
+        });
+      }
+    }
+    page.drawLine({
+      start: { x: tableX, y: y - rowHeight + 2 },
+      end: { x: tableX + tableWidth, y: y - rowHeight + 2 },
+      thickness: 0.5,
+      color: borderColor,
+    });
+    y -= rowHeight;
+  };
+
+  drawPageHeader();
+  drawHeaderRow();
+
+  if (!matrixRows.length) {
+    ensureSpace(20);
+    page.drawText("No rows found for selected year.", {
+      x: margin,
+      y: y - 10,
+      size: 9,
+      font,
+      color: textColor,
+    });
+    return pdfDoc.save();
+  }
+
+  for (let idx = 0; idx < matrixRows.length; idx += 1) {
+    ensureSpace(rowHeight + 2);
+    drawRow(matrixRows[idx], idx);
+  }
+
+  const dataRows = matrixRows.filter((row) => hasValueData(row.liter_total) || hasValueData(row.euro_total));
+  const totalLiters = dataRows.reduce((sum, row) => sum + toNumberSafe(row.liter_total, 0), 0);
+  const totalEuro = dataRows.reduce((sum, row) => sum + toNumberSafe(row.euro_total, 0), 0);
+  const weightedAvg = totalLiters > 0 ? totalEuro / totalLiters : 0;
+  const bestPriceRow = dataRows.reduce((best, row) => {
+    const value = toNumberSafe(row.euro_per_liter_avg, 0);
+    if (!hasValueData(value)) return best;
+    if (!best || value < toNumberSafe(best.euro_per_liter_avg, 0)) return row;
+    return best;
+  }, null);
+  const peakVolumeRow = dataRows.reduce((best, row) => {
+    if (!best || toNumberSafe(row.liter_total, 0) > toNumberSafe(best.liter_total, 0)) return row;
+    return best;
+  }, null);
+
+  y -= 12;
+  ensureSpace(94);
+  page.drawRectangle({
+    x: margin,
+    y: y - 78,
+    width: tableWidth,
+    height: 78,
+    color: rgb(0.97, 0.995, 0.985),
+    borderColor,
+    borderWidth: 1,
+  });
+  page.drawText("Key Metrics", {
+    x: margin + 8,
+    y: y - 14,
+    size: 10,
+    font: boldFont,
+    color: textColor,
+  });
+  page.drawText(
+    `Total Liter: ${formatMoneyInt(totalLiters)} | Total Euro: ${formatMoney(totalEuro)} | Weighted Avg EUR/L: ${formatPricePerLiter(weightedAvg)}`,
+    {
+      x: margin + 8,
+      y: y - 32,
+      size: 8,
+      font,
+      color: textColor,
+    },
+  );
+  page.drawText(
+    `Best price month: ${bestPriceRow ? `${safeText(bestPriceRow.month_name, "")} (${formatPricePerLiter(bestPriceRow.euro_per_liter_avg)})` : "-"}` +
+      ` | Peak liters month: ${peakVolumeRow ? `${safeText(peakVolumeRow.month_name, "")} (${formatMoneyInt(peakVolumeRow.liter_total)})` : "-"}`,
+    {
+      x: margin + 8,
+      y: y - 48,
+      size: 8,
+      font,
+      color: textColor,
+    },
+  );
+  page.drawText("Chart: Total liters per month. Trend labels show month-to-month change of EUR/L average.", {
+    x: margin + 8,
+    y: y - 64,
+    size: 7,
+    font,
+    color: rgb(0.34, 0.4, 0.5),
+  });
+  y -= 90;
+
+  const chartHeight = 160;
+  ensureSpace(chartHeight + 10);
+  const chartX = margin;
+  const chartY = y - chartHeight;
+  const chartWidth = tableWidth;
+  const plotPadTop = 24;
+  const plotPadBottom = 30;
+  const plotPadLeft = 40;
+  const plotPadRight = 16;
+  const plotHeight = chartHeight - plotPadTop - plotPadBottom;
+  const plotWidth = chartWidth - plotPadLeft - plotPadRight;
+  const baselineY = chartY + plotPadBottom;
+  const plotX = chartX + plotPadLeft;
+  const barColor = rgb(0.24, 0.58, 0.46);
+  const progressColor = rgb(0.08, 0.62, 0.2);
+  const regressColor = rgb(0.84, 0.2, 0.16);
+
+  page.drawRectangle({
+    x: chartX,
+    y: chartY,
+    width: chartWidth,
+    height: chartHeight,
+    borderColor,
+    borderWidth: 1,
+    color: rgb(0.99, 1, 0.995),
+  });
+  page.drawText("Diesel Total Liter", {
+    x: chartX + 8,
+    y: chartY + chartHeight - 12,
+    size: 9,
+    font: boldFont,
+    color: textColor,
+  });
+
+  const maxVal = Math.max(1, ...matrixRows.map((row) => toNumberSafe(row?.liter_total, 0)));
+  for (let g = 0; g <= 4; g += 1) {
+    const ratio = g / 4;
+    const gy = baselineY + (plotHeight * ratio);
+    page.drawLine({
+      start: { x: plotX, y: gy },
+      end: { x: plotX + plotWidth, y: gy },
+      thickness: 0.35,
+      color: rgb(0.86, 0.92, 0.9),
+    });
+    const val = formatMoneyInt(maxVal * ratio);
+    page.drawText(val, {
+      x: chartX + 2,
+      y: gy + 1,
+      size: 6,
+      font,
+      color: rgb(0.4, 0.46, 0.56),
+    });
+  }
+
+  const groupWidth = plotWidth / matrixRows.length;
+  const barWidth = Math.max(10, Math.min(24, groupWidth * 0.48));
+  for (let i = 0; i < matrixRows.length; i += 1) {
+    const row = matrixRows[i];
+    const liters = toNumberSafe(row?.liter_total, 0);
+    const avgPrice = toNumberSafe(row?.euro_per_liter_avg, 0);
+    const barHeight = Math.max(0, Math.floor((liters / maxVal) * plotHeight));
+    const centerX = plotX + (i * groupWidth) + (groupWidth / 2);
+    const barX = centerX - (barWidth / 2);
+    page.drawRectangle({
+      x: barX,
+      y: baselineY,
+      width: barWidth,
+      height: barHeight,
+      color: barColor,
+    });
+
+    const monthLabel = fitTextToWidth(font, String(row?.month_name || "").slice(0, 3), 7, groupWidth - 4);
+    page.drawText(monthLabel, {
+      x: centerX - (measureTextWidth(font, monthLabel, 7) / 2),
+      y: chartY + 4,
+      size: 7,
+      font,
+      color: textColor,
+    });
+
+    if (hasValueData(liters)) {
+      const litersLabel = formatMoneyInt(liters);
+      const vWidth = measureTextWidth(font, litersLabel, 6);
+      page.drawText(litersLabel, {
+        x: centerX - (vWidth / 2),
+        y: baselineY + barHeight + 2,
+        size: 6,
+        font,
+        color: textColor,
+      });
+    }
+
+    if (hasValueData(avgPrice)) {
+      const priceLabel = formatPricePerLiter(avgPrice);
+      const pWidth = measureTextWidth(font, priceLabel, 6);
+      page.drawText(priceLabel, {
+        x: centerX - (pWidth / 2),
+        y: chartY + chartHeight - 23,
+        size: 6,
+        font,
+        color: rgb(0.12, 0.42, 0.34),
+      });
+    }
+
+    if (i > 0) {
+      const prevAvg = toNumberSafe(matrixRows[i - 1]?.euro_per_liter_avg, 0);
+      if (hasValueData(avgPrice) && hasValueData(prevAvg)) {
+        const trend = calcMonthTrendPct(avgPrice, prevAvg);
+        if (trend !== null) {
+          const isUp = trend >= 0;
+          const trendColor = isUp ? regressColor : progressColor;
+          const trendLabel = `${trend >= 0 ? "+" : ""}${trend.toFixed(1)}%`;
+          const trendTextX = centerX - (measureTextWidth(font, trendLabel, 6) / 2);
+          drawTrendArrow({
+            page,
+            x: trendTextX - 5,
+            y: chartY + chartHeight - 36,
+            isUp,
+            color: trendColor,
+          });
+          page.drawText(trendLabel, {
+            x: trendTextX,
+            y: chartY + chartHeight - 35,
+            size: 6,
+            font,
+            color: trendColor,
+          });
+        }
+      }
+    }
+  }
+
+  return pdfDoc.save();
+}
+
 function formatPercent(value, digits = 1) {
   const n = toNumberSafe(value, 0);
   return `${n.toFixed(digits)}%`;
@@ -3336,6 +3814,8 @@ async function handleHistory(request, env) {
       filename = makeDataWeekFilename(isoYear, isoWeek);
     } else if (reportType === "einnahmen") {
       filename = makeEinnahmenFilename();
+    } else if (reportType === "diesel") {
+      filename = makeDieselFilename(params?.year);
     } else if (reportType === "bonus") {
       filename = makeBonusFilename(params?.year, params?.month);
     } else if (REPORT_TYPE_TO_DOCK_KIND[reportType]) {
@@ -3644,6 +4124,20 @@ function validateGeneratePayload(body) {
     return { ok: true, reportType, year, week };
   }
 
+  if (reportType === "diesel") {
+    const year = Number.parseInt(String(body.year ?? ""), 10);
+    const yearParam = report.params.find((p) => p.id === "year");
+    const minYear = toInt(yearParam?.min, 2020);
+    const maxYear = toInt(yearParam?.max, 2100);
+    if (!Number.isFinite(year)) {
+      return { ok: false, status: 400, error: "Invalid year" };
+    }
+    if (!(year >= minYear && year <= maxYear)) {
+      return { ok: false, status: 400, error: "Year out of range" };
+    }
+    return { ok: true, reportType, year };
+  }
+
   if (reportType === "bonus") {
     const year = Number.parseInt(String(body.year ?? ""), 10);
     const month = Number.parseInt(String(body.month ?? ""), 10);
@@ -3686,6 +4180,7 @@ async function handleGenerateWithBody(body, env, enforceRateLimit = true) {
     && valid.reportType !== "data_plan"
     && valid.reportType !== "data_data"
     && valid.reportType !== "einnahmen"
+    && valid.reportType !== "diesel"
     && valid.reportType !== "bonus"
   ) {
     return json(
@@ -3969,6 +4464,62 @@ async function handleGenerateWithBody(body, env, enforceRateLimit = true) {
         pageHeight: 595,
       });
     }
+  } else if (valid.reportType === "diesel") {
+    let rows;
+    try {
+      const result = await queryNeon(dbConnectionString, DIESEL_MONTHLY_SQL, [valid.year]);
+      rows = result.rows || [];
+    } catch (err) {
+      return json(
+        {
+          ok: false,
+          error: "Failed to execute SQL query",
+          code: "SQL_ERROR",
+          details: String(err?.message || err || "unknown error"),
+        },
+        500,
+        { "Cache-Control": "no-store" },
+      );
+    }
+
+    filename = makeDieselFilename(valid.year);
+    outputKey = `diesel:${valid.year}`;
+    try {
+      pdfBytes = await buildDieselPdfWithPdfLib({
+        userId: auth.userId,
+        year: valid.year,
+        rows,
+      });
+    } catch (err) {
+      pdfEngine = "legacy-fallback";
+      const matrixRows = buildDieselMatrixRows(rows, valid.year);
+      const lines = [];
+      lines.push("Monat | L Staack | L Shell | L DKV | L Total | EUR Staack | EUR Shell | EUR DKV | EUR Total | EUR/L Avg");
+      lines.push("-".repeat(150));
+      for (const row of matrixRows) {
+        lines.push(
+          [
+            safeText(row.month_name, ""),
+            formatMoneyInt(row.liter_staack),
+            formatMoneyInt(row.liter_shell),
+            formatMoneyInt(row.liter_dkv),
+            formatMoneyInt(row.liter_total),
+            formatMoney(row.euro_staack),
+            formatMoney(row.euro_shell),
+            formatMoney(row.euro_dkv),
+            formatMoney(row.euro_total),
+            formatPricePerLiter(row.euro_per_liter_avg),
+          ].join(" | "),
+        );
+      }
+      pdfBytes = buildSimplePdf({
+        title: `Diesel - ${valid.year}`,
+        subtitle: `Generated at ${new Date().toISOString()} UTC | user ${auth.userId}`,
+        lines,
+        pageWidth: 842,
+        pageHeight: 595,
+      });
+    }
   } else {
     let rows;
     const driverQuery = safeText(valid.driverQuery, "").trim();
@@ -4039,6 +4590,8 @@ async function handleGenerateWithBody(body, env, enforceRateLimit = true) {
   if ("year" in valid && "week" in valid) {
     reportParams.year = valid.year;
     reportParams.week = valid.week;
+  } else if (valid.reportType === "diesel" && "year" in valid) {
+    reportParams.year = valid.year;
   }
   if ("year" in valid && "month" in valid) {
     reportParams.year = valid.year;

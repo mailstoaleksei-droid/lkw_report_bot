@@ -41,6 +41,10 @@
   - chart by `Gesamt`
   - trend arrows shown only when both adjacent months have data
   - in-bar data labels are vertical and integer-formatted (thousand grouping)
+- [x] `Diesel` (monthly fuel costs)
+  - param: `year`
+  - source: `Diesel` via SQL (`report_diesel_monthly`)
+  - PDF: monthly liters/euro table + KPI summary + chart by `Liter Total`
 - [x] `Bonus` (monthly driver bonus)
   - params: `year`, `month`, optional `Fahrer ID / surname`
   - source: `BonusDynamik` via SQL (`report_bonus_dynamik_monthly`)

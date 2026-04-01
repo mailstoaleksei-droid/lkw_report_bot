@@ -88,6 +88,7 @@ These sheets are available but not required for first SQL report MVP:
 
 Already integrated into SQL ETL/reporting:
 - `BonusDynamik` -> `report_bonus_dynamik_monthly`
+- `Diesel` -> `report_diesel_monthly`
 
 ## Relation model (initial)
 
