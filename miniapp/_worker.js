@@ -3752,8 +3752,9 @@ async function buildDockPdfWithPdfLib({ kind, rows, userId }) {
     let x = tableX;
     for (const col of columns) {
       const label = fitTextToWidth(boldFont, col.label, maxTextSize, col.width - 8);
+      const labelWidth = measureTextWidth(boldFont, label, maxTextSize);
       page.drawText(label, {
-        x: x + 4,
+        x: x + Math.max(4, (col.width - labelWidth) / 2),
         y: y - 9,
         size: maxTextSize,
         font: boldFont,
@@ -3794,8 +3795,9 @@ async function buildDockPdfWithPdfLib({ kind, rows, userId }) {
     let x = tableX;
     for (const col of columns) {
       const value = fitTextToWidth(font, safeText(row?.[col.key], ""), maxTextSize, col.width - 8);
+      const valueWidth = measureTextWidth(font, value, maxTextSize);
       page.drawText(value, {
-        x: x + 4,
+        x: x + Math.max(4, (col.width - valueWidth) / 2),
         y: y - 9,
         size: maxTextSize,
         font,
