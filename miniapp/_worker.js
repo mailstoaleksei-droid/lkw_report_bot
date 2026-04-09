@@ -4361,9 +4361,6 @@ async function buildLkwMasterPdfWithPdfLib({ userId, rows, title }) {
       { key: "status", label: "Status", width: "auto", min_width: 58, max_width: 86 },
       { key: "datum_verkauft", label: "Datum verkauft", width: "auto", min_width: 78, max_width: 102 },
       { key: "telefonnummer", label: "Telefonnummer", width: "auto", min_width: 98, max_width: 126 },
-      { key: "dkv_card", label: "DKV Card", width: "auto", min_width: 86, max_width: 138 },
-      { key: "shell_card", label: "Shell Card", width: "auto", min_width: 90, max_width: 144 },
-      { key: "tankpool_card", label: "Tankpool Card", width: "auto", min_width: 86, max_width: 138 },
       { key: "km_2025", label: "KM 2025", width: "auto", min_width: 60, max_width: 88 },
       { key: "km_2026", label: "KM 2026", width: "auto", min_width: 60, max_width: 88 },
       { key: "naechste_tuev", label: "Nächste TÜV", width: "auto", min_width: 76, max_width: 102 },
@@ -5735,7 +5732,7 @@ async function handleGenerateWithBody(body, env, enforceRateLimit = true) {
     } catch (err) {
       pdfEngine = "legacy-fallback";
       const lines = [];
-      lines.push("LKW-ID | LKW-Nummer | Marke/Modell | LKW-Typ | Baujahr | Firma | Eigentum | Status | Datum verkauft | Telefonnummer | DKV Card | Shell Card | Tankpool Card | KM 2025 | KM 2026 | Nächste TÜV | Versicherung bis | Gesamtkosten für die Wartung | 2023 | 2024 | 2025 | 2026");
+      lines.push("LKW-ID | LKW-Nummer | Marke/Modell | LKW-Typ | Baujahr | Firma | Eigentum | Status | Datum verkauft | Telefonnummer | KM 2025 | KM 2026 | Nächste TÜV | Versicherung bis | Gesamtkosten für die Wartung | 2023 | 2024 | 2025 | 2026");
       lines.push("-".repeat(280));
       for (const row of rows) {
         lines.push(
@@ -5750,9 +5747,6 @@ async function handleGenerateWithBody(body, env, enforceRateLimit = true) {
             safeText(row.status, ""),
             safeText(row.datum_verkauft, ""),
             safeText(row.telefonnummer, ""),
-            safeText(row.dkv_card, ""),
-            safeText(row.shell_card, ""),
-            safeText(row.tankpool_card, ""),
             formatLkwMasterCell(row.km_2025, "numberish"),
             formatLkwMasterCell(row.km_2026, "numberish"),
             safeText(row.naechste_tuev, ""),
