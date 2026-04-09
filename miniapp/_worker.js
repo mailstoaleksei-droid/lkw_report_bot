@@ -165,6 +165,44 @@ const REPORTS = [
     ],
   },
   {
+    id: "lkw_single",
+    enabled: true,
+    icon: "truck",
+    name: {
+      en: "LKW (Single Truck)",
+      ru: "LKW (одна машина)",
+      de: "LKW (ein LKW)",
+    },
+    description: {
+      en: "Detailed master report for one selected LKW from sheet LKW",
+      ru: "Детальный мастер-отчет по одному LKW из листа LKW",
+      de: "Detaillierter Stammdatenbericht fuer ein LKW aus Blatt LKW",
+    },
+    params: [
+      {
+        id: "lkw_id",
+        type: "text",
+        label: { en: "LKW ID", ru: "LKW ID" },
+      },
+    ],
+  },
+  {
+    id: "lkw_all",
+    enabled: true,
+    icon: "truck",
+    name: {
+      en: "LKW (All Trucks)",
+      ru: "LKW (все машины)",
+      de: "LKW (alle LKW)",
+    },
+    description: {
+      en: "Master report for all LKW from sheet LKW",
+      ru: "Мастер-отчет по всем LKW из листа LKW",
+      de: "Stammdatenbericht fuer alle LKW aus Blatt LKW",
+    },
+    params: [],
+  },
+  {
     id: "tankkarten",
     enabled: false,
     icon: "fuel",
@@ -519,6 +557,39 @@ SELECT
   COALESCE(NULLIF(t.raw_payload->>'Tankpool Card', ''), NULLIF(t.raw_payload->>'Tankpool', '')) AS tankpool_card
 FROM trucks t
 LEFT JOIN companies c ON c.id = t.company_id
+ORDER BY t.external_id;
+`;
+
+const LKW_MASTER_SQL = `
+SELECT
+  t.external_id AS lkw_id,
+  COALESCE(NULLIF(t.plate_number, ''), NULLIF(t.raw_payload->>'LKW-Nummer', ''), NULLIF(t.raw_payload->>'Number', '')) AS lkw_nummer,
+  COALESCE(NULLIF(t.raw_payload->>'Marke/Modell', ''), NULLIF(t.raw_payload->>'Brand/Model', '')) AS marke_modell,
+  COALESCE(NULLIF(t.truck_type, ''), NULLIF(t.raw_payload->>'LKW-Typ', ''), NULLIF(t.raw_payload->>'Type', '')) AS lkw_typ,
+  COALESCE(NULLIF(t.raw_payload->>'Baujahr', ''), NULLIF(t.raw_payload->>'Year', '')) AS baujahr,
+  COALESCE(NULLIF(c.name, ''), NULLIF(t.raw_payload->>'Firma', ''), NULLIF(t.raw_payload->>'Company', '')) AS firma,
+  COALESCE(NULLIF(t.raw_payload->>'Eigentum', ''), NULLIF(t.raw_payload->>'Ownership', '')) AS eigentum,
+  COALESCE(NULLIF(t.status, ''), NULLIF(t.raw_payload->>'Status', '')) AS status,
+  COALESCE(to_char(t.status_since, 'DD/MM/YYYY'), NULLIF(t.raw_payload->>'Datum verkauft', ''), NULLIF(t.raw_payload->>'Sale Date', '')) AS datum_verkauft,
+  COALESCE(NULLIF(t.raw_payload->>'Telefonnummer', ''), NULLIF(t.raw_payload->>'Phone Number', ''), NULLIF(t.raw_payload->>'Phone', '')) AS telefonnummer,
+  COALESCE(NULLIF(t.raw_payload->>'DKV Card', ''), NULLIF(t.raw_payload->>'DKV', '')) AS dkv_card,
+  COALESCE(NULLIF(t.raw_payload->>'Shell Card', ''), NULLIF(t.raw_payload->>'Shell', '')) AS shell_card,
+  COALESCE(NULLIF(t.raw_payload->>'Tankpool Card', ''), NULLIF(t.raw_payload->>'Tankpool', '')) AS tankpool_card,
+  COALESCE(NULLIF(t.raw_payload->>'KM\n2025', ''), NULLIF(t.raw_payload->>'KM 2025', ''), NULLIF(t.raw_payload->>'KM2025', '')) AS km_2025,
+  COALESCE(NULLIF(t.raw_payload->>'KM\n2026', ''), NULLIF(t.raw_payload->>'KM 2026', ''), NULLIF(t.raw_payload->>'KM2026', '')) AS km_2026,
+  COALESCE(NULLIF(t.raw_payload->>'Nächste TÜV', ''), NULLIF(t.raw_payload->>'Naechste TUEV', ''), NULLIF(t.raw_payload->>'Nest TÜV', '')) AS naechste_tuev,
+  COALESCE(NULLIF(t.raw_payload->>'Versicherung bis', ''), NULLIF(t.raw_payload->>'Insurance', '')) AS versicherung_bis,
+  COALESCE(NULLIF(t.raw_payload->>'Gesamtkosten für die Wartung', ''), NULLIF(t.raw_payload->>'Gesamtkosten fur die Wartung', ''), NULLIF(t.raw_payload->>'Total Costs', '')) AS wartung_total,
+  COALESCE(NULLIF(t.raw_payload->>'2023', ''), '0') AS cost_2023,
+  COALESCE(NULLIF(t.raw_payload->>'2024', ''), '0') AS cost_2024,
+  COALESCE(NULLIF(t.raw_payload->>'2025', ''), '0') AS cost_2025,
+  COALESCE(NULLIF(t.raw_payload->>'2026', ''), '0') AS cost_2026
+FROM trucks t
+LEFT JOIN companies c ON c.id = t.company_id
+WHERE (
+  $1::text = ''
+  OR lower(t.external_id) = lower($1::text)
+)
 ORDER BY t.external_id;
 `;
 
@@ -3599,6 +3670,222 @@ async function buildDockPdfWithPdfLib({ kind, rows, userId }) {
   return pdfDoc.save();
 }
 
+function parseDdMmYyyy(value) {
+  const m = /^(\d{2})\/(\d{2})\/(\d{4})$/.exec(String(value || "").trim());
+  if (!m) return null;
+  const ts = Date.UTC(Number(m[3]), Number(m[2]) - 1, Number(m[1]));
+  return Number.isFinite(ts) ? ts : null;
+}
+
+function formatLkwMasterCell(value, kind = "text") {
+  const raw = String(value ?? "").trim();
+  if (!raw) return "";
+  if (kind === "numberish") {
+    const normalized = raw.replace(/\s+/g, "").replace(",", ".");
+    const n = Number(normalized);
+    if (Number.isFinite(n) && Math.abs(n) < 0.0000001) return "";
+  }
+  if (raw === "0" || raw === "0.0" || raw === "0.00") return "";
+  return raw;
+}
+
+async function buildLkwMasterPdfWithPdfLib({ userId, rows, title }) {
+  const pdfDoc = await PDFDocument.create();
+  const font = await pdfDoc.embedFont(StandardFonts.Helvetica);
+  const boldFont = await pdfDoc.embedFont(StandardFonts.HelveticaBold);
+
+  const pageSize = [1190, 595];
+  const margin = 18;
+  const rowHeight = 15;
+  const textSize = 7;
+  const tableMaxWidth = pageSize[0] - (margin * 2);
+  const columns = resolveAutoColumns({
+    columns: [
+      { key: "lkw_id", label: "LKW-ID", width: "auto", min_width: 48, max_width: 72 },
+      { key: "lkw_nummer", label: "LKW-Nummer", width: "auto", min_width: 78, max_width: 110 },
+      { key: "marke_modell", label: "Marke/Modell", width: "auto", min_width: 84, max_width: 128 },
+      { key: "lkw_typ", label: "LKW-Typ", width: "auto", min_width: 62, max_width: 96 },
+      { key: "baujahr", label: "Baujahr", width: "auto", min_width: 54, max_width: 74 },
+      { key: "firma", label: "Firma", width: "auto", min_width: 72, max_width: 112 },
+      { key: "eigentum", label: "Eigentum", width: "auto", min_width: 74, max_width: 104 },
+      { key: "status", label: "Status", width: "auto", min_width: 58, max_width: 86 },
+      { key: "datum_verkauft", label: "Datum verkauft", width: "auto", min_width: 78, max_width: 102 },
+      { key: "telefonnummer", label: "Telefonnummer", width: "auto", min_width: 98, max_width: 126 },
+      { key: "dkv_card", label: "DKV Card", width: "auto", min_width: 86, max_width: 138 },
+      { key: "shell_card", label: "Shell Card", width: "auto", min_width: 90, max_width: 144 },
+      { key: "tankpool_card", label: "Tankpool Card", width: "auto", min_width: 86, max_width: 138 },
+      { key: "km_2025", label: "KM 2025", width: "auto", min_width: 60, max_width: 88 },
+      { key: "km_2026", label: "KM 2026", width: "auto", min_width: 60, max_width: 88 },
+      { key: "naechste_tuev", label: "Nächste TÜV", width: "auto", min_width: 76, max_width: 102 },
+      { key: "versicherung_bis", label: "Versicherung bis", width: "auto", min_width: 90, max_width: 118 },
+      { key: "wartung_total", label: "Gesamtkosten für die Wartung", width: "auto", min_width: 112, max_width: 156 },
+      { key: "cost_2023", label: "2023", width: "auto", min_width: 50, max_width: 72 },
+      { key: "cost_2024", label: "2024", width: "auto", min_width: 50, max_width: 72 },
+      { key: "cost_2025", label: "2025", width: "auto", min_width: 50, max_width: 72 },
+      { key: "cost_2026", label: "2026", width: "auto", min_width: 50, max_width: 72 },
+    ],
+    rows,
+    font,
+    size: textSize,
+    maxTableWidth: tableMaxWidth,
+  });
+  const tableWidth = columns.reduce((sum, c) => sum + c.width, 0);
+  const tableX = margin;
+  const borderColor = rgb(0.74, 0.8, 0.9);
+  const headerBg = rgb(0.93, 0.96, 1);
+  const oddBg = rgb(0.985, 0.99, 1);
+  const soldBg = rgb(0.84, 0.84, 0.84);
+  const containerBg = rgb(0.94, 0.88, 0.8);
+  const planenBg = rgb(0.91, 0.87, 0.96);
+  const textColor = rgb(0.08, 0.14, 0.24);
+  const nowUtc = Date.now();
+
+  let page = pdfDoc.addPage(pageSize);
+  let y = page.getHeight() - margin;
+
+  const drawPageHeader = () => {
+    page.drawText(title, {
+      x: margin,
+      y,
+      size: 13,
+      font: boldFont,
+      color: textColor,
+    });
+    y -= 16;
+    page.drawText(`Sheet LKW | Generated: ${new Date().toISOString()} UTC | User: ${userId}`, {
+      x: margin,
+      y,
+      size: 8,
+      font,
+      color: rgb(0.24, 0.3, 0.4),
+    });
+    y -= 14;
+  };
+
+  const drawHeaderRow = () => {
+    page.drawRectangle({
+      x: tableX,
+      y: y - rowHeight + 2,
+      width: tableWidth,
+      height: rowHeight,
+      color: headerBg,
+      borderColor,
+      borderWidth: 1,
+    });
+
+    let x = tableX;
+    for (const col of columns) {
+      const label = fitTextToWidth(boldFont, col.label, textSize, col.width - 8);
+      const labelWidth = measureTextWidth(boldFont, label, textSize);
+      page.drawText(label, {
+        x: x + ((col.width - labelWidth) / 2),
+        y: y - 9,
+        size: textSize,
+        font: boldFont,
+        color: textColor,
+      });
+      x += col.width;
+      if (x < tableX + tableWidth - 0.5) {
+        page.drawLine({
+          start: { x, y: y - rowHeight + 2 },
+          end: { x, y: y + 2 },
+          thickness: 0.8,
+          color: borderColor,
+        });
+      }
+    }
+    y -= rowHeight;
+  };
+
+  const ensureSpace = (needed) => {
+    if (y - needed >= margin) return;
+    page = pdfDoc.addPage(pageSize);
+    y = page.getHeight() - margin;
+    drawPageHeader();
+    drawHeaderRow();
+  };
+
+  const getRowFill = (row, idx) => {
+    const status = safeText(row?.status, "").trim().toLowerCase();
+    const saleTs = parseDdMmYyyy(row?.datum_verkauft);
+    if (status === "verkauft" && (saleTs === null || saleTs <= nowUtc)) return soldBg;
+    const type = safeText(row?.lkw_typ, "").trim().toLowerCase();
+    if (type === "container") return containerBg;
+    if (type === "planen") return planenBg;
+    return idx % 2 === 1 ? oddBg : null;
+  };
+
+  const drawRow = (row, idx) => {
+    const fill = getRowFill(row, idx);
+    if (fill) {
+      page.drawRectangle({
+        x: tableX,
+        y: y - rowHeight + 2,
+        width: tableWidth,
+        height: rowHeight,
+        color: fill,
+      });
+    }
+
+    let x = tableX;
+    for (const col of columns) {
+      const value = fitTextToWidth(
+        font,
+        formatLkwMasterCell(row?.[col.key], ["km_2025", "km_2026", "wartung_total", "cost_2023", "cost_2024", "cost_2025", "cost_2026"].includes(col.key) ? "numberish" : "text"),
+        textSize,
+        col.width - 8,
+      );
+      const tx = x + ((col.width - measureTextWidth(font, value, textSize)) / 2);
+      page.drawText(value, {
+        x: tx,
+        y: y - 9,
+        size: textSize,
+        font,
+        color: textColor,
+      });
+      x += col.width;
+      if (x < tableX + tableWidth - 0.5) {
+        page.drawLine({
+          start: { x, y: y - rowHeight + 2 },
+          end: { x, y: y + 2 },
+          thickness: 0.5,
+          color: borderColor,
+        });
+      }
+    }
+    page.drawLine({
+      start: { x: tableX, y: y - rowHeight + 2 },
+      end: { x: tableX + tableWidth, y: y - rowHeight + 2 },
+      thickness: 0.5,
+      color: borderColor,
+    });
+    y -= rowHeight;
+  };
+
+  drawPageHeader();
+  drawHeaderRow();
+
+  if (!Array.isArray(rows) || rows.length === 0) {
+    ensureSpace(20);
+    page.drawText("No rows found.", {
+      x: margin,
+      y: y - 10,
+      size: 9,
+      font,
+      color: textColor,
+    });
+  } else {
+    let idx = 0;
+    for (const row of rows) {
+      ensureSpace(rowHeight + 2);
+      drawRow(row, idx);
+      idx += 1;
+    }
+  }
+
+  return pdfDoc.save();
+}
+
 async function fetchImageByUrl(url) {
   if (!url) return null;
   try {
@@ -4142,6 +4429,18 @@ function validateGeneratePayload(body) {
     return { ok: true, reportType, year, month, period, driverQuery };
   }
 
+  if (reportType === "lkw_single") {
+    const lkwId = String(body.lkw_id || "").trim().slice(0, 40);
+    if (!lkwId) {
+      return { ok: false, status: 400, error: "Missing lkw_id" };
+    }
+    return { ok: true, reportType, lkwId };
+  }
+
+  if (reportType === "lkw_all") {
+    return { ok: true, reportType };
+  }
+
   return { ok: true, reportType };
 }
 
@@ -4167,6 +4466,8 @@ async function handleGenerateWithBody(body, env, enforceRateLimit = true) {
     && valid.reportType !== "einnahmen"
     && valid.reportType !== "diesel"
     && valid.reportType !== "bonus"
+    && valid.reportType !== "lkw_single"
+    && valid.reportType !== "lkw_all"
   ) {
     return json(
       {
@@ -4533,6 +4834,82 @@ async function handleGenerateWithBody(body, env, enforceRateLimit = true) {
         pageHeight: 595,
       });
     }
+  } else if (valid.reportType === "lkw_single" || valid.reportType === "lkw_all") {
+    let rows;
+    const filterLkwId = valid.reportType === "lkw_single" ? safeText(valid.lkwId, "").trim() : "";
+    try {
+      const result = await queryNeon(
+        dbConnectionString,
+        LKW_MASTER_SQL,
+        [filterLkwId],
+      );
+      rows = result.rows || [];
+    } catch (err) {
+      return json(
+        {
+          ok: false,
+          error: "Failed to execute SQL query",
+          code: "SQL_ERROR",
+          details: String(err?.message || err || "unknown error"),
+        },
+        500,
+        { "Cache-Control": "no-store" },
+      );
+    }
+
+    filename = valid.reportType === "lkw_single"
+      ? `lkw_${filterLkwId}.pdf`
+      : `lkw_all_${formatUtcDateStamp(new Date())}.pdf`;
+    outputKey = valid.reportType === "lkw_single"
+      ? `lkw_single:${filterLkwId}`
+      : `lkw_all:${formatUtcDateStamp(new Date())}`;
+    try {
+      pdfBytes = await buildLkwMasterPdfWithPdfLib({
+        userId: auth.userId,
+        rows,
+        title: valid.reportType === "lkw_single" ? `LKW ${filterLkwId}` : "LKW All",
+      });
+    } catch (err) {
+      pdfEngine = "legacy-fallback";
+      const lines = [];
+      lines.push("LKW-ID | LKW-Nummer | Marke/Modell | LKW-Typ | Baujahr | Firma | Eigentum | Status | Datum verkauft | Telefonnummer | DKV Card | Shell Card | Tankpool Card | KM 2025 | KM 2026 | Nächste TÜV | Versicherung bis | Gesamtkosten für die Wartung | 2023 | 2024 | 2025 | 2026");
+      lines.push("-".repeat(280));
+      for (const row of rows) {
+        lines.push(
+          [
+            safeText(row.lkw_id, ""),
+            safeText(row.lkw_nummer, ""),
+            safeText(row.marke_modell, ""),
+            safeText(row.lkw_typ, ""),
+            safeText(row.baujahr, ""),
+            safeText(row.firma, ""),
+            safeText(row.eigentum, ""),
+            safeText(row.status, ""),
+            safeText(row.datum_verkauft, ""),
+            safeText(row.telefonnummer, ""),
+            safeText(row.dkv_card, ""),
+            safeText(row.shell_card, ""),
+            safeText(row.tankpool_card, ""),
+            formatLkwMasterCell(row.km_2025, "numberish"),
+            formatLkwMasterCell(row.km_2026, "numberish"),
+            safeText(row.naechste_tuev, ""),
+            safeText(row.versicherung_bis, ""),
+            formatLkwMasterCell(row.wartung_total, "numberish"),
+            formatLkwMasterCell(row.cost_2023, "numberish"),
+            formatLkwMasterCell(row.cost_2024, "numberish"),
+            formatLkwMasterCell(row.cost_2025, "numberish"),
+            formatLkwMasterCell(row.cost_2026, "numberish"),
+          ].join(" | "),
+        );
+      }
+      pdfBytes = buildSimplePdf({
+        title: valid.reportType === "lkw_single" ? `LKW ${filterLkwId}` : "LKW All",
+        subtitle: `Generated at ${new Date().toISOString()} UTC, user ${auth.userId}`,
+        lines,
+        pageWidth: 1190,
+        pageHeight: 595,
+      });
+    }
   } else {
     let rows;
     const driverQuery = safeText(valid.driverQuery, "").trim();
@@ -4639,6 +5016,9 @@ async function handleGenerateWithBody(body, env, enforceRateLimit = true) {
       reportParams.driver_query = safeText(valid.driverQuery, "").trim();
     }
   }
+  if ("lkwId" in valid) {
+    reportParams.lkw_id = valid.lkwId;
+  }
   try {
     await writeReportLog(dbConnectionString, {
       userId: auth.userId,
@@ -4682,6 +5062,7 @@ async function handleGenerateGet(request, env) {
     week: url.searchParams.get("week"),
     month: url.searchParams.get("month"),
     period: url.searchParams.get("period") || "",
+    lkw_id: url.searchParams.get("lkw_id") || "",
     driver_query: url.searchParams.get("driver_query") || "",
     disposition: url.searchParams.get("disposition") || "",
   };
@@ -4756,6 +5137,28 @@ async function buildMetaWithAccess(request, env) {
         source_name: newest?.source_name || null,
         sources: sourceMap,
       };
+
+      try {
+        const trucksResult = await queryNeon(
+          dbConnectionString,
+          `
+            SELECT
+              external_id AS lkw_id,
+              COALESCE(NULLIF(plate_number, ''), NULLIF(raw_payload->>'LKW-Nummer', ''), NULLIF(raw_payload->>'Number', '')) AS lkw_nummer
+            FROM trucks
+            ORDER BY external_id
+          `,
+          [],
+        );
+        meta.lookups = meta.lookups || {};
+        meta.lookups.lkw_vehicles = (trucksResult.rows || []).map((row) => ({
+          lkw_id: safeText(row.lkw_id, ""),
+          lkw_nummer: safeText(row.lkw_nummer, ""),
+          label: [safeText(row.lkw_id, ""), safeText(row.lkw_nummer, "")].filter(Boolean).join(" - "),
+        })).filter((row) => row.lkw_id);
+      } catch {
+        // Optional lookup only.
+      }
     } catch {
       // Keep safe fallback metadata from env.
     }

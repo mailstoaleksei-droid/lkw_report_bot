@@ -1817,7 +1817,7 @@
         
         // Sheet headers
         hintContainer: "Select year and week for Bericht report",
-        hintLkw: "Choose truck and report type",
+        hintLkw: "Generate LKW master report for one selected truck or for all LKW",
         hintFahrer: "Driver information and vacation data",
         hintYf: "Vehicle mileage and fuel consumption",
         hintEinnahmen: "Total revenue report for all operations",
@@ -1911,7 +1911,7 @@
         
         // Sheet headers
         hintContainer: "Выберите год и неделю для отчета Bericht",
-        hintLkw: "Выберите грузовик и тип отчета",
+        hintLkw: "Сформируйте мастер-отчет LKW для одной выбранной машины или для всех LKW",
         hintFahrer: "Информация о водителях и отпусках",
         hintYf: "Пробег и расход топлива транспорта",
         hintEinnahmen: "Отчет по общей выручке",
@@ -2046,6 +2046,9 @@
       if (payload && payload.week !== undefined) u.searchParams.set("week", String(payload.week));
       if (payload && payload.month !== undefined) u.searchParams.set("month", String(payload.month));
       if (payload && payload.period !== undefined) u.searchParams.set("period", String(payload.period));
+      if (payload && payload.lkw_id !== undefined && String(payload.lkw_id).trim()) {
+        u.searchParams.set("lkw_id", String(payload.lkw_id).trim());
+      }
       if (payload && payload.driver_query !== undefined && String(payload.driver_query).trim()) {
         u.searchParams.set("driver_query", String(payload.driver_query).trim());
       }
@@ -2824,88 +2827,63 @@
     }
 
     function openLkw() {
-      let active = "mileage";
-      const tabs = [
-        { key:"mileage", label: L("tabMileage") },
-        { key:"repair", label: L("tabRepair") },
-      ];
+      setSheetHeader("LKW", L("hintLkw"), "PDF");
+      setSegments([], "", () => {});
+      setForm(`
+        <div class="field">
+          <label>1 LKW</label>
+          <select id="lkwSingleVehicle"><option value="">${L("loadingHistory")}</option></select>
+          <div class="note-actions">
+            <button type="button" class="btn btn-primary" id="lkwSingleRun">${L("generate")}</button>
+          </div>
+        </div>
+        <div class="field">
+          <label>Alle LKW</label>
+          <div class="note">${L("hintLkw")}</div>
+          <div class="note-actions">
+            <button type="button" class="btn btn-primary" id="lkwAllRun">${L("generate")}</button>
+          </div>
+        </div>
+      `);
+      setNote("");
 
-      const render = () => {
-        setSheetHeader("LKW", L("hintLkw"), "Params");
-        setSegments(tabs, active, (k) => { active = k; render(); });
+      const footer = $("btnPrimary")?.parentElement;
+      if (footer) footer.style.display = "none";
+      if ($("btnPrimary")) $("btnPrimary").style.display = "none";
 
-        if (active === "mileage") {
-          setForm(`
-            <div class="field">
-              <label>${L("vehicle")}</label>
-              <select id="lkwVehicle">${optionsFrom(DEMO_VEHICLES, L("choose"))}</select>
-            </div>
-            <div class="field">
-              <label>${L("period")}</label>
-              <select id="lkwPeriod">
-                <option value="year">${L("year")}</option>
-                <option value="all">${L("allTime")}</option>
-              </select>
-            </div>
-            <div class="field" id="lkwYearBox">
-              <label>${L("year")}</label>
-              <select id="lkwYear">${buildYearOptions(2018)}</select>
-            </div>
-          `);
-          setNote("");
-
-          const period = $("lkwPeriod");
-          const yearBox = $("lkwYearBox");
-          period.onchange = () => {
-            yearBox.style.display = (period.value === "year") ? "block" : "none";
-          };
-
-          $("btnPrimary").textContent = L("generate");
-          $("btnPrimary").onclick = () => {
-            const v = $("lkwVehicle").value;
-            const p = $("lkwPeriod").value;
-            const y = (p === "year") ? Number($("lkwYear").value) : null;
-            if (!v) return haptic("error");
-            sendToBot({ action:"report", report:"lkw_mileage", vehicle:v, period:p, year:y });
-          };
-        } else {
-          setForm(`
-            <div class="field">
-              <label>${L("vehicle")}</label>
-              <select id="repVehicle">${optionsFrom(DEMO_VEHICLES, L("choose"))}</select>
-            </div>
-            <div class="field">
-              <label>${L("period")}</label>
-              <select id="repPeriod">
-                <option value="year">${L("year")}</option>
-                <option value="all">${L("allTime")}</option>
-              </select>
-            </div>
-            <div class="field" id="repYearBox">
-              <label>${L("year")}</label>
-              <select id="repYear">${buildYearOptions(2018)}</select>
-            </div>
-          `);
-          setNote("");
-
-          const period = $("repPeriod");
-          const yearBox = $("repYearBox");
-          period.onchange = () => {
-            yearBox.style.display = (period.value === "year") ? "block" : "none";
-          };
-
-          $("btnPrimary").textContent = L("generate");
-          $("btnPrimary").onclick = () => {
-            const v = $("repVehicle").value;
-            const p = $("repPeriod").value;
-            const y = (p === "year") ? Number($("repYear").value) : null;
-            if (!v) return haptic("error");
-            sendToBot({ action:"report", report:"lkw_repair", vehicle:v, period:p, year:y });
-          };
+      const loadLkwOptions = async () => {
+        try {
+          const meta = await fetchMetaServer();
+          const items = Array.isArray(meta?.lookups?.lkw_vehicles) ? meta.lookups.lkw_vehicles : [];
+          const select = $("lkwSingleVehicle");
+          if (select) {
+            const opts = [`<option value="">${L("choose")}</option>`]
+              .concat(items.map((item) => `<option value="${escapeHtml(item.lkw_id)}">${escapeHtml(item.label || item.lkw_id)}</option>`));
+            select.innerHTML = opts.join("");
+          }
+        } catch (err) {
+          const select = $("lkwSingleVehicle");
+          if (select) {
+            select.innerHTML = `<option value="">${escapeHtml(err?.message || "Failed to load LKW list")}</option>`;
+          }
         }
       };
 
-      render();
+      $("lkwSingleRun").onclick = async () => {
+        const lkwId = String($("lkwSingleVehicle")?.value || "").trim();
+        if (!lkwId) {
+          haptic("error");
+          showToast(L("choose"));
+          return;
+        }
+        await sendReportGenerate("lkw_single", { lkw_id: lkwId });
+      };
+
+      $("lkwAllRun").onclick = async () => {
+        await sendReportGenerate("lkw_all", {});
+      };
+
+      loadLkwOptions();
       openSheet();
     }
 
