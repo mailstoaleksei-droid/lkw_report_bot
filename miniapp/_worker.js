@@ -2359,7 +2359,7 @@ async function buildEinnahmenPdfWithPdfLib({ userId, rows }) {
 
   const maxVal = Math.max(1, ...matrixRows.map((row) => toNumberSafe(row?.gesamt, 0)));
   const groupWidth = plotWidth / matrixRows.length;
-  const barWidth = Math.max(12, Math.min(28, groupWidth * 0.52));
+  const barWidth = Math.max(20, Math.min(52, groupWidth * 0.82));
 
   for (let i = 0; i < matrixRows.length; i += 1) {
     const row = matrixRows[i];
@@ -2398,29 +2398,36 @@ async function buildEinnahmenPdfWithPdfLib({ userId, rows }) {
           : trend < 0
             ? regressColor
             : rgb(0.96, 0.98, 1);
-      const valueSize = Math.max(6.8, Math.min(8.6, groupWidth * 0.15));
-      const pctSize = Math.max(5.8, Math.min(7.2, groupWidth * 0.11));
-      const valueWidth = measureTextWidth(boldFont, valueLabel, valueSize);
-      const trendWidth = trendLabel ? measureTextWidth(boldFont, trendLabel, pctSize) : 0;
-      const totalWidth = valueWidth + trendWidth;
-      const labelX = centerX - (totalWidth / 2);
-      const labelY = barHeight >= 18 ? baselineY + 6 : baselineY + barHeight + 4;
-      const valueColor = barHeight >= 18 ? rgb(0.97, 0.985, 1) : textColor;
+      const valueSize = Math.max(6.2, Math.min(7.6, groupWidth * 0.13));
+      const pctSize = Math.max(5.2, Math.min(6.4, groupWidth * 0.1));
+      const labelMaxWidth = Math.max(24, barWidth - 6);
+      const fittedValueLabel = fitTextToWidth(boldFont, valueLabel, valueSize, labelMaxWidth);
+      const fittedTrendLabel = trendLabel
+        ? fitTextToWidth(boldFont, trendLabel, pctSize, labelMaxWidth)
+        : "";
+      const valueWidth = measureTextWidth(boldFont, fittedValueLabel, valueSize);
+      const trendWidth = fittedTrendLabel ? measureTextWidth(boldFont, fittedTrendLabel, pctSize) : 0;
+      const insideBar = barHeight >= 28;
+      const valueColor = insideBar ? rgb(0.97, 0.985, 1) : textColor;
+      const trendInk = insideBar && trend === null ? rgb(0.97, 0.985, 1) : trendColor;
+      const baseLabelY = insideBar ? baselineY + 6 : baselineY + barHeight + 6;
+      const trendY = baseLabelY;
+      const valueY = trendLabel ? trendY + pctSize + 2 : baseLabelY + 1;
 
-      page.drawText(valueLabel, {
-        x: labelX,
-        y: labelY,
+      page.drawText(fittedValueLabel, {
+        x: centerX - (valueWidth / 2),
+        y: valueY,
         size: valueSize,
         font: boldFont,
         color: valueColor,
       });
-      if (trendLabel) {
-        page.drawText(trendLabel, {
-          x: labelX + valueWidth,
-          y: labelY + Math.max(0, (valueSize - pctSize) * 0.2),
+      if (fittedTrendLabel) {
+        page.drawText(fittedTrendLabel, {
+          x: centerX - (trendWidth / 2),
+          y: trendY,
           size: pctSize,
           font: boldFont,
-          color: trendColor,
+          color: trendInk,
         });
       }
     }
