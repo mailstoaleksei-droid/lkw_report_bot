@@ -643,30 +643,11 @@ def extract_diesel_months(wb) -> list[DieselMonthRow]:
     if any(col is None for col in required_cols):
         return []
 
-    metric_cols = [
-        col_liter_staack,
-        col_liter_shell,
-        col_liter_dkv,
-        col_liter_total,
-        col_euro_staack,
-        col_euro_shell,
-        col_euro_dkv,
-        col_euro_total,
-        col_eurpl_staack,
-        col_eurpl_shell,
-        col_eurpl_dkv,
-        col_eurpl_avg,
-    ]
-
     rows: list[DieselMonthRow] = []
     for row_idx in range(3, max_row + 1):
         month_index = _parse_int_like(ws.cell(row=row_idx, column=col_month).value)
         report_year = _parse_int_like(ws.cell(row=row_idx, column=col_year).value)
         if not month_index or not report_year or month_index < 1 or month_index > 12:
-            continue
-
-        has_any_metric = any(_clean_text(ws.cell(row=row_idx, column=col_idx).value) is not None for col_idx in metric_cols)
-        if not has_any_metric:
             continue
 
         raw_payload = {"sheet": DIESEL_SHEET, "row": row_idx}

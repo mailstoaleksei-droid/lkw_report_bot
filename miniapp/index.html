@@ -1812,7 +1812,7 @@
         descFahrer: "Driver data and vacation",
         descYf: "Mileage and fuel reports",
         descEinnahmen: "Total revenue overview",
-        descDiesel: "Fuel costs and EUR/L overview",
+        descDiesel: "Two-page source sheet diesel snapshot",
         descBonus: "Bonus calculations",
         
         // Sheet headers
@@ -1821,7 +1821,7 @@
         hintFahrer: "Driver information and vacation data",
         hintYf: "Vehicle mileage and fuel consumption",
         hintEinnahmen: "Total revenue report for all operations",
-        hintDiesel: "Select year for monthly diesel report",
+        hintDiesel: "Generate 2-page Diesel PDF from sheet ranges",
         hintBonus: "Select year/month and optional Fahrer filter",
         hintDataPlan: "Select process, year and week for Data/Plan report",
         hintDataPlanPlan: "Plan: selected week + 3 weeks",
@@ -1905,7 +1905,7 @@
         descFahrer: "Данные водителей и отпуска",
         descYf: "Пробег и расход топлива",
         descEinnahmen: "Общая выручка",
-        descDiesel: "Топливо, расходы и EUR/L",
+        descDiesel: "Двухстраничный снимок Diesel из листа",
         descBonus: "Расчет бонусов",
         
         // Sheet headers
@@ -1914,7 +1914,7 @@
         hintFahrer: "Информация о водителях и отпусках",
         hintYf: "Пробег и расход топлива транспорта",
         hintEinnahmen: "Отчет по общей выручке",
-        hintDiesel: "Выберите год для отчета по дизелю",
+        hintDiesel: "Сформировать 2-страничный Diesel PDF по диапазонам листа",
         hintBonus: "Выберите год/месяц и при необходимости фильтр Fahrer",
         hintDataPlan: "Выберите процесс, год и неделю для отчета Data/Plan",
         hintDataPlanPlan: "Plan: выбранная неделя + 3 недели",
@@ -2088,13 +2088,7 @@
         return buildGenerateDirectUrl("einnahmen", {}, initData || "", disposition);
       }
       if (type === "diesel") {
-        const params = item?.params || {};
-        return buildGenerateDirectUrl(
-          "diesel",
-          { year: Number(params.year || 0) },
-          initData || "",
-          disposition,
-        );
+        return buildGenerateDirectUrl("diesel", {}, initData || "", disposition);
       }
       if (type === "bonus") {
         const params = item?.params || {};
@@ -3002,29 +2996,14 @@
     }
 
     function openDiesel() {
-      setSheetHeader("Diesel", L("hintDiesel"), "Params");
+      setSheetHeader("Diesel", L("hintDiesel"), "Quick");
       setSegments([], "", () => {});
-      setForm(`
-        <div class="field">
-          <label>${L("year")}</label>
-          <select id="dieselYear">${buildYearOptions(2025, 2035)}</select>
-        </div>
-      `);
+      setForm(`<div class="note">${L("hintDiesel")}</div>`);
       setNote(L("hintDiesel"));
-
-      const now = new Date();
-      const yEl = $("dieselYear");
-      if (yEl) yEl.value = String(now.getFullYear());
 
       $("btnPrimary").textContent = L("generate");
       $("btnPrimary").onclick = async () => {
-        const year = Number($("dieselYear")?.value);
-        if (!Number.isFinite(year) || year < 2025 || year > 2035) {
-          haptic("error");
-          showToast(L("invalidYear"));
-          return;
-        }
-        await sendReportGenerate("diesel", { year });
+        await sendReportGenerate("diesel", {});
       };
 
       openSheet();
