@@ -2230,8 +2230,9 @@ async function buildEinnahmenPdfWithPdfLib({ userId, rows }) {
 
     let x = tableX;
     for (const col of columns) {
+      const labelWidth = measureTextWidth(boldFont, col.label, textSize);
       page.drawText(col.label, {
-        x: x + 4,
+        x: x + ((col.width - labelWidth) / 2),
         y: y - 9,
         size: textSize,
         font: boldFont,
@@ -2280,10 +2281,7 @@ async function buildEinnahmenPdfWithPdfLib({ userId, rows }) {
     for (let i = 0; i < columns.length; i += 1) {
       const col = columns[i];
       const value = fitTextToWidth(font, values[i], textSize, col.width - 8);
-      const isNumeric = i > 0;
-      const tx = isNumeric
-        ? x + col.width - 4 - measureTextWidth(font, value, textSize)
-        : x + 4;
+      const tx = x + ((col.width - measureTextWidth(font, value, textSize)) / 2);
       page.drawText(value, {
         x: tx,
         y: y - 9,
@@ -2337,16 +2335,16 @@ async function buildEinnahmenPdfWithPdfLib({ userId, rows }) {
   const chartX = margin;
   const chartY = y - chartHeight;
   const chartWidth = tableWidth;
-  const plotPadTop = 26;
+  const plotPadTop = 12;
   const plotPadBottom = 34;
-  const plotPadLeft = 38;
+  const plotPadLeft = 16;
   const plotPadRight = 16;
   const plotHeight = chartHeight - plotPadTop - plotPadBottom;
   const plotWidth = chartWidth - plotPadLeft - plotPadRight;
   const baselineY = chartY + plotPadBottom;
   const plotX = chartX + plotPadLeft;
-  const progressColor = rgb(0.08, 0.62, 0.2);
-  const regressColor = rgb(0.84, 0.2, 0.16);
+  const progressColor = rgb(0.18, 0.72, 0.28);
+  const regressColor = rgb(0.88, 0.24, 0.2);
   const barColor = rgb(0.3, 0.56, 0.84);
 
   page.drawRectangle({
@@ -2358,37 +2356,10 @@ async function buildEinnahmenPdfWithPdfLib({ userId, rows }) {
     borderWidth: 1,
     color: rgb(0.99, 0.995, 1),
   });
-  page.drawText("Einnahmen Gesamt", {
-    x: chartX + 8,
-    y: chartY + chartHeight - 12,
-    size: 9,
-    font: boldFont,
-    color: textColor,
-  });
 
   const maxVal = Math.max(1, ...matrixRows.map((row) => toNumberSafe(row?.gesamt, 0)));
-  const gridSteps = 4;
-  for (let g = 0; g <= gridSteps; g += 1) {
-    const ratio = g / gridSteps;
-    const gy = baselineY + (plotHeight * ratio);
-    page.drawLine({
-      start: { x: plotX, y: gy },
-      end: { x: plotX + plotWidth, y: gy },
-      thickness: 0.35,
-      color: rgb(0.86, 0.9, 0.95),
-    });
-    const val = formatMoney((maxVal * ratio).toFixed(2));
-    page.drawText(val, {
-      x: chartX + 2,
-      y: gy + 1,
-      size: 6,
-      font,
-      color: rgb(0.4, 0.46, 0.56),
-    });
-  }
-
   const groupWidth = plotWidth / matrixRows.length;
-  const barWidth = Math.max(10, Math.min(24, groupWidth * 0.48));
+  const barWidth = Math.max(12, Math.min(28, groupWidth * 0.52));
 
   for (let i = 0; i < matrixRows.length; i += 1) {
     const row = matrixRows[i];
@@ -2415,64 +2386,45 @@ async function buildEinnahmenPdfWithPdfLib({ userId, rows }) {
 
     if (hasValueData(value)) {
       const valueLabel = formatMoneyInt(value);
-      if (barHeight >= 18) {
-        const innerLabelX = barX + Math.max(1.5, (barWidth * 0.5) - 2.5);
-        const innerLabelY = baselineY + 2;
-        page.drawText(valueLabel, {
-          x: innerLabelX,
-          y: innerLabelY,
-          size: 6,
-          font,
-          color: rgb(0.96, 0.98, 1),
-          rotate: degrees(90),
-        });
-      } else {
-        const vWidth = measureTextWidth(font, valueLabel, 6);
-        page.drawText(valueLabel, {
-          x: centerX - (vWidth / 2),
-          y: baselineY + barHeight + 2,
-          size: 6,
-          font,
-          color: textColor,
-        });
-      }
-    }
+      const prevValue = i > 0 ? toNumberSafe(matrixRows[i - 1]?.gesamt, 0) : 0;
+      const trend = i > 0 ? calcMonthTrendPct(value, prevValue) : null;
+      const trendLabel = trend === null
+        ? ""
+        : `; ${trend >= 0 ? "+" : ""}${trend.toFixed(1)}%`;
+      const trendColor = trend === null
+        ? rgb(0.96, 0.98, 1)
+        : trend > 0
+          ? progressColor
+          : trend < 0
+            ? regressColor
+            : rgb(0.96, 0.98, 1);
+      const valueSize = Math.max(6.8, Math.min(8.6, groupWidth * 0.15));
+      const pctSize = Math.max(5.8, Math.min(7.2, groupWidth * 0.11));
+      const valueWidth = measureTextWidth(boldFont, valueLabel, valueSize);
+      const trendWidth = trendLabel ? measureTextWidth(boldFont, trendLabel, pctSize) : 0;
+      const totalWidth = valueWidth + trendWidth;
+      const labelX = centerX - (totalWidth / 2);
+      const labelY = barHeight >= 18 ? baselineY + 6 : baselineY + barHeight + 4;
+      const valueColor = barHeight >= 18 ? rgb(0.97, 0.985, 1) : textColor;
 
-    if (i > 0) {
-      const prevValue = toNumberSafe(matrixRows[i - 1]?.gesamt, 0);
-      if (hasValueData(value) && hasValueData(prevValue)) {
-        const trend = calcMonthTrendPct(value, prevValue);
-        if (trend === null) continue;
-        const isUp = trend >= 0;
-        const trendColor = isUp ? progressColor : regressColor;
-        const trendLabel = `${trend >= 0 ? "+" : ""}${trend.toFixed(1)}%`;
-        const trendY = chartY + chartHeight - 26 - ((i % 2) * 10);
-        const trendTextX = centerX - (measureTextWidth(font, trendLabel, 6) / 2);
-        drawTrendArrow({
-          page,
-          x: trendTextX - 5,
-          y: trendY - 1,
-          isUp,
-          color: trendColor,
-        });
+      page.drawText(valueLabel, {
+        x: labelX,
+        y: labelY,
+        size: valueSize,
+        font: boldFont,
+        color: valueColor,
+      });
+      if (trendLabel) {
         page.drawText(trendLabel, {
-          x: trendTextX,
-          y: trendY,
-          size: 6,
-          font,
+          x: labelX + valueWidth,
+          y: labelY + Math.max(0, (valueSize - pctSize) * 0.2),
+          size: pctSize,
+          font: boldFont,
           color: trendColor,
         });
       }
     }
   }
-
-  page.drawText("Legend: Gesamt (blue), progress (green up), regress (red down)", {
-    x: chartX + 8,
-    y: chartY + chartHeight - 23,
-    size: 6,
-    font,
-    color: rgb(0.35, 0.42, 0.52),
-  });
 
   return pdfDoc.save();
 }
