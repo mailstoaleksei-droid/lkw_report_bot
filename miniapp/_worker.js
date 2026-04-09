@@ -2716,16 +2716,17 @@ async function buildDieselPdfWithPdfLib({ userId, rows }) {
       for (let i = 0; i < widths.length; i += 1) {
         const value = getDieselRawCell(payload, spec.sourceCols[i]);
         const rendered = formatDieselSnapshotCell(value, spec.kinds[i]);
-        const fitted = fitTextToWidth(font, rendered, 7, widths[i] - 4);
-        const isNumeric = ["int", "decimal2", "percent1", "percent2", "signed2", "month", "year"].includes(spec.kinds[i]);
-        const tx = isNumeric
-          ? x + widths[i] - 2 - measureTextWidth(font, fitted, 7)
-          : x + 2;
+        const emphasizedHeader = safeText(spec.subHeaders[i], "").trim();
+        const isEmphasized = emphasizedHeader === "Km" || emphasizedHeader === "Total" || emphasizedHeader === "Average";
+        const cellFont = isEmphasized ? boldFont : font;
+        const cellSize = isEmphasized ? 9 : 7;
+        const fitted = fitTextToWidth(cellFont, rendered, cellSize, widths[i] - 4);
+        const tx = x + ((widths[i] - measureTextWidth(cellFont, fitted, cellSize)) / 2);
         page.drawText(fitted, {
           x: tx,
-          y: y - 10,
-          size: 7,
-          font,
+          y: y - (isEmphasized ? 11 : 10),
+          size: cellSize,
+          font: cellFont,
           color: textColor,
         });
         page.drawRectangle({
