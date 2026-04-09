@@ -2809,6 +2809,12 @@
       $("noteArea").innerHTML = text ? `<div class="note">${text}</div>` : "";
     }
 
+    function hideSheetFooter() {
+      const footer = $("btnPrimary")?.parentElement;
+      if (footer) footer.style.display = "none";
+      if ($("btnPrimary")) $("btnPrimary").style.display = "none";
+    }
+
     function optionsFrom(arr, placeholder) {
       return `<option value="">${placeholder}</option>` + 
         arr.map(v => `<option value="${v}">${v}</option>`).join("");
@@ -2833,6 +2839,7 @@
     // === REPORT HANDLERS ===
     function openContainer() {
       setSheetHeader("Bericht", L("hintContainer"), "Bericht");
+      setSheetCloseAction("back", closeSheet);
       setSegments([], "", () => {});
 
       setForm(`
@@ -2874,22 +2881,40 @@
 
     function openDataPlan() {
       const now = new Date();
-      let active = "plan";
       let selectedYear = Math.max(2025, Math.min(2030, getISOYear(now)));
       let selectedWeek = getISOWeek(now);
-      const tabs = [
-        { key: "plan", label: L("processPlan") },
-        { key: "data", label: L("processData") },
-      ];
 
-      const render = () => {
-        const isPlan = active === "plan";
-        setSheetHeader(
-          "Data/Plan",
-          isPlan ? L("hintDataPlanPlan") : L("hintDataPlanData"),
-          isPlan ? L("processPlan") : L("processData"),
-        );
-        setSegments(tabs, active, (k) => { active = k; render(); });
+      const renderMenu = () => {
+        setSheetHeader("Data/Plan", L("hintDataPlan"), "PDF");
+        setSheetCloseAction("back", closeSheet);
+        setSegments([], "", () => {});
+        setForm(`
+          <div class="field">
+            <label>Choose report</label>
+            <div class="note">${L("hintDataPlanPlan")}</div>
+            <div class="note-actions">
+              <button type="button" class="btn btn-primary" id="dataPlanChoosePlan">${L("processPlan")}</button>
+            </div>
+          </div>
+          <div class="field">
+            <label>Choose report</label>
+            <div class="note">${L("hintDataPlanData")}</div>
+            <div class="note-actions">
+              <button type="button" class="btn btn-primary" id="dataPlanChooseData">${L("processData")}</button>
+            </div>
+          </div>
+        `);
+        setNote("");
+        hideSheetFooter();
+        $("dataPlanChoosePlan").onclick = () => renderParams("plan");
+        $("dataPlanChooseData").onclick = () => renderParams("data");
+      };
+
+      const renderParams = (kind) => {
+        const isPlan = kind === "plan";
+        setSheetHeader("Data/Plan", isPlan ? L("hintDataPlanPlan") : L("hintDataPlanData"), "PDF");
+        setSheetCloseAction("back", renderMenu);
+        setSegments([], "", () => {});
         setForm(`
           <div class="field">
             <label>${L("year")}</label>
@@ -2898,9 +2923,13 @@
           <div class="field">
             <label>${L("week")}</label>
             <select id="planReportWeek">${buildWeekOptions()}</select>
+            <div class="note-actions" style="margin-top:12px;">
+              <button type="button" class="btn btn-primary" id="dataPlanRun">${L("generate")}</button>
+            </div>
           </div>
         `);
-        setNote(L("hintDataPlan"));
+        setNote(isPlan ? L("hintDataPlanPlan") : L("hintDataPlanData"));
+        hideSheetFooter();
 
         const yearEl = $("planReportYear");
         const weekEl = $("planReportWeek");
@@ -2919,8 +2948,7 @@
           };
         }
 
-        $("btnPrimary").textContent = L("generate");
-        $("btnPrimary").onclick = async () => {
+        $("dataPlanRun").onclick = async () => {
           const year = Number($("planReportYear")?.value ?? selectedYear);
           const week = Number($("planReportWeek")?.value ?? selectedWeek);
           if (!Number.isFinite(year) || !Number.isFinite(week) || year < 2025 || year > 2030 || week < 1 || week > 53) {
@@ -2928,56 +2956,90 @@
             showToast("Invalid year/week");
             return;
           }
-          const reportType = active === "plan" ? "data_plan" : "data_data";
+          const reportType = isPlan ? "data_plan" : "data_data";
           await sendReportGenerate(reportType, { year, week });
         };
       };
 
-      render();
-
+      renderMenu();
       openSheet();
     }
 
     function openLkw() {
-      setSheetHeader("LKW", L("hintLkw"), "PDF");
-      setSegments([], "", () => {});
-      setForm(`
-        <div class="field">
-          <label>1 LKW</label>
-          <select id="lkwSingleVehicle"><option value="">${L("loadingHistory")}</option></select>
-          <div class="note-actions">
-            <button type="button" class="btn btn-primary" id="lkwSingleRun">${L("generate")}</button>
+      const renderMenu = () => {
+        setSheetHeader("LKW", L("hintLkw"), "PDF");
+        setSheetCloseAction("back", closeSheet);
+        setSegments([], "", () => {});
+        setForm(`
+          <div class="field">
+            <label>Choose report</label>
+            <div class="note">Generate PDF for one selected LKW</div>
+            <div class="note-actions">
+              <button type="button" class="btn btn-primary" id="lkwChooseSingle">1 LKW</button>
+            </div>
           </div>
-        </div>
-        <div class="field">
-          <label>Alle LKW</label>
-          <div class="note">${L("hintLkw")}</div>
-          <div class="note-actions">
-            <button type="button" class="btn btn-primary" id="lkwAllRun">${L("generate")}</button>
+          <div class="field">
+            <label>Choose report</label>
+            <div class="note">${L("hintLkw")}</div>
+            <div class="note-actions">
+              <button type="button" class="btn btn-primary" id="lkwChooseAll">Alle LKW</button>
+            </div>
           </div>
-        </div>
-      `);
-      setNote("");
-
-      const footer = $("btnPrimary")?.parentElement;
-      if (footer) footer.style.display = "none";
-      if ($("btnPrimary")) $("btnPrimary").style.display = "none";
-
-      $("lkwSingleRun").onclick = async () => {
-        const lkwId = String($("lkwSingleVehicle")?.value || "").trim();
-        if (!lkwId) {
-          haptic("error");
-          showToast(L("choose"));
-          return;
-        }
-        await sendReportGenerate("lkw_single", { lkw_id: lkwId });
+        `);
+        setNote("");
+        hideSheetFooter();
+        $("lkwChooseSingle").onclick = () => renderSingle();
+        $("lkwChooseAll").onclick = () => renderAll();
       };
 
-      $("lkwAllRun").onclick = async () => {
-        await sendReportGenerate("lkw_all", {});
+      const renderSingle = async () => {
+        setSheetHeader("LKW", "Generate PDF for one selected LKW", "PDF");
+        setSheetCloseAction("back", renderMenu);
+        setSegments([], "", () => {});
+        setForm(`
+          <div class="field">
+            <label>1 LKW</label>
+            <select id="lkwSingleVehicle"><option value="">${L("loadingHistory")}</option></select>
+            <div class="note-actions">
+              <button type="button" class="btn btn-primary" id="lkwSingleRun">${L("generate")}</button>
+            </div>
+          </div>
+        `);
+        setNote("");
+        hideSheetFooter();
+        await populateLkwVehicleSelect("lkwSingleVehicle");
+        $("lkwSingleRun").onclick = async () => {
+          const lkwId = String($("lkwSingleVehicle")?.value || "").trim();
+          if (!lkwId) {
+            haptic("error");
+            showToast(L("choose"));
+            return;
+          }
+          await sendReportGenerate("lkw_single", { lkw_id: lkwId });
+        };
       };
 
-      populateLkwVehicleSelect("lkwSingleVehicle");
+      const renderAll = () => {
+        setSheetHeader("LKW", L("hintLkw"), "PDF");
+        setSheetCloseAction("back", renderMenu);
+        setSegments([], "", () => {});
+        setForm(`
+          <div class="field">
+            <label>Alle LKW</label>
+            <div class="note">${L("hintLkw")}</div>
+            <div class="note-actions">
+              <button type="button" class="btn btn-primary" id="lkwAllRun">${L("generate")}</button>
+            </div>
+          </div>
+        `);
+        setNote("");
+        hideSheetFooter();
+        $("lkwAllRun").onclick = async () => {
+          await sendReportGenerate("lkw_all", {});
+        };
+      };
+
+      renderMenu();
       openSheet();
     }
 
@@ -2990,6 +3052,7 @@
 
       const render = () => {
         setSheetHeader("Fahrer", L("hintFahrer"), "Params");
+        setSheetCloseAction("back", closeSheet);
         setSegments(tabs, active, (k) => { active = k; render(); });
 
         setForm(`
@@ -3017,12 +3080,6 @@
     }
 
     function openYf() {
-      const footer = $("btnPrimary")?.parentElement;
-      const hideFooter = () => {
-        if (footer) footer.style.display = "none";
-        if ($("btnPrimary")) $("btnPrimary").style.display = "none";
-      };
-
       const renderYfMenu = () => {
         setSheetHeader("Yellow Fox", L("hintYfMenu"), "PDF");
         setSegments([], "", () => {});
@@ -3044,7 +3101,7 @@
           </div>
         `);
         setNote("");
-        hideFooter();
+        hideSheetFooter();
         $("yfChooseDriverMonth").onclick = () => renderYfDriverMonth();
         $("yfChooseLkwWeek").onclick = () => renderYfLkwWeek();
       };
@@ -3068,7 +3125,7 @@
           </div>
         `);
         setNote("");
-        hideFooter();
+        hideSheetFooter();
 
         const now = new Date();
         if ($("yfDriverMonth")) $("yfDriverMonth").value = String(now.getMonth() + 1);
@@ -3109,7 +3166,7 @@
           </div>
         `);
         setNote("");
-        hideFooter();
+        hideSheetFooter();
 
         const now = new Date();
         if ($("yfLkwYear")) $("yfLkwYear").value = String(now.getFullYear());
@@ -3135,6 +3192,7 @@
 
     function openEinnahmen() {
       setSheetHeader("Einnahmen", L("hintEinnahmen"), "Quick");
+      setSheetCloseAction("back", closeSheet);
       setSegments([], "", () => {});
       setForm(`<div class="note">${L("hintEinnahmen")}</div>`);
       setNote("");
@@ -3146,126 +3204,196 @@
     }
 
     function openDiesel() {
-      setSheetHeader("Diesel", L("hintDiesel"), "PDF");
-      setSegments([], "", () => {});
-      setForm(`
-        <div class="field">
-          <label>Diesel PDF</label>
-          <div class="note">${L("hintDiesel")}</div>
-          <div class="note-actions">
-            <button type="button" class="btn btn-primary" id="dieselSnapshotRun">${L("generate")}</button>
+      const renderMenu = () => {
+        setSheetHeader("Diesel", L("hintDiesel"), "PDF");
+        setSheetCloseAction("back", closeSheet);
+        setSegments([], "", () => {});
+        setForm(`
+          <div class="field">
+            <label>Choose report</label>
+            <div class="note">${L("hintDiesel")}</div>
+            <div class="note-actions">
+              <button type="button" class="btn btn-primary" id="dieselChooseSnapshot">Diesel PDF</button>
+            </div>
           </div>
-        </div>
-        <div class="field">
-          <label>LKW Karte</label>
-          <select id="dieselCardVehicle"><option value="">${L("loadingHistory")}</option></select>
-          <div class="note">${L("hintDieselCard")}</div>
-          <div class="note-actions">
-            <button type="button" class="btn btn-primary" id="dieselCardRun">${L("generate")}</button>
+          <div class="field">
+            <label>Choose report</label>
+            <div class="note">${L("hintDieselCard")}</div>
+            <div class="note-actions">
+              <button type="button" class="btn btn-primary" id="dieselChooseCard">LKW Karte</button>
+            </div>
           </div>
-        </div>
-      `);
-      setNote("");
-
-      const footer = $("btnPrimary")?.parentElement;
-      if (footer) footer.style.display = "none";
-      if ($("btnPrimary")) $("btnPrimary").style.display = "none";
-
-      $("dieselSnapshotRun").onclick = async () => {
-        await sendReportGenerate("diesel", {});
-      };
-      $("dieselCardRun").onclick = async () => {
-        const lkwId = String($("dieselCardVehicle")?.value || "").trim();
-        if (!lkwId) {
-          haptic("error");
-          showToast(L("choose"));
-          return;
-        }
-        await sendReportGenerate("diesel_lkw_card", { lkw_id: lkwId });
+        `);
+        setNote("");
+        hideSheetFooter();
+        $("dieselChooseSnapshot").onclick = () => renderSnapshot();
+        $("dieselChooseCard").onclick = () => renderCard();
       };
 
-      populateLkwVehicleSelect("dieselCardVehicle");
+      const renderSnapshot = () => {
+        setSheetHeader("Diesel", L("hintDiesel"), "PDF");
+        setSheetCloseAction("back", renderMenu);
+        setSegments([], "", () => {});
+        setForm(`
+          <div class="field">
+            <label>Diesel PDF</label>
+            <div class="note">${L("hintDiesel")}</div>
+            <div class="note-actions">
+              <button type="button" class="btn btn-primary" id="dieselSnapshotRun">${L("generate")}</button>
+            </div>
+          </div>
+        `);
+        setNote("");
+        hideSheetFooter();
+        $("dieselSnapshotRun").onclick = async () => {
+          await sendReportGenerate("diesel", {});
+        };
+      };
+
+      const renderCard = async () => {
+        setSheetHeader("Diesel", L("hintDieselCard"), "PDF");
+        setSheetCloseAction("back", renderMenu);
+        setSegments([], "", () => {});
+        setForm(`
+          <div class="field">
+            <label>LKW Karte</label>
+            <select id="dieselCardVehicle"><option value="">${L("loadingHistory")}</option></select>
+            <div class="note">${L("hintDieselCard")}</div>
+            <div class="note-actions">
+              <button type="button" class="btn btn-primary" id="dieselCardRun">${L("generate")}</button>
+            </div>
+          </div>
+        `);
+        setNote("");
+        hideSheetFooter();
+        await populateLkwVehicleSelect("dieselCardVehicle");
+        $("dieselCardRun").onclick = async () => {
+          const lkwId = String($("dieselCardVehicle")?.value || "").trim();
+          if (!lkwId) {
+            haptic("error");
+            showToast(L("choose"));
+            return;
+          }
+          await sendReportGenerate("diesel_lkw_card", { lkw_id: lkwId });
+        };
+      };
+
+      renderMenu();
       openSheet();
     }
 
     function openBonus() {
-      setSheetHeader("Bonus", L("hintBonus"), "Params");
-      setSegments([], "", () => {});
-
-      setForm(`
-        <div class="field">
-          <label>${L("wholeYear")}</label>
-          <select id="bonusYearWhole">${buildYearOptions(2025, 2035)}</select>
-          <div class="field" style="margin-top:12px; margin-bottom:0; padding:10px 10px 8px;">
-            <label>${L("fahrerFilter")}</label>
-            <input id="bonusDriverQueryWhole" type="text" placeholder="${L("fahrerFilter")}" />
+      const renderMenu = () => {
+        setSheetHeader("Bonus", L("hintBonus"), "PDF");
+        setSheetCloseAction("back", closeSheet);
+        setSegments([], "", () => {});
+        setForm(`
+          <div class="field">
+            <label>Choose report</label>
+            <div class="note">Generate yearly Bonus report</div>
+            <div class="note-actions">
+              <button type="button" class="btn btn-primary" id="bonusChooseWhole">${L("wholeYear")}</button>
+            </div>
           </div>
-          <div class="note-actions">
-            <button type="button" class="btn btn-primary" id="bonusWholeRun">${L("generate")}</button>
+          <div class="field">
+            <label>Choose report</label>
+            <div class="note">Generate Bonus report by selected month and year</div>
+            <div class="note-actions">
+              <button type="button" class="btn btn-primary" id="bonusChooseMonth">${L("month")}</button>
+            </div>
           </div>
-        </div>
-        <div class="field">
-          <label>${L("month")}</label>
-          <select id="bonusMonthMonth">${buildMonthOptions()}</select>
-          <div class="field" style="margin-top:12px; margin-bottom:0; padding:10px 10px 8px;">
-            <label>${L("year")}</label>
-            <select id="bonusYearMonth">${buildYearOptions(2025, 2035)}</select>
-          </div>
-          <div class="field" style="margin-top:12px; margin-bottom:0; padding:10px 10px 8px;">
-            <label>${L("fahrerFilter")}</label>
-            <input id="bonusDriverQueryMonth" type="text" placeholder="${L("fahrerFilter")}" />
-          </div>
-          <div class="note-actions">
-            <button type="button" class="btn btn-primary" id="bonusMonthRun">${L("generate")}</button>
-          </div>
-        </div>
-      `);
-      setNote(L("hintBonus"));
-
-      const now = new Date();
-      const yWholeEl = $("bonusYearWhole");
-      const yMonthEl = $("bonusYearMonth");
-      const mMonthEl = $("bonusMonthMonth");
-      if (yWholeEl) yWholeEl.value = String(now.getFullYear());
-      if (yMonthEl) yMonthEl.value = String(now.getFullYear());
-      if (mMonthEl) mMonthEl.value = String(now.getMonth() + 1);
-
-      const footer = $("btnPrimary")?.parentElement;
-      if (footer) footer.style.display = "none";
-      if ($("btnPrimary")) $("btnPrimary").style.display = "none";
-
-      $("bonusWholeRun").onclick = async () => {
-        const year = Number($("bonusYearWhole")?.value);
-        const driverQuery = String($("bonusDriverQueryWhole")?.value || "").trim();
-        if (!Number.isFinite(year) || year < 2025 || year > 2035) {
-          haptic("error");
-          showToast(L("invalidYearMonth"));
-          return;
-        }
-        await sendReportGenerate("bonus", {
-          period: "year",
-          year,
-          driver_query: driverQuery,
-        });
+        `);
+        setNote("");
+        hideSheetFooter();
+        $("bonusChooseWhole").onclick = () => renderWholeYear();
+        $("bonusChooseMonth").onclick = () => renderMonth();
       };
 
-      $("bonusMonthRun").onclick = async () => {
-        const year = Number($("bonusYearMonth")?.value);
-        const month = Number($("bonusMonthMonth")?.value);
-        const driverQuery = String($("bonusDriverQueryMonth")?.value || "").trim();
-        if (!Number.isFinite(year) || year < 2025 || year > 2035 || !Number.isFinite(month) || month < 1 || month > 12) {
-          haptic("error");
-          showToast(L("invalidYearMonth"));
-          return;
-        }
-        await sendReportGenerate("bonus", {
-          period: "month",
-          year,
-          month,
-          driver_query: driverQuery,
-        });
+      const renderWholeYear = () => {
+        setSheetHeader("Bonus", "Generate yearly Bonus report", "PDF");
+        setSheetCloseAction("back", renderMenu);
+        setSegments([], "", () => {});
+        setForm(`
+          <div class="field">
+            <label>${L("wholeYear")}</label>
+            <select id="bonusYearWhole">${buildYearOptions(2025, 2035)}</select>
+            <div class="field" style="margin-top:12px; margin-bottom:0; padding:10px 10px 8px;">
+              <label>${L("fahrerFilter")}</label>
+              <input id="bonusDriverQueryWhole" type="text" placeholder="${L("fahrerFilter")}" />
+            </div>
+            <div class="note-actions">
+              <button type="button" class="btn btn-primary" id="bonusWholeRun">${L("generate")}</button>
+            </div>
+          </div>
+        `);
+        setNote(L("hintBonus"));
+        hideSheetFooter();
+        const now = new Date();
+        const yWholeEl = $("bonusYearWhole");
+        if (yWholeEl) yWholeEl.value = String(now.getFullYear());
+        $("bonusWholeRun").onclick = async () => {
+          const year = Number($("bonusYearWhole")?.value);
+          const driverQuery = String($("bonusDriverQueryWhole")?.value || "").trim();
+          if (!Number.isFinite(year) || year < 2025 || year > 2035) {
+            haptic("error");
+            showToast(L("invalidYearMonth"));
+            return;
+          }
+          await sendReportGenerate("bonus", {
+            period: "year",
+            year,
+            driver_query: driverQuery,
+          });
+        };
       };
 
+      const renderMonth = () => {
+        setSheetHeader("Bonus", "Generate Bonus report by month", "PDF");
+        setSheetCloseAction("back", renderMenu);
+        setSegments([], "", () => {});
+        setForm(`
+          <div class="field">
+            <label>${L("month")}</label>
+            <select id="bonusMonthMonth">${buildMonthOptions()}</select>
+            <div class="field" style="margin-top:12px; margin-bottom:0; padding:10px 10px 8px;">
+              <label>${L("year")}</label>
+              <select id="bonusYearMonth">${buildYearOptions(2025, 2035)}</select>
+            </div>
+            <div class="field" style="margin-top:12px; margin-bottom:0; padding:10px 10px 8px;">
+              <label>${L("fahrerFilter")}</label>
+              <input id="bonusDriverQueryMonth" type="text" placeholder="${L("fahrerFilter")}" />
+            </div>
+            <div class="note-actions">
+              <button type="button" class="btn btn-primary" id="bonusMonthRun">${L("generate")}</button>
+            </div>
+          </div>
+        `);
+        setNote(L("hintBonus"));
+        hideSheetFooter();
+        const now = new Date();
+        const yMonthEl = $("bonusYearMonth");
+        const mMonthEl = $("bonusMonthMonth");
+        if (yMonthEl) yMonthEl.value = String(now.getFullYear());
+        if (mMonthEl) mMonthEl.value = String(now.getMonth() + 1);
+        $("bonusMonthRun").onclick = async () => {
+          const year = Number($("bonusYearMonth")?.value);
+          const month = Number($("bonusMonthMonth")?.value);
+          const driverQuery = String($("bonusDriverQueryMonth")?.value || "").trim();
+          if (!Number.isFinite(year) || year < 2025 || year > 2035 || !Number.isFinite(month) || month < 1 || month > 12) {
+            haptic("error");
+            showToast(L("invalidYearMonth"));
+            return;
+          }
+          await sendReportGenerate("bonus", {
+            period: "month",
+            year,
+            month,
+            driver_query: driverQuery,
+          });
+        };
+      };
+
+      renderMenu();
       openSheet();
     }
 
