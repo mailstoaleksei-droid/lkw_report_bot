@@ -1,6 +1,6 @@
 # LKW Telegram Mini App - Implementation Checklist
 
-> Last updated: 2026-02-27
+> Last updated: 2026-04-09
 > Status legend: [ ] pending | [~] in progress | [x] done
 
 ## 1) Infra and Deploy
@@ -27,6 +27,13 @@
 - [x] ETL import for `BonusDynamik` added:
   - table: `report_bonus_dynamik_monthly`
   - columns: `ID`, `Fahrer`, `Days`, `KM`, `%KM`, `CT`, `%CT`, `Bonus`, `Penalty`, `Final`
+- [x] ETL import for `Diesel` added:
+  - table: `report_diesel_monthly`
+  - columns: liters / euro / euro per liter
+- [~] ETL import for `YF_Fahrer` and `YF` is being added:
+  - tables drafted: `report_yf_fahrer_monthly`, `report_yf_lkw_daily`
+  - parser + Worker integration drafted
+  - pending: final ETL completion and production verification on live workbook data
 - [x] ETL freshness monitor active (`ETL_STALE_AFTER_HOURS=4`)
 - [x] ETL schedule updated:
   - Day: hourly (07:00-18:00)
@@ -38,17 +45,56 @@
 - [x] `Data/Plan -> Data` (selected week, 7 days)
 - [x] `Einnahmen` (monthly revenue)
   - columns: `Monat`, `Nahverkehr`, `Logistics`, `Gesamt`
-  - chart by `Gesamt`
-  - trend arrows shown only when both adjacent months have data
-  - in-bar data labels are vertical and integer-formatted (thousand grouping)
+  - table values centered
+  - `Gesamt` column enlarged and bold
+  - zero values hidden
+  - chart simplified: no side scales / no extra legend rows / labels horizontal
 - [x] `Diesel` (monthly fuel costs)
-  - param: `year`
-  - source: `Diesel` via SQL (`report_diesel_monthly`)
-  - PDF: monthly liters/euro table + KPI summary + chart by `Liter Total`
+  - source snapshot from sheet ranges:
+    - page 1: `A1:R26`
+    - page 2: `T1:AL26`
+  - chart removed
+  - centered values
+  - `Km`, `Total`, `Average` emphasized
+  - `LKW Karte` PDF added inside Diesel block:
+    - select one LKW
+    - columns: `LKW-ID`, `LKW-Nummer`, `DKV Card`, `Shell Card`, `Tankpool Card`
+    - zero values hidden
 - [x] `Bonus` (monthly driver bonus)
-  - params: `year`, `month`, optional `Fahrer ID / surname`
+  - params: `year`, `month`, optional `Fahrer`
   - source: `BonusDynamik` via SQL (`report_bonus_dynamik_monthly`)
-  - PDF: landscape table + KPI summary + chart `Top Fahrer by Final`
+  - monthly PDF without chart
+  - table centered
+  - `Final` emphasized
+  - zero values hidden
+- [x] `Bonus` (whole year)
+  - separate block in mini app
+  - columns: `ID`, `Fahrer`, `Jan..Dec Final`, yearly cumulative total
+- [x] `LKW`
+  - `1 LKW` PDF
+  - `Alle LKW` PDF
+  - source: sheet `LKW`
+  - columns: `A-G`, `L-Z`
+  - centered values
+  - zero values hidden
+  - row colors:
+    - sold truck -> grey
+    - `Container` -> light brown
+    - `Planen` -> light violet
+- [~] `Yellow Fox`
+  - mini app UI for two PDF reports drafted
+  - report 1: driver/month from `YF_Fahrer`
+  - report 2: LKW/week from `YF`
+  - pending: final ETL load + production check
+- [x] `Data/Plan`
+  - table values centered
+  - special labels highlighted:
+    - `O.F.`
+    - `Verkauft`
+    - `Werkstatt`
+    - `Werkstattwagen`
+  - `U` after driver name highlighted orange
+  - bottom statistics/chart removed
 - [x] Bottom dock SQL PDFs:
   - `LKW`
   - `Fahrer`
@@ -64,6 +110,7 @@
 
 ## 6) Remaining Work (Planned)
 - [~] Additional report family rollout:
+  - `Yellow Fox` final ETL/data verification
   - `Fahrerzeiten`
   - `Urlaubsplan`
   - other business reports to be finalized
