@@ -526,6 +526,13 @@
       height:14px;
       display:block;
     }
+
+    .sheet-close.back{
+      color:#e9f6ff;
+      font-size:18px;
+      font-weight:800;
+      line-height:1;
+    }
     
     .sheet-close:active{
       transform: scale(0.95);
@@ -1789,6 +1796,7 @@
         etlPlanFile: "LKW_Fahrer_Plan.xlsb",
         noEtlUpdate: "No successful update yet",
         close: "Close",
+        back: "Back",
         historyTitle: "Generated Files",
         historyHint: "Tap a file to open it",
         historySelectHint: "Select files to delete",
@@ -1820,6 +1828,7 @@
         hintLkw: "Generate LKW master report for one selected truck or for all LKW",
         hintFahrer: "Driver information and vacation data",
         hintYf: "Vehicle mileage and fuel consumption",
+        hintYfMenu: "Choose the Yellow Fox report type first",
         hintYfDriverMonth: "Select month and driver to generate monthly Yellow Fox driver metrics",
         hintYfLkwWeek: "Select year, week and LKW to generate Yellow Fox truck metrics",
         hintEinnahmen: "Total revenue report for all operations",
@@ -1886,6 +1895,7 @@
         etlPlanFile: "LKW_Fahrer_Plan.xlsb",
         noEtlUpdate: "Успешных обновлений пока нет",
         close: "Закрыть",
+        back: "Назад",
         historyTitle: "Сгенерированные файлы",
         historyHint: "Нажмите на файл, чтобы открыть",
         historySelectHint: "Отметьте файлы для удаления",
@@ -1917,6 +1927,7 @@
         hintLkw: "Сформируйте мастер-отчет LKW для одной выбранной машины или для всех LKW",
         hintFahrer: "Информация о водителях и отпусках",
         hintYf: "Пробег и расход топлива транспорта",
+        hintYfMenu: "Сначала выберите вид отчета Yellow Fox",
         hintYfDriverMonth: "Выберите месяц и водителя для PDF с месячными показателями Yellow Fox",
         hintYfLkwWeek: "Выберите год, неделю и LKW для PDF с показателями работы машины Yellow Fox",
         hintEinnahmen: "Отчет по общей выручке",
@@ -2748,10 +2759,25 @@
       clearPdfUrl();
     }
 
+    function setSheetCloseAction(mode = "close", handler = closeSheet) {
+      const btn = $("btnClose");
+      if (!btn) return;
+      btn.classList.toggle("back", mode === "back");
+      btn.setAttribute("aria-label", mode === "back" ? L("back") : L("close"));
+      btn.title = mode === "back" ? L("back") : L("close");
+      if (mode === "back") {
+        btn.innerHTML = "&larr;";
+      } else {
+        btn.innerHTML = '<img src="icons/close.svg" alt="Close" width="14" height="14">';
+      }
+      btn.onclick = handler;
+    }
+
     function setSheetHeader(title, hint, type) {
       $("sheetTitle").textContent = title;
       $("sheetHint").textContent = hint;
       $("sheetType").textContent = type;
+      setSheetCloseAction("close", closeSheet);
       const footer = $("btnPrimary")?.parentElement;
       if (footer) footer.style.display = "";
       if ($("btnPrimary")) {
@@ -2991,74 +3017,119 @@
     }
 
     function openYf() {
-      setSheetHeader("Yellow Fox", L("hintYf"), "PDF");
-      setSegments([], "", () => {});
-      setForm(`
-        <div class="field">
-          <label>Fahrer / Monat</label>
-          <select id="yfDriverMonth">${buildMonthOptions()}</select>
-          <div class="field" style="margin-top:12px; margin-bottom:0; padding:10px 10px 8px;">
-            <label>${L("driver")}</label>
-            <select id="yfDriverName"><option value="">${L("loadingHistory")}</option></select>
-          </div>
-          <div class="note">${L("hintYfDriverMonth")}</div>
-          <div class="note-actions">
-            <button type="button" class="btn btn-primary" id="yfDriverRun">${L("generate")}</button>
-          </div>
-        </div>
-        <div class="field">
-          <label>LKW / Woche</label>
-          <select id="yfLkwYear">${buildYearOptions(2025, 2035)}</select>
-          <div class="field" style="margin-top:12px; margin-bottom:0; padding:10px 10px 8px;">
-            <label>${L("week")}</label>
-            <select id="yfLkwWeek">${buildWeekOptions()}</select>
-          </div>
-          <div class="field" style="margin-top:12px; margin-bottom:0; padding:10px 10px 8px;">
-            <label>${L("vehicle")}</label>
-            <select id="yfLkwVehicle"><option value="">${L("loadingHistory")}</option></select>
-          </div>
-          <div class="note">${L("hintYfLkwWeek")}</div>
-          <div class="note-actions">
-            <button type="button" class="btn btn-primary" id="yfLkwRun">${L("generate")}</button>
-          </div>
-        </div>
-      `);
-      setNote("");
-
-      const now = new Date();
-      if ($("yfDriverMonth")) $("yfDriverMonth").value = String(now.getMonth() + 1);
-      if ($("yfLkwYear")) $("yfLkwYear").value = String(now.getFullYear());
-      if ($("yfLkwWeek")) $("yfLkwWeek").value = String(getISOWeek(now));
-
       const footer = $("btnPrimary")?.parentElement;
-      if (footer) footer.style.display = "none";
-      if ($("btnPrimary")) $("btnPrimary").style.display = "none";
-
-      $("yfDriverRun").onclick = async () => {
-        const month = Number($("yfDriverMonth")?.value);
-        const driverQuery = String($("yfDriverName")?.value || "").trim();
-        if (!Number.isFinite(month) || month < 1 || month > 12 || !driverQuery) {
-          haptic("error");
-          showToast(L("choose"));
-          return;
-        }
-        await sendReportGenerate("yf_driver_month", { month, driver_query: driverQuery });
+      const hideFooter = () => {
+        if (footer) footer.style.display = "none";
+        if ($("btnPrimary")) $("btnPrimary").style.display = "none";
       };
 
-      $("yfLkwRun").onclick = async () => {
-        const year = Number($("yfLkwYear")?.value);
-        const week = Number($("yfLkwWeek")?.value);
-        const lkwId = String($("yfLkwVehicle")?.value || "").trim();
-        if (!Number.isFinite(year) || year < 2025 || year > 2035 || !Number.isFinite(week) || week < 1 || week > 53 || !lkwId) {
-          haptic("error");
-          showToast(L("choose"));
-          return;
-        }
-        await sendReportGenerate("yf_lkw_week", { year, week, lkw_id: lkwId });
+      const renderYfMenu = () => {
+        setSheetHeader("Yellow Fox", L("hintYfMenu"), "PDF");
+        setSegments([], "", () => {});
+        setSheetCloseAction("close", closeSheet);
+        setForm(`
+          <div class="field">
+            <label>Choose report</label>
+            <div class="note">${L("hintYfDriverMonth")}</div>
+            <div class="note-actions">
+              <button type="button" class="btn btn-primary" id="yfChooseDriverMonth">Fahrer / Monat</button>
+            </div>
+          </div>
+          <div class="field">
+            <label>Choose report</label>
+            <div class="note">${L("hintYfLkwWeek")}</div>
+            <div class="note-actions">
+              <button type="button" class="btn btn-primary" id="yfChooseLkwWeek">LKW / Woche</button>
+            </div>
+          </div>
+        `);
+        setNote("");
+        hideFooter();
+        $("yfChooseDriverMonth").onclick = () => renderYfDriverMonth();
+        $("yfChooseLkwWeek").onclick = () => renderYfLkwWeek();
       };
 
-      populateYfDriverSelect("yfDriverName");
-      populateLkwNummerSelect("yfLkwVehicle");
+      const renderYfDriverMonth = async () => {
+        setSheetHeader("Yellow Fox", L("hintYfDriverMonth"), "PDF");
+        setSegments([], "", () => {});
+        setSheetCloseAction("back", renderYfMenu);
+        setForm(`
+          <div class="field">
+            <label>Fahrer / Monat</label>
+            <select id="yfDriverMonth">${buildMonthOptions()}</select>
+            <div class="field" style="margin-top:12px; margin-bottom:0; padding:10px 10px 8px;">
+              <label>${L("driver")}</label>
+              <select id="yfDriverName"><option value="">${L("loadingHistory")}</option></select>
+            </div>
+            <div class="note">${L("hintYfDriverMonth")}</div>
+            <div class="note-actions">
+              <button type="button" class="btn btn-primary" id="yfDriverRun">${L("generate")}</button>
+            </div>
+          </div>
+        `);
+        setNote("");
+        hideFooter();
+
+        const now = new Date();
+        if ($("yfDriverMonth")) $("yfDriverMonth").value = String(now.getMonth() + 1);
+        await populateYfDriverSelect("yfDriverName");
+
+        $("yfDriverRun").onclick = async () => {
+          const month = Number($("yfDriverMonth")?.value);
+          const driverQuery = String($("yfDriverName")?.value || "").trim();
+          if (!Number.isFinite(month) || month < 1 || month > 12 || !driverQuery) {
+            haptic("error");
+            showToast(L("choose"));
+            return;
+          }
+          await sendReportGenerate("yf_driver_month", { month, driver_query: driverQuery });
+        };
+      };
+
+      const renderYfLkwWeek = async () => {
+        setSheetHeader("Yellow Fox", L("hintYfLkwWeek"), "PDF");
+        setSegments([], "", () => {});
+        setSheetCloseAction("back", renderYfMenu);
+        setForm(`
+          <div class="field">
+            <label>LKW / Woche</label>
+            <select id="yfLkwYear">${buildYearOptions(2025, 2035)}</select>
+            <div class="field" style="margin-top:12px; margin-bottom:0; padding:10px 10px 8px;">
+              <label>${L("week")}</label>
+              <select id="yfLkwWeek">${buildWeekOptions()}</select>
+            </div>
+            <div class="field" style="margin-top:12px; margin-bottom:0; padding:10px 10px 8px;">
+              <label>${L("vehicle")}</label>
+              <select id="yfLkwVehicle"><option value="">${L("loadingHistory")}</option></select>
+            </div>
+            <div class="note">${L("hintYfLkwWeek")}</div>
+            <div class="note-actions">
+              <button type="button" class="btn btn-primary" id="yfLkwRun">${L("generate")}</button>
+            </div>
+          </div>
+        `);
+        setNote("");
+        hideFooter();
+
+        const now = new Date();
+        if ($("yfLkwYear")) $("yfLkwYear").value = String(now.getFullYear());
+        if ($("yfLkwWeek")) $("yfLkwWeek").value = String(getISOWeek(now));
+        await populateLkwNummerSelect("yfLkwVehicle");
+
+        $("yfLkwRun").onclick = async () => {
+          const year = Number($("yfLkwYear")?.value);
+          const week = Number($("yfLkwWeek")?.value);
+          const lkwId = String($("yfLkwVehicle")?.value || "").trim();
+          if (!Number.isFinite(year) || year < 2025 || year > 2035 || !Number.isFinite(week) || week < 1 || week > 53 || !lkwId) {
+            haptic("error");
+            showToast(L("choose"));
+            return;
+          }
+          await sendReportGenerate("yf_lkw_week", { year, week, lkw_id: lkwId });
+        };
+      };
+
+      renderYfMenu();
       openSheet();
     }
 
@@ -3311,7 +3382,7 @@
       }
 
       // Wire events
-      $("btnClose").onclick = closeSheet;
+      setSheetCloseAction("close", closeSheet);
       $("sheet").onclick = (e) => { 
         if (e.target === $("sheet")) closeSheet(); 
       };
