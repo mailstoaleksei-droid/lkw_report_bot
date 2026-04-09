@@ -2827,6 +2827,16 @@ function buildBonusYearMatrixRows(rows = [], year) {
     });
 }
 
+function formatBonusCell(value, kind) {
+  const n = toNumberSafe(value, 0);
+  if (Math.abs(n) < 0.0000001) return "";
+  if (kind === "int") return String(toIntSafe(value, 0));
+  if (kind === "money_int") return formatMoneyInt(value);
+  if (kind === "money") return formatMoney(value);
+  if (kind === "percent1") return formatPercent(value, 1);
+  return safeText(value, "");
+}
+
 function summarizeBonusRows(rows = []) {
   const out = {
     drivers: rows.length,
@@ -2975,14 +2985,14 @@ async function buildBonusPdfWithPdfLib({
     const values = [
       safeText(row?.fahrer_id, ""),
       safeText(row?.fahrer_name, ""),
-      String(toIntSafe(row?.days, 0)),
-      formatMoneyInt(row?.km),
-      formatPercent(row?.pct_km, 1),
-      String(toIntSafe(row?.ct, 0)),
-      formatPercent(row?.pct_ct, 1),
-      formatMoney(row?.bonus),
-      formatMoney(row?.penalty),
-      formatMoneyInt(row?.final),
+      formatBonusCell(row?.days, "int"),
+      formatBonusCell(row?.km, "money_int"),
+      formatBonusCell(row?.pct_km, "percent1"),
+      formatBonusCell(row?.ct, "int"),
+      formatBonusCell(row?.pct_ct, "percent1"),
+      formatBonusCell(row?.bonus, "money"),
+      formatBonusCell(row?.penalty, "money"),
+      formatBonusCell(row?.final, "money_int"),
     ];
 
     let x = tableX;
@@ -3210,7 +3220,7 @@ async function buildBonusYearPdfWithPdfLib({
         ? safeText(row?.fahrer_id, "")
         : col.key === "fahrer_name"
           ? safeText(row?.fahrer_name, "")
-          : formatMoneyInt(row?.[col.key]);
+          : formatBonusCell(row?.[col.key], "money_int");
       const value = fitTextToWidth(cellFont, rawValue, cellSize, col.width - 8);
       const tx = x + ((col.width - measureTextWidth(cellFont, value, cellSize)) / 2);
       page.drawText(value, {
@@ -4546,8 +4556,8 @@ async function handleGenerateWithBody(body, env, enforceRateLimit = true) {
             [
               safeText(row.fahrer_id, ""),
               safeText(row.fahrer_name, ""),
-              ...Array.from({ length: 12 }, (_, idx) => formatMoneyInt(row[`m${idx + 1}`])),
-              formatMoneyInt(row.year_total),
+              ...Array.from({ length: 12 }, (_, idx) => formatBonusCell(row[`m${idx + 1}`], "money_int")),
+              formatBonusCell(row.year_total, "money_int"),
             ].join(" | "),
           );
         }
@@ -4560,14 +4570,14 @@ async function handleGenerateWithBody(body, env, enforceRateLimit = true) {
             [
               safeText(row.fahrer_id, ""),
               safeText(row.fahrer_name, ""),
-              String(toIntSafe(row.days, 0)),
-              formatMoneyInt(row.km),
-              formatPercent(row.pct_km, 1),
-              String(toIntSafe(row.ct, 0)),
-              formatPercent(row.pct_ct, 1),
-              formatMoney(row.bonus),
-              formatMoney(row.penalty),
-              formatMoneyInt(row.final),
+              formatBonusCell(row.days, "int"),
+              formatBonusCell(row.km, "money_int"),
+              formatBonusCell(row.pct_km, "percent1"),
+              formatBonusCell(row.ct, "int"),
+              formatBonusCell(row.pct_ct, "percent1"),
+              formatBonusCell(row.bonus, "money"),
+              formatBonusCell(row.penalty, "money"),
+              formatBonusCell(row.final, "money_int"),
             ].join(" | "),
           );
         }
