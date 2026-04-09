@@ -2203,6 +2203,12 @@ function buildEinnahmenMatrixRows(rows = []) {
   return out;
 }
 
+function formatEinnahmenCell(value) {
+  const n = toNumberSafe(value, 0);
+  if (Math.abs(n) < 0.0000001) return "";
+  return formatMoney(value);
+}
+
 function drawTrendArrow({ page, x, y, isUp, color }) {
   if (isUp) {
     page.drawLine({ start: { x, y }, end: { x, y: y + 7 }, thickness: 1.2, color });
@@ -2316,9 +2322,9 @@ async function buildEinnahmenPdfWithPdfLib({ userId, rows }) {
 
     const values = [
       safeText(row?.month_name, ""),
-      formatMoney(row?.nahverkehr),
-      formatMoney(row?.logistics),
-      formatMoney(row?.gesamt),
+      formatEinnahmenCell(row?.nahverkehr),
+      formatEinnahmenCell(row?.logistics),
+      formatEinnahmenCell(row?.gesamt),
     ];
 
     let x = tableX;
@@ -4401,9 +4407,9 @@ async function handleGenerateWithBody(body, env, enforceRateLimit = true) {
         lines.push(
           [
             safeText(row.month_name, ""),
-            formatMoney(row.nahverkehr),
-            formatMoney(row.logistics),
-            formatMoney(row.gesamt),
+            formatEinnahmenCell(row.nahverkehr),
+            formatEinnahmenCell(row.logistics),
+            formatEinnahmenCell(row.gesamt),
           ].join(" | "),
         );
       }
