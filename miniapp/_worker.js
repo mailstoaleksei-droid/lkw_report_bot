@@ -2324,13 +2324,16 @@ async function buildEinnahmenPdfWithPdfLib({ userId, rows }) {
     let x = tableX;
     for (let i = 0; i < columns.length; i += 1) {
       const col = columns[i];
-      const value = fitTextToWidth(font, values[i], textSize, col.width - 8);
-      const tx = x + ((col.width - measureTextWidth(font, value, textSize)) / 2);
+      const isGesamt = col.key === "gesamt";
+      const cellFont = isGesamt ? boldFont : font;
+      const cellSize = isGesamt ? textSize + 2 : textSize;
+      const value = fitTextToWidth(cellFont, values[i], cellSize, col.width - 8);
+      const tx = x + ((col.width - measureTextWidth(cellFont, value, cellSize)) / 2);
       page.drawText(value, {
         x: tx,
-        y: y - 9,
-        size: textSize,
-        font,
+        y: y - (isGesamt ? 10 : 9),
+        size: cellSize,
+        font: cellFont,
         color: textColor,
       });
       x += col.width;
