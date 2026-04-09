@@ -131,6 +131,57 @@ CREATE TABLE IF NOT EXISTS report_bonus_dynamik_monthly (
     PRIMARY KEY (report_year, report_month, fahrer_id)
 );
 
+CREATE TABLE IF NOT EXISTS report_diesel_monthly (
+    report_year SMALLINT NOT NULL CHECK (report_year BETWEEN 2020 AND 2100),
+    month_index SMALLINT NOT NULL CHECK (month_index BETWEEN 1 AND 12),
+    month_name TEXT NOT NULL,
+    liter_staack NUMERIC(14, 2) NOT NULL DEFAULT 0,
+    liter_shell NUMERIC(14, 2) NOT NULL DEFAULT 0,
+    liter_dkv NUMERIC(14, 2) NOT NULL DEFAULT 0,
+    liter_total NUMERIC(14, 2) NOT NULL DEFAULT 0,
+    euro_staack NUMERIC(14, 2) NOT NULL DEFAULT 0,
+    euro_shell NUMERIC(14, 2) NOT NULL DEFAULT 0,
+    euro_dkv NUMERIC(14, 2) NOT NULL DEFAULT 0,
+    euro_total NUMERIC(14, 2) NOT NULL DEFAULT 0,
+    euro_per_liter_staack NUMERIC(10, 4) NOT NULL DEFAULT 0,
+    euro_per_liter_shell NUMERIC(10, 4) NOT NULL DEFAULT 0,
+    euro_per_liter_dkv NUMERIC(10, 4) NOT NULL DEFAULT 0,
+    euro_per_liter_avg NUMERIC(10, 4) NOT NULL DEFAULT 0,
+    raw_payload JSONB NOT NULL DEFAULT '{}'::JSONB,
+    updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    PRIMARY KEY (report_year, month_index)
+);
+
+CREATE TABLE IF NOT EXISTS report_yf_fahrer_monthly (
+    month_index SMALLINT NOT NULL CHECK (month_index BETWEEN 1 AND 12),
+    fahrer_name TEXT NOT NULL,
+    distanz_km NUMERIC(14, 2) NOT NULL DEFAULT 0,
+    aktivitaet_total_minutes INTEGER NOT NULL DEFAULT 0,
+    fahrzeit_total_minutes INTEGER NOT NULL DEFAULT 0,
+    inaktivitaet_total_minutes INTEGER NOT NULL DEFAULT 0,
+    raw_payload JSONB NOT NULL DEFAULT '{}'::JSONB,
+    updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    PRIMARY KEY (month_index, fahrer_name)
+);
+
+CREATE TABLE IF NOT EXISTS report_yf_lkw_daily (
+    report_year SMALLINT NOT NULL CHECK (report_year BETWEEN 2020 AND 2100),
+    month_index SMALLINT NOT NULL CHECK (month_index BETWEEN 1 AND 12),
+    month_name TEXT NOT NULL,
+    iso_week SMALLINT NOT NULL CHECK (iso_week BETWEEN 1 AND 53),
+    lkw_nummer TEXT NOT NULL,
+    report_date DATE NOT NULL,
+    source_row INTEGER NOT NULL DEFAULT 0,
+    dayweek TEXT,
+    strecke_km NUMERIC(14, 2) NOT NULL DEFAULT 0,
+    km_start NUMERIC(14, 2) NOT NULL DEFAULT 0,
+    km_end NUMERIC(14, 2) NOT NULL DEFAULT 0,
+    drivers_final TEXT,
+    raw_payload JSONB NOT NULL DEFAULT '{}'::JSONB,
+    updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    PRIMARY KEY (report_year, iso_week, lkw_nummer, report_date, source_row)
+);
+
 CREATE INDEX IF NOT EXISTS idx_trucks_company_id ON trucks(company_id);
 CREATE INDEX IF NOT EXISTS idx_drivers_company_id ON drivers(company_id);
 
@@ -144,5 +195,7 @@ CREATE INDEX IF NOT EXISTS idx_etl_log_status_started_at ON etl_log(status, star
 CREATE INDEX IF NOT EXISTS idx_reports_log_user_requested_at ON reports_log(user_id, requested_at DESC);
 CREATE INDEX IF NOT EXISTS idx_reports_log_type_requested_at ON reports_log(report_type, requested_at DESC);
 CREATE INDEX IF NOT EXISTS idx_report_bonus_dynamik_lookup ON report_bonus_dynamik_monthly(report_year, report_month, fahrer_name);
+CREATE INDEX IF NOT EXISTS idx_report_yf_fahrer_lookup ON report_yf_fahrer_monthly(month_index, fahrer_name);
+CREATE INDEX IF NOT EXISTS idx_report_yf_lkw_lookup ON report_yf_lkw_daily(report_year, iso_week, lkw_nummer, report_date, source_row);
 
 COMMIT;

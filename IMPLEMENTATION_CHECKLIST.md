@@ -30,10 +30,10 @@
 - [x] ETL import for `Diesel` added:
   - table: `report_diesel_monthly`
   - columns: liters / euro / euro per liter
-- [~] ETL import for `YF_Fahrer` and `YF` is being added:
-  - tables drafted: `report_yf_fahrer_monthly`, `report_yf_lkw_daily`
-  - parser + Worker integration drafted
-  - pending: final ETL completion and production verification on live workbook data
+- [x] ETL import for `YF_Fahrer` and `YF` added:
+  - tables: `report_yf_fahrer_monthly`, `report_yf_lkw_daily`
+  - parser + Worker integration active
+  - ETL verified on live workbook data
 - [x] ETL freshness monitor active (`ETL_STALE_AFTER_HOURS=4`)
 - [x] ETL schedule updated:
   - Day: hourly (07:00-18:00)
@@ -81,11 +81,15 @@
     - sold truck -> grey
     - `Container` -> light brown
     - `Planen` -> light violet
-- [~] `Yellow Fox`
-  - mini app UI for two PDF reports drafted
+- [x] `Yellow Fox`
   - report 1: driver/month from `YF_Fahrer`
+    - params: `month`, `Fahrer`
+    - columns: `Month`, `Fahrer`, `Distanz`, `Aktivitätsdauer`, `Fahrzeit`, `Inaktivitätszeit`
   - report 2: LKW/week from `YF`
-  - pending: final ETL load + production check
+    - params: `year`, `week`, `LKW`
+    - columns: `Year`, `Month`, `Week`, `LKW`, `Datum`, `dayweek`, `Strecke`, `Kilometerstand Start`, `Kilometerstand Ende`, `Drivers final`
+  - centered table layout
+  - live ETL data loaded and verified
 - [x] `Data/Plan`
   - table values centered
   - special labels highlighted:
@@ -110,7 +114,6 @@
 
 ## 6) Remaining Work (Planned)
 - [~] Additional report family rollout:
-  - `Yellow Fox` final ETL/data verification
   - `Fahrerzeiten`
   - `Urlaubsplan`
   - other business reports to be finalized

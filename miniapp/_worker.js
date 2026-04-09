@@ -151,6 +151,71 @@ const REPORTS = [
     ],
   },
   {
+    id: "yf_driver_month",
+    enabled: true,
+    icon: "chart",
+    name: {
+      en: "Yellow Fox (Driver Monthly)",
+      ru: "Yellow Fox (водитель за месяц)",
+      de: "Yellow Fox (Fahrer pro Monat)",
+    },
+    description: {
+      en: "Monthly driver metrics from sheet YF_Fahrer",
+      ru: "Помесячные показатели водителя с листа YF_Fahrer",
+      de: "Monatskennzahlen Fahrer aus Blatt YF_Fahrer",
+    },
+    params: [
+      {
+        id: "month",
+        type: "month",
+        label: { en: "Month", ru: "Месяц" },
+        min: 1,
+        max: 12,
+      },
+      {
+        id: "driver_query",
+        type: "text",
+        label: { en: "Driver", ru: "Водитель" },
+      },
+    ],
+  },
+  {
+    id: "yf_lkw_week",
+    enabled: true,
+    icon: "chart",
+    name: {
+      en: "Yellow Fox (LKW Weekly)",
+      ru: "Yellow Fox (машина за неделю)",
+      de: "Yellow Fox (LKW pro Woche)",
+    },
+    description: {
+      en: "Weekly LKW operation metrics from sheet YF",
+      ru: "Недельные показатели работы машины с листа YF",
+      de: "Wochenkennzahlen LKW aus Blatt YF",
+    },
+    params: [
+      {
+        id: "year",
+        type: "year",
+        label: { en: "Year", ru: "Год" },
+        min: 2025,
+        max: 2035,
+      },
+      {
+        id: "week",
+        type: "week",
+        label: { en: "Week", ru: "Неделя" },
+        min: 1,
+        max: 53,
+      },
+      {
+        id: "lkw_id",
+        type: "text",
+        label: { en: "LKW", ru: "LKW" },
+      },
+    ],
+  },
+  {
     id: "bonus",
     enabled: true,
     icon: "bonus",
@@ -628,6 +693,47 @@ ORDER BY t.external_id
 LIMIT 1;
 `;
 
+const YF_DRIVER_MONTH_SQL = `
+SELECT
+  month_index,
+  fahrer_name,
+  distanz_km,
+  aktivitaet_total_minutes,
+  fahrzeit_total_minutes,
+  inaktivitaet_total_minutes
+FROM report_yf_fahrer_monthly
+WHERE month_index = $1::int
+  AND (
+    $2::text = ''
+    OR lower(fahrer_name) = lower($2::text)
+    OR lower(fahrer_name) LIKE lower($3::text)
+  )
+ORDER BY fahrer_name ASC;
+`;
+
+const YF_LKW_WEEK_SQL = `
+SELECT
+  report_year,
+  month_index,
+  month_name,
+  iso_week,
+  lkw_nummer,
+  to_char(report_date, 'DD/MM/YYYY') AS report_date,
+  dayweek,
+  strecke_km,
+  km_start,
+  km_end,
+  drivers_final
+FROM report_yf_lkw_daily
+WHERE report_year = $1::int
+  AND iso_week = $2::int
+  AND (
+    $3::text = ''
+    OR lower(lkw_nummer) = lower($3::text)
+  )
+ORDER BY report_date ASC, source_row ASC, lkw_nummer ASC;
+`;
+
 const DRIVERS_LIST_SQL = `
 SELECT
   d.external_id AS fahrer_id,
@@ -944,6 +1050,33 @@ function makeDieselLkwCardFilename(lkwId, at = new Date()) {
   const clean = String(lkwId || "").trim();
   if (clean) return `diesel_lkw_card_${clean}.pdf`;
   return `diesel_lkw_card_${formatUtcDateStamp(at)}.pdf`;
+}
+
+function sanitizeFilenamePart(value) {
+  return String(value || "")
+    .trim()
+    .replace(/[^\w.-]+/g, "_")
+    .replace(/_+/g, "_")
+    .replace(/^_+|_+$/g, "");
+}
+
+function makeYfDriverMonthFilename(month, driverQuery, at = new Date()) {
+  const m = Number.parseInt(String(month), 10);
+  const driver = sanitizeFilenamePart(driverQuery);
+  if (Number.isFinite(m) && m >= 1 && m <= 12) {
+    return `yf_driver_month_${pad2(m)}${driver ? `_${driver}` : ""}.pdf`;
+  }
+  return `yf_driver_month_${formatUtcDateStamp(at)}.pdf`;
+}
+
+function makeYfLkwWeekFilename(year, week, lkwId, at = new Date()) {
+  const y = Number.parseInt(String(year), 10);
+  const w = Number.parseInt(String(week), 10);
+  const lkw = sanitizeFilenamePart(lkwId);
+  if (Number.isFinite(y) && Number.isFinite(w) && y > 0 && w >= 1 && w <= 53) {
+    return `yf_lkw_${y}_w${pad2(w)}${lkw ? `_${lkw}` : ""}.pdf`;
+  }
+  return `yf_lkw_${formatUtcDateStamp(at)}.pdf`;
 }
 
 function makeBonusFilename(year, month, at = new Date(), period = "month") {
@@ -3730,6 +3863,351 @@ function formatLkwMasterCell(value, kind = "text") {
   return raw;
 }
 
+function formatYfDistanceKm(value) {
+  const raw = String(value ?? "").trim();
+  if (!raw) return "";
+  const n = Number(raw.replace(/\s+/g, "").replace(",", "."));
+  if (!Number.isFinite(n)) return raw;
+  return `${formatMoneyInt(n)} km`;
+}
+
+function formatYfHoursMinutes(totalMinutes) {
+  const mins = Math.max(0, Number.parseInt(String(totalMinutes ?? "0"), 10) || 0);
+  const hours = Math.floor(mins / 60);
+  const restMinutes = mins % 60;
+  return `${hours}:${String(restMinutes).padStart(2, "0")}`;
+}
+
+function formatYfDaysHours(totalMinutes) {
+  const mins = Math.max(0, Number.parseInt(String(totalMinutes ?? "0"), 10) || 0);
+  const hoursTotal = Math.floor(mins / 60);
+  const days = Math.floor(hoursTotal / 24);
+  const hours = hoursTotal % 24;
+  return `${days} d ${hours} h`;
+}
+
+async function buildYfDriverMonthPdfWithPdfLib({ userId, month, driverQuery, rows }) {
+  const pdfDoc = await PDFDocument.create();
+  const font = await pdfDoc.embedFont(StandardFonts.Helvetica);
+  const boldFont = await pdfDoc.embedFont(StandardFonts.HelveticaBold);
+
+  const pageSize = [842, 595];
+  const margin = 24;
+  const rowHeight = 18;
+  const textSize = 8;
+  const borderColor = rgb(0.74, 0.8, 0.9);
+  const headerBg = rgb(0.93, 0.96, 1);
+  const oddBg = rgb(0.985, 0.99, 1);
+  const textColor = rgb(0.08, 0.14, 0.24);
+  const columns = [
+    { key: "month_index", label: "Month", width: 62 },
+    { key: "fahrer_name", label: "Fahrer", width: 190 },
+    { key: "distanz_km", label: "Distanz", width: 110 },
+    { key: "aktivitaet_total_minutes", label: "Aktivitätsdauer", width: 120 },
+    { key: "fahrzeit_total_minutes", label: "Fahrzeit", width: 100 },
+    { key: "inaktivitaet_total_minutes", label: "Inaktivitätszeit", width: 120 },
+  ];
+  const tableWidth = columns.reduce((sum, col) => sum + col.width, 0);
+  const tableX = margin + ((pageSize[0] - (margin * 2) - tableWidth) / 2);
+
+  let page = pdfDoc.addPage(pageSize);
+  let y = page.getHeight() - margin;
+
+  const drawHeader = () => {
+    page.drawText("Yellow Fox - Driver Month", {
+      x: margin,
+      y,
+      size: 14,
+      font: boldFont,
+      color: textColor,
+    });
+    y -= 16;
+    page.drawText(`Month: ${month} | Driver: ${safeText(driverQuery, "all")} | Generated: ${new Date().toISOString()} UTC | User: ${userId}`, {
+      x: margin,
+      y,
+      size: 8,
+      font,
+      color: rgb(0.24, 0.3, 0.4),
+    });
+    y -= 14;
+
+    page.drawRectangle({
+      x: tableX,
+      y: y - rowHeight + 2,
+      width: tableWidth,
+      height: rowHeight,
+      color: headerBg,
+      borderColor,
+      borderWidth: 1,
+    });
+
+    let x = tableX;
+    for (const col of columns) {
+      const label = fitTextToWidth(boldFont, col.label, textSize, col.width - 8);
+      const labelWidth = measureTextWidth(boldFont, label, textSize);
+      page.drawText(label, {
+        x: x + ((col.width - labelWidth) / 2),
+        y: y - 11,
+        size: textSize,
+        font: boldFont,
+        color: textColor,
+      });
+      x += col.width;
+      if (x < tableX + tableWidth - 0.5) {
+        page.drawLine({
+          start: { x, y: y - rowHeight + 2 },
+          end: { x, y: y + 2 },
+          thickness: 0.8,
+          color: borderColor,
+        });
+      }
+    }
+    y -= rowHeight;
+  };
+
+  const ensureSpace = (needHeight) => {
+    if (y - needHeight >= margin) return;
+    page = pdfDoc.addPage(pageSize);
+    y = page.getHeight() - margin;
+    drawHeader();
+  };
+
+  const drawRow = (row, idx) => {
+    if (idx % 2 === 1) {
+      page.drawRectangle({
+        x: tableX,
+        y: y - rowHeight + 2,
+        width: tableWidth,
+        height: rowHeight,
+        color: oddBg,
+      });
+    }
+
+    const values = [
+      String(row?.month_index ?? ""),
+      safeText(row?.fahrer_name, ""),
+      formatYfDistanceKm(row?.distanz_km),
+      formatYfDaysHours(row?.aktivitaet_total_minutes),
+      formatYfHoursMinutes(row?.fahrzeit_total_minutes),
+      formatYfHoursMinutes(row?.inaktivitaet_total_minutes),
+    ];
+
+    let x = tableX;
+    for (let i = 0; i < columns.length; i += 1) {
+      const col = columns[i];
+      const value = fitTextToWidth(font, values[i], textSize, col.width - 8);
+      const valueWidth = measureTextWidth(font, value, textSize);
+      page.drawText(value, {
+        x: x + ((col.width - valueWidth) / 2),
+        y: y - 11,
+        size: textSize,
+        font,
+        color: textColor,
+      });
+      x += col.width;
+      if (x < tableX + tableWidth - 0.5) {
+        page.drawLine({
+          start: { x, y: y - rowHeight + 2 },
+          end: { x, y: y + 2 },
+          thickness: 0.5,
+          color: borderColor,
+        });
+      }
+    }
+    page.drawLine({
+      start: { x: tableX, y: y - rowHeight + 2 },
+      end: { x: tableX + tableWidth, y: y - rowHeight + 2 },
+      thickness: 0.5,
+      color: borderColor,
+    });
+    y -= rowHeight;
+  };
+
+  drawHeader();
+  if (!rows.length) {
+    page.drawText("No rows found.", {
+      x: margin,
+      y: y - 10,
+      size: 9,
+      font,
+      color: textColor,
+    });
+    return pdfDoc.save();
+  }
+
+  for (let idx = 0; idx < rows.length; idx += 1) {
+    ensureSpace(rowHeight + 2);
+    drawRow(rows[idx], idx);
+  }
+
+  return pdfDoc.save();
+}
+
+async function buildYfLkwWeekPdfWithPdfLib({ userId, year, week, lkwId, rows }) {
+  const pdfDoc = await PDFDocument.create();
+  const font = await pdfDoc.embedFont(StandardFonts.Helvetica);
+  const boldFont = await pdfDoc.embedFont(StandardFonts.HelveticaBold);
+
+  const pageSize = [1040, 595];
+  const margin = 22;
+  const rowHeight = 17;
+  const textSize = 7;
+  const borderColor = rgb(0.74, 0.8, 0.9);
+  const headerBg = rgb(0.93, 0.96, 1);
+  const oddBg = rgb(0.985, 0.99, 1);
+  const textColor = rgb(0.08, 0.14, 0.24);
+  const columns = [
+    { key: "report_year", label: "Year", width: 54 },
+    { key: "month_name", label: "Month", width: 72 },
+    { key: "iso_week", label: "Week", width: 52 },
+    { key: "lkw_nummer", label: "LKW", width: 88 },
+    { key: "report_date", label: "Datum", width: 76 },
+    { key: "dayweek", label: "dayweek", width: 74 },
+    { key: "strecke_km", label: "Strecke", width: 72 },
+    { key: "km_start", label: "Kilometerstand Start", width: 120 },
+    { key: "km_end", label: "Kilometerstand Ende", width: 118 },
+    { key: "drivers_final", label: "Drivers final", width: 156 },
+  ];
+  const tableWidth = columns.reduce((sum, col) => sum + col.width, 0);
+  const tableX = margin + ((pageSize[0] - (margin * 2) - tableWidth) / 2);
+
+  let page = pdfDoc.addPage(pageSize);
+  let y = page.getHeight() - margin;
+
+  const drawHeader = () => {
+    page.drawText("Yellow Fox - LKW Week", {
+      x: margin,
+      y,
+      size: 14,
+      font: boldFont,
+      color: textColor,
+    });
+    y -= 16;
+    page.drawText(`Year: ${year} | Week: ${week} | LKW: ${safeText(lkwId, "all")} | Generated: ${new Date().toISOString()} UTC | User: ${userId}`, {
+      x: margin,
+      y,
+      size: 8,
+      font,
+      color: rgb(0.24, 0.3, 0.4),
+    });
+    y -= 14;
+
+    page.drawRectangle({
+      x: tableX,
+      y: y - rowHeight + 2,
+      width: tableWidth,
+      height: rowHeight,
+      color: headerBg,
+      borderColor,
+      borderWidth: 1,
+    });
+
+    let x = tableX;
+    for (const col of columns) {
+      const label = fitTextToWidth(boldFont, col.label, textSize, col.width - 8);
+      const labelWidth = measureTextWidth(boldFont, label, textSize);
+      page.drawText(label, {
+        x: x + ((col.width - labelWidth) / 2),
+        y: y - 10,
+        size: textSize,
+        font: boldFont,
+        color: textColor,
+      });
+      x += col.width;
+      if (x < tableX + tableWidth - 0.5) {
+        page.drawLine({
+          start: { x, y: y - rowHeight + 2 },
+          end: { x, y: y + 2 },
+          thickness: 0.8,
+          color: borderColor,
+        });
+      }
+    }
+    y -= rowHeight;
+  };
+
+  const ensureSpace = (needHeight) => {
+    if (y - needHeight >= margin) return;
+    page = pdfDoc.addPage(pageSize);
+    y = page.getHeight() - margin;
+    drawHeader();
+  };
+
+  const drawRow = (row, idx) => {
+    if (idx % 2 === 1) {
+      page.drawRectangle({
+        x: tableX,
+        y: y - rowHeight + 2,
+        width: tableWidth,
+        height: rowHeight,
+        color: oddBg,
+      });
+    }
+
+    const values = [
+      safeText(row?.report_year, ""),
+      safeText(row?.month_name, ""),
+      safeText(row?.iso_week, ""),
+      safeText(row?.lkw_nummer, ""),
+      safeText(row?.report_date, ""),
+      safeText(row?.dayweek, ""),
+      formatMoneyInt(row?.strecke_km),
+      formatMoneyInt(row?.km_start),
+      formatMoneyInt(row?.km_end),
+      safeText(row?.drivers_final, ""),
+    ];
+
+    let x = tableX;
+    for (let i = 0; i < columns.length; i += 1) {
+      const col = columns[i];
+      const value = fitTextToWidth(font, values[i], textSize, col.width - 8);
+      const valueWidth = measureTextWidth(font, value, textSize);
+      page.drawText(value, {
+        x: x + ((col.width - valueWidth) / 2),
+        y: y - 10,
+        size: textSize,
+        font,
+        color: textColor,
+      });
+      x += col.width;
+      if (x < tableX + tableWidth - 0.5) {
+        page.drawLine({
+          start: { x, y: y - rowHeight + 2 },
+          end: { x, y: y + 2 },
+          thickness: 0.5,
+          color: borderColor,
+        });
+      }
+    }
+    page.drawLine({
+      start: { x: tableX, y: y - rowHeight + 2 },
+      end: { x: tableX + tableWidth, y: y - rowHeight + 2 },
+      thickness: 0.5,
+      color: borderColor,
+    });
+    y -= rowHeight;
+  };
+
+  drawHeader();
+  if (!rows.length) {
+    page.drawText("No rows found.", {
+      x: margin,
+      y: y - 10,
+      size: 9,
+      font,
+      color: textColor,
+    });
+    return pdfDoc.save();
+  }
+
+  for (let idx = 0; idx < rows.length; idx += 1) {
+    ensureSpace(rowHeight + 2);
+    drawRow(rows[idx], idx);
+  }
+
+  return pdfDoc.save();
+}
+
 async function buildDieselLkwCardPdfWithPdfLib({ userId, rows, lkwId }) {
   const pdfDoc = await PDFDocument.create();
   const font = await pdfDoc.embedFont(StandardFonts.Helvetica);
@@ -4260,6 +4738,10 @@ async function handleHistory(request, env) {
       filename = makeDieselFilename();
     } else if (reportType === "diesel_lkw_card") {
       filename = makeDieselLkwCardFilename(params?.lkw_id);
+    } else if (reportType === "yf_driver_month") {
+      filename = makeYfDriverMonthFilename(params?.month, params?.driver_query);
+    } else if (reportType === "yf_lkw_week") {
+      filename = makeYfLkwWeekFilename(params?.year, params?.week, params?.lkw_id);
     } else if (reportType === "bonus") {
       filename = makeBonusFilename(params?.year, params?.month);
     } else if (REPORT_TYPE_TO_DOCK_KIND[reportType]) {
@@ -4580,6 +5062,31 @@ function validateGeneratePayload(body) {
     return { ok: true, reportType, lkwId };
   }
 
+  if (reportType === "yf_driver_month") {
+    const month = Number.parseInt(String(body.month ?? ""), 10);
+    const driverQuery = String(body.driver_query || "").trim().slice(0, 120);
+    if (!Number.isFinite(month) || month < 1 || month > 12) {
+      return { ok: false, status: 400, error: "Invalid month" };
+    }
+    if (!driverQuery) {
+      return { ok: false, status: 400, error: "Missing driver_query" };
+    }
+    return { ok: true, reportType, month, driverQuery };
+  }
+
+  if (reportType === "yf_lkw_week") {
+    const year = Number.parseInt(String(body.year ?? ""), 10);
+    const week = Number.parseInt(String(body.week ?? ""), 10);
+    const lkwId = String(body.lkw_id || "").trim().slice(0, 80);
+    if (!Number.isFinite(year) || !Number.isFinite(week) || year < 2025 || year > 2035 || week < 1 || week > 53) {
+      return { ok: false, status: 400, error: "Invalid year/week" };
+    }
+    if (!lkwId) {
+      return { ok: false, status: 400, error: "Missing lkw_id" };
+    }
+    return { ok: true, reportType, year, week, lkwId };
+  }
+
   if (reportType === "bonus") {
     const year = Number.parseInt(String(body.year ?? ""), 10);
     const period = String(body.period || "month").trim().toLowerCase() === "year" ? "year" : "month";
@@ -4646,6 +5153,8 @@ async function handleGenerateWithBody(body, env, enforceRateLimit = true) {
     && valid.reportType !== "einnahmen"
     && valid.reportType !== "diesel"
     && valid.reportType !== "diesel_lkw_card"
+    && valid.reportType !== "yf_driver_month"
+    && valid.reportType !== "yf_lkw_week"
     && valid.reportType !== "bonus"
     && valid.reportType !== "lkw_single"
     && valid.reportType !== "lkw_all"
@@ -5070,6 +5579,122 @@ async function handleGenerateWithBody(body, env, enforceRateLimit = true) {
         pageHeight: 595,
       });
     }
+  } else if (valid.reportType === "yf_driver_month") {
+    let rows;
+    const driverQuery = safeText(valid.driverQuery, "").trim();
+    const likeQuery = driverQuery ? `%${driverQuery}%` : "";
+    try {
+      const result = await queryNeon(
+        dbConnectionString,
+        YF_DRIVER_MONTH_SQL,
+        [valid.month, driverQuery, likeQuery],
+      );
+      rows = result.rows || [];
+    } catch (err) {
+      return json(
+        {
+          ok: false,
+          error: "Failed to execute SQL query",
+          code: "SQL_ERROR",
+          details: String(err?.message || err || "unknown error"),
+        },
+        500,
+        { "Cache-Control": "no-store" },
+      );
+    }
+
+    filename = makeYfDriverMonthFilename(valid.month, driverQuery);
+    outputKey = `yf_driver_month:${pad2(valid.month)}:${driverQuery}`;
+    try {
+      pdfBytes = await buildYfDriverMonthPdfWithPdfLib({
+        userId: auth.userId,
+        month: valid.month,
+        driverQuery,
+        rows,
+      });
+    } catch (err) {
+      pdfEngine = "legacy-fallback";
+      const lines = [];
+      lines.push("Month | Fahrer | Distanz | Aktivitaetsdauer | Fahrzeit | Inaktivitaetszeit");
+      lines.push("-".repeat(120));
+      for (const row of rows) {
+        lines.push([
+          safeText(row.month_index, ""),
+          safeText(row.fahrer_name, ""),
+          formatYfDistanceKm(row.distanz_km),
+          formatYfDaysHours(row.aktivitaet_total_minutes),
+          formatYfHoursMinutes(row.fahrzeit_total_minutes),
+          formatYfHoursMinutes(row.inaktivitaet_total_minutes),
+        ].join(" | "));
+      }
+      pdfBytes = buildSimplePdf({
+        title: `Yellow Fox - Driver Month ${pad2(valid.month)}`,
+        subtitle: `Generated at ${new Date().toISOString()} UTC, user ${auth.userId}`,
+        lines,
+        pageWidth: 842,
+        pageHeight: 595,
+      });
+    }
+  } else if (valid.reportType === "yf_lkw_week") {
+    let rows;
+    const lkwId = safeText(valid.lkwId, "").trim();
+    try {
+      const result = await queryNeon(
+        dbConnectionString,
+        YF_LKW_WEEK_SQL,
+        [valid.year, valid.week, lkwId],
+      );
+      rows = result.rows || [];
+    } catch (err) {
+      return json(
+        {
+          ok: false,
+          error: "Failed to execute SQL query",
+          code: "SQL_ERROR",
+          details: String(err?.message || err || "unknown error"),
+        },
+        500,
+        { "Cache-Control": "no-store" },
+      );
+    }
+
+    filename = makeYfLkwWeekFilename(valid.year, valid.week, lkwId);
+    outputKey = `yf_lkw_week:${valid.year}:W${pad2(valid.week)}:${lkwId}`;
+    try {
+      pdfBytes = await buildYfLkwWeekPdfWithPdfLib({
+        userId: auth.userId,
+        year: valid.year,
+        week: valid.week,
+        lkwId,
+        rows,
+      });
+    } catch (err) {
+      pdfEngine = "legacy-fallback";
+      const lines = [];
+      lines.push("Year | Month | Week | LKW | Datum | dayweek | Strecke | Kilometerstand Start | Kilometerstand Ende | Drivers final");
+      lines.push("-".repeat(170));
+      for (const row of rows) {
+        lines.push([
+          safeText(row.report_year, ""),
+          safeText(row.month_name, ""),
+          safeText(row.iso_week, ""),
+          safeText(row.lkw_nummer, ""),
+          safeText(row.report_date, ""),
+          safeText(row.dayweek, ""),
+          formatMoneyInt(row.strecke_km),
+          formatMoneyInt(row.km_start),
+          formatMoneyInt(row.km_end),
+          safeText(row.drivers_final, ""),
+        ].join(" | "));
+      }
+      pdfBytes = buildSimplePdf({
+        title: `Yellow Fox - LKW Week ${valid.year}/W${pad2(valid.week)}`,
+        subtitle: `Generated at ${new Date().toISOString()} UTC, user ${auth.userId}`,
+        lines,
+        pageWidth: 1040,
+        pageHeight: 595,
+      });
+    }
   } else if (valid.reportType === "lkw_single" || valid.reportType === "lkw_all") {
     let rows;
     const filterLkwId = valid.reportType === "lkw_single" ? safeText(valid.lkwId, "").trim() : "";
@@ -5244,6 +5869,10 @@ async function handleGenerateWithBody(body, env, enforceRateLimit = true) {
     reportParams.year = valid.year;
     reportParams.week = valid.week;
   }
+  if (valid.reportType === "yf_driver_month") {
+    reportParams.month = valid.month;
+    reportParams.driver_query = safeText(valid.driverQuery, "").trim();
+  }
   if ("year" in valid && "month" in valid) {
     reportParams.year = valid.year;
     if (valid.period === "month") reportParams.month = valid.month;
@@ -5392,6 +6021,24 @@ async function buildMetaWithAccess(request, env) {
           lkw_nummer: safeText(row.lkw_nummer, ""),
           label: [safeText(row.lkw_id, ""), safeText(row.lkw_nummer, "")].filter(Boolean).join(" - "),
         })).filter((row) => row.lkw_id);
+      } catch {
+        // Optional lookup only.
+      }
+      try {
+        const yfDriversResult = await queryNeon(
+          dbConnectionString,
+          `
+            SELECT DISTINCT fahrer_name
+            FROM report_yf_fahrer_monthly
+            WHERE COALESCE(fahrer_name, '') <> ''
+            ORDER BY fahrer_name
+          `,
+          [],
+        );
+        meta.lookups = meta.lookups || {};
+        meta.lookups.yf_drivers = (yfDriversResult.rows || [])
+          .map((row) => safeText(row.fahrer_name, ""))
+          .filter(Boolean);
       } catch {
         // Optional lookup only.
       }

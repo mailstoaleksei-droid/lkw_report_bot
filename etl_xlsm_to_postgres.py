@@ -46,6 +46,8 @@ REQUIRED_DRIVER_KEYS = ("fahrerid", "fahrername")
 BERICHT_DISPO_SHEET = "Bericht_Dispo"
 BONUS_DYNAMIK_SHEET = "BonusDynamik"
 DIESEL_SHEET = "Diesel"
+YF_FAHRER_SHEET = "YF_Fahrer"
+YF_SHEET = "YF"
 MONTHS_DE = {
     "januar": (1, "Januar"),
     "jan": (1, "Januar"),
@@ -135,7 +137,15 @@ def _parse_date(value: object) -> date | None:
         try:
             d = datetime.fromisoformat(s).date()
         except ValueError:
-            return None
+            d = None
+            for fmt in ("%d/%m/%Y", "%m/%d/%Y", "%d.%m.%Y", "%Y-%m-%d"):
+                try:
+                    d = datetime.strptime(s, fmt).date()
+                    break
+                except ValueError:
+                    continue
+            if d is None:
+                return None
     if d.year < 1970 or d.year > 2100:
         return None
     return d
@@ -315,6 +325,34 @@ class DieselMonthRow:
     euro_per_liter_shell: Decimal
     euro_per_liter_dkv: Decimal
     euro_per_liter_avg: Decimal
+    raw_payload: dict[str, object]
+
+
+@dataclass
+class YFFahrerMonthRow:
+    month_index: int
+    fahrer_name: str
+    distanz_km: Decimal
+    aktivitaet_total_minutes: int
+    fahrzeit_total_minutes: int
+    inaktivitaet_total_minutes: int
+    raw_payload: dict[str, object]
+
+
+@dataclass
+class YFLkwDayRow:
+    report_year: int
+    month_index: int
+    month_name: str
+    iso_week: int
+    lkw_nummer: str
+    report_date: date
+    source_row: int
+    dayweek: str | None
+    strecke_km: Decimal
+    km_start: Decimal
+    km_end: Decimal
+    drivers_final: str | None
     raw_payload: dict[str, object]
 
 
@@ -596,6 +634,177 @@ def _parse_int_like(value: object) -> int | None:
     return out if out > 0 else None
 
 
+def _parse_duration_minutes(value: object) -> int:
+    if value is None:
+        return 0
+
+    if isinstance(value, datetime):
+        return (value.hour * 60) + value.minute
+
+    if isinstance(value, (int, float, Decimal)):
+        parsed = Decimal(str(value))
+        if parsed <= Decimal("0"):
+            return 0
+        # Excel durations are stored as day fractions.
+        if abs(parsed) <= Decimal("10"):
+            return int((parsed * Decimal("1440")).to_integral_value(rounding=ROUND_HALF_UP))
+        return int(parsed.to_integral_value(rounding=ROUND_HALF_UP))
+
+    raw = str(value).strip()
+    if not raw or raw.upper() in {"#VALUE!", "#REF!", "#N/A", "N/A"}:
+        return 0
+
+    min_match = re.search(r"(-?\d+(?:[.,]\d+)?)\s*min", raw, flags=re.IGNORECASE)
+    if min_match:
+        return max(0, int(_parse_decimal(min_match.group(1)).to_integral_value(rounding=ROUND_HALF_UP)))
+
+    hhmm_match = re.search(r"(-?\d+):(\d{1,2})", raw)
+    if hhmm_match:
+        hours = int(hhmm_match.group(1))
+        minutes = int(hhmm_match.group(2))
+        total = (hours * 60) + minutes
+        return total if total > 0 else 0
+
+    as_decimal = _parse_decimal(raw)
+    if as_decimal > 0:
+        if as_decimal <= Decimal("10"):
+            return int((as_decimal * Decimal("1440")).to_integral_value(rounding=ROUND_HALF_UP))
+        return int(as_decimal.to_integral_value(rounding=ROUND_HALF_UP))
+    return 0
+
+
+def extract_yf_fahrer_months(wb) -> list[YFFahrerMonthRow]:
+    if YF_FAHRER_SHEET not in wb.sheetnames:
+        return []
+
+    ws = wb[YF_FAHRER_SHEET]
+    header_row_idx = _find_header_row(ws, ("month", "fahrer"), max_scan_rows=10)
+    header = _get_row_values(ws, header_row_idx)
+    index = _build_col_index(header)
+
+    col_month = _pick_col(index, "Month")
+    col_fahrer = _pick_col(index, "Fahrer")
+    col_distanz = _pick_col(index, "Distanz", "Distance")
+    col_aktivitaet = _pick_col(index, "Aktivitätsdauer", "Aktivitatsdauer", "Aktivitaetsdauer")
+    col_fahrzeit = _pick_col(index, "Fahrzeit")
+    col_inaktiv = _pick_col(index, "Inaktivitätszeit", "Inaktivitatszeit", "Inaktivitaetszeit")
+
+    required_cols = (col_month, col_fahrer, col_distanz, col_aktivitaet, col_fahrzeit, col_inaktiv)
+    if any(col is None for col in required_cols):
+        return []
+
+    by_key: dict[tuple[int, str], YFFahrerMonthRow] = {}
+    for row_idx, row in enumerate(_iter_sheet_rows(ws, header_row_idx), start=header_row_idx + 1):
+        if col_month >= len(row) or col_fahrer >= len(row):
+            continue
+        month_index = _parse_int_like(row[col_month])
+        fahrer_name = _clean_text(row[col_fahrer]) or ""
+        if not month_index or month_index < 1 or month_index > 12 or not fahrer_name:
+            continue
+
+        payload = {
+            str(header[i]).strip() if i < len(header) and header[i] is not None else f"col_{i+1}":
+            (row[i] if i < len(row) else None)
+            for i in range(len(header))
+        }
+        payload["sheet"] = YF_FAHRER_SHEET
+        payload["row"] = row_idx
+
+        key = (month_index, fahrer_name.upper())
+        distanz_km = _parse_decimal(row[col_distanz]) if col_distanz < len(row) else Decimal("0.00")
+        aktivitaet_total_minutes = _parse_duration_minutes(row[col_aktivitaet]) if col_aktivitaet < len(row) else 0
+        fahrzeit_total_minutes = _parse_duration_minutes(row[col_fahrzeit]) if col_fahrzeit < len(row) else 0
+        inaktivitaet_total_minutes = _parse_duration_minutes(row[col_inaktiv]) if col_inaktiv < len(row) else 0
+
+        existing = by_key.get(key)
+        if existing is None:
+            by_key[key] = YFFahrerMonthRow(
+                month_index=month_index,
+                fahrer_name=fahrer_name,
+                distanz_km=distanz_km,
+                aktivitaet_total_minutes=aktivitaet_total_minutes,
+                fahrzeit_total_minutes=fahrzeit_total_minutes,
+                inaktivitaet_total_minutes=inaktivitaet_total_minutes,
+                raw_payload=payload,
+            )
+        else:
+            existing.distanz_km += distanz_km
+            existing.aktivitaet_total_minutes += aktivitaet_total_minutes
+            existing.fahrzeit_total_minutes += fahrzeit_total_minutes
+            existing.inaktivitaet_total_minutes += inaktivitaet_total_minutes
+            existing.raw_payload = payload
+
+    return [by_key[k] for k in sorted(by_key.keys())]
+
+
+def extract_yf_lkw_days(wb) -> list[YFLkwDayRow]:
+    if YF_SHEET not in wb.sheetnames:
+        return []
+
+    ws = wb[YF_SHEET]
+    header_row_idx = _find_header_row(ws, ("year", "lkw", "month", "datum"), max_scan_rows=10)
+    header = _get_row_values(ws, header_row_idx)
+    index = _build_col_index(header)
+
+    col_year = _pick_col(index, "Year")
+    col_lkw = _pick_col(index, "LKW")
+    col_month = _pick_col(index, "Month")
+    col_datum = _pick_col(index, "Datum", "Date")
+    col_week = _pick_col(index, "Week")
+    col_dayweek = _pick_col(index, "dayweek", "Dayweek", "Day of week")
+    col_strecke = _pick_col(index, "Strecke", "Distance")
+    col_km_start = _pick_col(index, "Kilometerstand Start")
+    col_km_end = _pick_col(index, "Kilometerstand Ende")
+    col_drivers_final = _pick_col(index, "Drivers final")
+
+    required_cols = (
+        col_year, col_lkw, col_month, col_datum, col_week,
+        col_dayweek, col_strecke, col_km_start, col_km_end, col_drivers_final,
+    )
+    if any(col is None for col in required_cols):
+        return []
+
+    rows: list[YFLkwDayRow] = []
+    for row_idx, row in enumerate(_iter_sheet_rows(ws, header_row_idx), start=header_row_idx + 1):
+        if col_year >= len(row) or col_lkw >= len(row) or col_datum >= len(row):
+            continue
+        report_year = _parse_int_like(row[col_year])
+        month_index = _parse_int_like(row[col_month]) if col_month < len(row) else None
+        iso_week = _parse_int_like(row[col_week]) if col_week < len(row) else None
+        lkw_nummer = _clean_text(row[col_lkw]) or ""
+        report_date = _parse_date(row[col_datum])
+        if not report_year or not month_index or not iso_week or not lkw_nummer or report_date is None:
+            continue
+
+        payload = {
+            str(header[i]).strip() if i < len(header) and header[i] is not None else f"col_{i+1}":
+            (row[i] if i < len(row) else None)
+            for i in range(len(header))
+        }
+        payload["sheet"] = YF_SHEET
+        payload["row"] = row_idx
+
+        rows.append(
+            YFLkwDayRow(
+                report_year=report_year,
+                month_index=month_index,
+                month_name=MONTH_NAMES_DE[month_index - 1] if 1 <= month_index <= 12 else str(month_index),
+                iso_week=iso_week,
+                lkw_nummer=lkw_nummer,
+                report_date=report_date,
+                source_row=row_idx,
+                dayweek=_clean_text(row[col_dayweek]) if col_dayweek < len(row) else None,
+                strecke_km=_parse_decimal(row[col_strecke]) if col_strecke < len(row) else Decimal("0.00"),
+                km_start=_parse_decimal(row[col_km_start]) if col_km_start < len(row) else Decimal("0.00"),
+                km_end=_parse_decimal(row[col_km_end]) if col_km_end < len(row) else Decimal("0.00"),
+                drivers_final=_clean_text(row[col_drivers_final]) if col_drivers_final < len(row) else None,
+                raw_payload=payload,
+            )
+        )
+
+    return sorted(rows, key=lambda r: (r.report_year, r.iso_week, r.lkw_nummer.upper(), r.report_date))
+
+
 def extract_diesel_months(wb) -> list[DieselMonthRow]:
     if DIESEL_SHEET not in wb.sheetnames:
         return []
@@ -795,6 +1004,73 @@ def _ensure_diesel_table(cur) -> None:
     )
 
 
+def _ensure_yf_fahrer_table(cur) -> None:
+    cur.execute(
+        """
+        CREATE TABLE IF NOT EXISTS report_yf_fahrer_monthly (
+            month_index SMALLINT NOT NULL CHECK (month_index BETWEEN 1 AND 12),
+            fahrer_name TEXT NOT NULL,
+            distanz_km NUMERIC(14, 2) NOT NULL DEFAULT 0,
+            aktivitaet_total_minutes INTEGER NOT NULL DEFAULT 0,
+            fahrzeit_total_minutes INTEGER NOT NULL DEFAULT 0,
+            inaktivitaet_total_minutes INTEGER NOT NULL DEFAULT 0,
+            raw_payload JSONB NOT NULL DEFAULT '{}'::jsonb,
+            updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+            PRIMARY KEY (month_index, fahrer_name)
+        )
+        """
+    )
+    cur.execute(
+        """
+        CREATE INDEX IF NOT EXISTS idx_report_yf_fahrer_lookup
+            ON report_yf_fahrer_monthly (month_index, fahrer_name)
+        """
+    )
+
+
+def _ensure_yf_lkw_table(cur) -> None:
+    cur.execute(
+        """
+        CREATE TABLE IF NOT EXISTS report_yf_lkw_daily (
+            report_year SMALLINT NOT NULL CHECK (report_year BETWEEN 2020 AND 2100),
+            month_index SMALLINT NOT NULL CHECK (month_index BETWEEN 1 AND 12),
+            month_name TEXT NOT NULL,
+            iso_week SMALLINT NOT NULL CHECK (iso_week BETWEEN 1 AND 53),
+            lkw_nummer TEXT NOT NULL,
+            report_date DATE NOT NULL,
+            source_row INTEGER NOT NULL DEFAULT 0,
+            dayweek TEXT,
+            strecke_km NUMERIC(14, 2) NOT NULL DEFAULT 0,
+            km_start NUMERIC(14, 2) NOT NULL DEFAULT 0,
+            km_end NUMERIC(14, 2) NOT NULL DEFAULT 0,
+            drivers_final TEXT,
+            raw_payload JSONB NOT NULL DEFAULT '{}'::jsonb,
+            updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+            PRIMARY KEY (report_year, iso_week, lkw_nummer, report_date, source_row)
+        )
+        """
+    )
+    cur.execute(
+        """
+        ALTER TABLE report_yf_lkw_daily
+        ADD COLUMN IF NOT EXISTS source_row INTEGER NOT NULL DEFAULT 0
+        """
+    )
+    cur.execute("ALTER TABLE report_yf_lkw_daily DROP CONSTRAINT IF EXISTS report_yf_lkw_daily_pkey")
+    cur.execute(
+        """
+        ALTER TABLE report_yf_lkw_daily
+        ADD PRIMARY KEY (report_year, iso_week, lkw_nummer, report_date, source_row)
+        """
+    )
+    cur.execute(
+        """
+        CREATE INDEX IF NOT EXISTS idx_report_yf_lkw_lookup
+            ON report_yf_lkw_daily (report_year, iso_week, lkw_nummer, report_date, source_row)
+        """
+    )
+
+
 def run_etl(database_url: str, xlsm_path: Path) -> dict[str, int]:
     psycopg = _lazy_import_psycopg()
     created_copy = False
@@ -822,6 +1098,8 @@ def run_etl(database_url: str, xlsm_path: Path) -> dict[str, int]:
             einnahmen_rows = extract_einnahmen_months(wb)
             bonus_rows = extract_bonus_dynamik_months(wb)
             diesel_rows = extract_diesel_months(wb)
+            yf_fahrer_rows = extract_yf_fahrer_months(wb)
+            yf_lkw_rows = extract_yf_lkw_days(wb)
             wb.close()
 
             company_names = sorted(
@@ -840,6 +1118,8 @@ def run_etl(database_url: str, xlsm_path: Path) -> dict[str, int]:
                 _ensure_einnahmen_table(cur)
                 _ensure_bonus_table(cur)
                 _ensure_diesel_table(cur)
+                _ensure_yf_fahrer_table(cur)
+                _ensure_yf_lkw_table(cur)
 
                 rows_inserted = 0
                 rows_updated = 0
@@ -1032,6 +1312,76 @@ def run_etl(database_url: str, xlsm_path: Path) -> dict[str, int]:
                     )
                     rows_inserted += 1
 
+                cur.execute("DELETE FROM report_yf_fahrer_monthly")
+                rows_deleted += int(cur.rowcount or 0)
+                for rec in yf_fahrer_rows:
+                    cur.execute(
+                        """
+                        INSERT INTO report_yf_fahrer_monthly (
+                            month_index,
+                            fahrer_name,
+                            distanz_km,
+                            aktivitaet_total_minutes,
+                            fahrzeit_total_minutes,
+                            inaktivitaet_total_minutes,
+                            raw_payload,
+                            updated_at
+                        )
+                        VALUES (%s, %s, %s, %s, %s, %s, %s::jsonb, NOW())
+                        """,
+                        (
+                            rec.month_index,
+                            rec.fahrer_name,
+                            rec.distanz_km,
+                            rec.aktivitaet_total_minutes,
+                            rec.fahrzeit_total_minutes,
+                            rec.inaktivitaet_total_minutes,
+                            json.dumps(rec.raw_payload, ensure_ascii=False, default=str),
+                        ),
+                    )
+                    rows_inserted += 1
+
+                cur.execute("DELETE FROM report_yf_lkw_daily")
+                rows_deleted += int(cur.rowcount or 0)
+                for rec in yf_lkw_rows:
+                    cur.execute(
+                        """
+                        INSERT INTO report_yf_lkw_daily (
+                            report_year,
+                            month_index,
+                            month_name,
+                            iso_week,
+                            lkw_nummer,
+                            report_date,
+                            source_row,
+                            dayweek,
+                            strecke_km,
+                            km_start,
+                            km_end,
+                            drivers_final,
+                            raw_payload,
+                            updated_at
+                        )
+                        VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s::jsonb, NOW())
+                        """,
+                        (
+                            rec.report_year,
+                            rec.month_index,
+                            rec.month_name,
+                            rec.iso_week,
+                            rec.lkw_nummer,
+                            rec.report_date,
+                            rec.source_row,
+                            rec.dayweek,
+                            rec.strecke_km,
+                            rec.km_start,
+                            rec.km_end,
+                            rec.drivers_final,
+                            json.dumps(rec.raw_payload, ensure_ascii=False, default=str),
+                        ),
+                    )
+                    rows_inserted += 1
+
                 cur.execute(
                     """
                     UPDATE etl_log
@@ -1046,7 +1396,7 @@ def run_etl(database_url: str, xlsm_path: Path) -> dict[str, int]:
                     WHERE id = %s
                     """,
                     (
-                        len(trucks) + len(drivers) + len(einnahmen_rows) + len(bonus_rows) + len(diesel_rows),
+                        len(trucks) + len(drivers) + len(einnahmen_rows) + len(bonus_rows) + len(diesel_rows) + len(yf_fahrer_rows) + len(yf_lkw_rows),
                         rows_inserted,
                         rows_updated,
                         rows_deleted,
@@ -1058,6 +1408,8 @@ def run_etl(database_url: str, xlsm_path: Path) -> dict[str, int]:
                                 "einnahmen_months": len(einnahmen_rows),
                                 "bonus_rows": len(bonus_rows),
                                 "diesel_months": len(diesel_rows),
+                                "yf_fahrer_rows": len(yf_fahrer_rows),
+                                "yf_lkw_rows": len(yf_lkw_rows),
                                 "workbook_used": str(readable_path),
                             },
                             ensure_ascii=False,
@@ -1074,6 +1426,8 @@ def run_etl(database_url: str, xlsm_path: Path) -> dict[str, int]:
                 "einnahmen_months": len(einnahmen_rows),
                 "bonus_rows": len(bonus_rows),
                 "diesel_months": len(diesel_rows),
+                "yf_fahrer_rows": len(yf_fahrer_rows),
+                "yf_lkw_rows": len(yf_lkw_rows),
             }
 
         except Exception as exc:
@@ -1117,7 +1471,9 @@ def main() -> int:
         f"trucks={result['trucks']} drivers={result['drivers']} "
         f"einnahmen_months={result['einnahmen_months']} "
         f"bonus_rows={result['bonus_rows']} "
-        f"diesel_months={result['diesel_months']}"
+        f"diesel_months={result['diesel_months']} "
+        f"yf_fahrer_rows={result['yf_fahrer_rows']} "
+        f"yf_lkw_rows={result['yf_lkw_rows']}"
     )
     return 0
 
