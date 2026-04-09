@@ -1822,6 +1822,7 @@
         hintYf: "Vehicle mileage and fuel consumption",
         hintEinnahmen: "Total revenue report for all operations",
         hintDiesel: "Generate 2-page Diesel PDF from sheet ranges",
+        hintDieselCard: "Select LKW and generate PDF with DKV, Shell and Tankpool card numbers",
         hintBonus: "Generate Bonus as whole year or as selected year/month with optional Fahrer filter",
         hintDataPlan: "Select process, year and week for Data/Plan report",
         hintDataPlanPlan: "Plan: selected week + 3 weeks",
@@ -1916,6 +1917,7 @@
         hintYf: "Пробег и расход топлива транспорта",
         hintEinnahmen: "Отчет по общей выручке",
         hintDiesel: "Сформировать 2-страничный Diesel PDF по диапазонам листа",
+        hintDieselCard: "Выберите LKW и сформируйте PDF с номерами карт DKV, Shell и Tankpool",
         hintBonus: "Сформируйте Bonus за весь год или за выбранные год/месяц, при необходимости укажите Fahrer",
         hintDataPlan: "Выберите процесс, год и неделю для отчета Data/Plan",
         hintDataPlanPlan: "Plan: выбранная неделя + 3 недели",
@@ -2096,6 +2098,15 @@
       if (type === "diesel") {
         return buildGenerateDirectUrl("diesel", {}, initData || "", disposition);
       }
+      if (type === "diesel_lkw_card") {
+        const params = item?.params || {};
+        return buildGenerateDirectUrl(
+          "diesel_lkw_card",
+          { lkw_id: String(params.lkw_id || "") },
+          initData || "",
+          disposition,
+        );
+      }
       if (type === "bonus") {
         const params = item?.params || {};
         return buildGenerateDirectUrl(
@@ -2254,6 +2265,20 @@
         throw new Error(data?.error || "Failed to load meta");
       }
       return data;
+    }
+
+    async function populateLkwVehicleSelect(selectId) {
+      const select = $(selectId);
+      if (!select) return;
+      try {
+        const meta = await fetchMetaServer();
+        const items = Array.isArray(meta?.lookups?.lkw_vehicles) ? meta.lookups.lkw_vehicles : [];
+        const opts = [`<option value="">${L("choose")}</option>`]
+          .concat(items.map((item) => `<option value="${escapeHtml(item.lkw_id)}">${escapeHtml(item.label || item.lkw_id)}</option>`));
+        select.innerHTML = opts.join("");
+      } catch (err) {
+        select.innerHTML = `<option value="">${escapeHtml(err?.message || "Failed to load LKW list")}</option>`;
+      }
     }
 
     function formatDateTimeLocal(isoString) {
@@ -2851,24 +2876,6 @@
       if (footer) footer.style.display = "none";
       if ($("btnPrimary")) $("btnPrimary").style.display = "none";
 
-      const loadLkwOptions = async () => {
-        try {
-          const meta = await fetchMetaServer();
-          const items = Array.isArray(meta?.lookups?.lkw_vehicles) ? meta.lookups.lkw_vehicles : [];
-          const select = $("lkwSingleVehicle");
-          if (select) {
-            const opts = [`<option value="">${L("choose")}</option>`]
-              .concat(items.map((item) => `<option value="${escapeHtml(item.lkw_id)}">${escapeHtml(item.label || item.lkw_id)}</option>`));
-            select.innerHTML = opts.join("");
-          }
-        } catch (err) {
-          const select = $("lkwSingleVehicle");
-          if (select) {
-            select.innerHTML = `<option value="">${escapeHtml(err?.message || "Failed to load LKW list")}</option>`;
-          }
-        }
-      };
-
       $("lkwSingleRun").onclick = async () => {
         const lkwId = String($("lkwSingleVehicle")?.value || "").trim();
         if (!lkwId) {
@@ -2883,7 +2890,7 @@
         await sendReportGenerate("lkw_all", {});
       };
 
-      loadLkwOptions();
+      populateLkwVehicleSelect("lkwSingleVehicle");
       openSheet();
     }
 
@@ -2983,16 +2990,45 @@
     }
 
     function openDiesel() {
-      setSheetHeader("Diesel", L("hintDiesel"), "Quick");
+      setSheetHeader("Diesel", L("hintDiesel"), "PDF");
       setSegments([], "", () => {});
-      setForm(`<div class="note">${L("hintDiesel")}</div>`);
+      setForm(`
+        <div class="field">
+          <label>Diesel PDF</label>
+          <div class="note">${L("hintDiesel")}</div>
+          <div class="note-actions">
+            <button type="button" class="btn btn-primary" id="dieselSnapshotRun">${L("generate")}</button>
+          </div>
+        </div>
+        <div class="field">
+          <label>LKW Karte</label>
+          <select id="dieselCardVehicle"><option value="">${L("loadingHistory")}</option></select>
+          <div class="note">${L("hintDieselCard")}</div>
+          <div class="note-actions">
+            <button type="button" class="btn btn-primary" id="dieselCardRun">${L("generate")}</button>
+          </div>
+        </div>
+      `);
       setNote("");
 
-      $("btnPrimary").textContent = L("generate");
-      $("btnPrimary").onclick = async () => {
+      const footer = $("btnPrimary")?.parentElement;
+      if (footer) footer.style.display = "none";
+      if ($("btnPrimary")) $("btnPrimary").style.display = "none";
+
+      $("dieselSnapshotRun").onclick = async () => {
         await sendReportGenerate("diesel", {});
       };
+      $("dieselCardRun").onclick = async () => {
+        const lkwId = String($("dieselCardVehicle")?.value || "").trim();
+        if (!lkwId) {
+          haptic("error");
+          showToast(L("choose"));
+          return;
+        }
+        await sendReportGenerate("diesel_lkw_card", { lkw_id: lkwId });
+      };
 
+      populateLkwVehicleSelect("dieselCardVehicle");
       openSheet();
     }
 

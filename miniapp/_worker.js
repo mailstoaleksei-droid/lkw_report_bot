@@ -129,6 +129,28 @@ const REPORTS = [
     params: [],
   },
   {
+    id: "diesel_lkw_card",
+    enabled: true,
+    icon: "fuel",
+    name: {
+      en: "Diesel (LKW Card)",
+      ru: "Diesel (карта LKW)",
+      de: "Diesel (LKW Karte)",
+    },
+    description: {
+      en: "Fuel card PDF for one selected LKW from sheet LKW",
+      ru: "PDF по топливным картам для одного выбранного LKW из листа LKW",
+      de: "Tankkarten-PDF fuer ein ausgewaehltes LKW aus Blatt LKW",
+    },
+    params: [
+      {
+        id: "lkw_id",
+        type: "text",
+        label: { en: "LKW ID", ru: "LKW ID" },
+      },
+    ],
+  },
+  {
     id: "bonus",
     enabled: true,
     icon: "bonus",
@@ -593,6 +615,19 @@ WHERE (
 ORDER BY t.external_id;
 `;
 
+const DIESEL_LKW_CARD_SQL = `
+SELECT
+  t.external_id AS lkw_id,
+  COALESCE(NULLIF(t.plate_number, ''), NULLIF(t.raw_payload->>'LKW-Nummer', ''), NULLIF(t.raw_payload->>'Number', '')) AS lkw_nummer,
+  COALESCE(NULLIF(t.raw_payload->>'DKV Card', ''), NULLIF(t.raw_payload->>'DKV', ''), '0') AS dkv_card,
+  COALESCE(NULLIF(t.raw_payload->>'Shell Card', ''), NULLIF(t.raw_payload->>'Shell', ''), '0') AS shell_card,
+  COALESCE(NULLIF(t.raw_payload->>'Tankpool Card', ''), NULLIF(t.raw_payload->>'Tankpool', ''), '0') AS tankpool_card
+FROM trucks t
+WHERE lower(t.external_id) = lower($1::text)
+ORDER BY t.external_id
+LIMIT 1;
+`;
+
 const DRIVERS_LIST_SQL = `
 SELECT
   d.external_id AS fahrer_id,
@@ -903,6 +938,12 @@ function makeEinnahmenFilename(at = new Date()) {
 
 function makeDieselFilename(at = new Date()) {
   return `diesel_${formatUtcDateStamp(at)}.pdf`;
+}
+
+function makeDieselLkwCardFilename(lkwId, at = new Date()) {
+  const clean = String(lkwId || "").trim();
+  if (clean) return `diesel_lkw_card_${clean}.pdf`;
+  return `diesel_lkw_card_${formatUtcDateStamp(at)}.pdf`;
 }
 
 function makeBonusFilename(year, month, at = new Date(), period = "month") {
@@ -3689,6 +3730,135 @@ function formatLkwMasterCell(value, kind = "text") {
   return raw;
 }
 
+async function buildDieselLkwCardPdfWithPdfLib({ userId, rows, lkwId }) {
+  const pdfDoc = await PDFDocument.create();
+  const font = await pdfDoc.embedFont(StandardFonts.Helvetica);
+  const boldFont = await pdfDoc.embedFont(StandardFonts.HelveticaBold);
+
+  const pageSize = [842, 595];
+  const margin = 28;
+  const rowHeight = 24;
+  const textSize = 10;
+  const borderColor = rgb(0.74, 0.8, 0.9);
+  const headerBg = rgb(0.93, 0.96, 1);
+  const oddBg = rgb(0.985, 0.99, 1);
+  const textColor = rgb(0.08, 0.14, 0.24);
+  const columns = resolveAutoColumns({
+    columns: [
+      { key: "lkw_id", label: "LKW-ID", width: "auto", min_width: 90, max_width: 130 },
+      { key: "lkw_nummer", label: "LKW-Nummer", width: "auto", min_width: 120, max_width: 170 },
+      { key: "dkv_card", label: "DKV Card", width: "auto", min_width: 150, max_width: 180 },
+      { key: "shell_card", label: "Shell Card", width: "auto", min_width: 160, max_width: 190 },
+      { key: "tankpool_card", label: "Tankpool Card", width: "auto", min_width: 130, max_width: 160 },
+    ],
+    rows,
+    font,
+    size: textSize,
+    maxTableWidth: pageSize[0] - (margin * 2),
+  });
+  const tableWidth = columns.reduce((sum, col) => sum + col.width, 0);
+  const tableX = margin + ((pageSize[0] - (margin * 2) - tableWidth) / 2);
+
+  const page = pdfDoc.addPage(pageSize);
+  let y = page.getHeight() - margin;
+
+  page.drawText("Diesel - LKW Karte", {
+    x: margin,
+    y,
+    size: 16,
+    font: boldFont,
+    color: textColor,
+  });
+  y -= 18;
+  page.drawText(`Sheet LKW | LKW-ID: ${safeText(lkwId, "-")} | Generated: ${new Date().toISOString()} UTC | User: ${userId}`, {
+    x: margin,
+    y,
+    size: 9,
+    font,
+    color: rgb(0.24, 0.3, 0.4),
+  });
+  y -= 28;
+
+  page.drawRectangle({
+    x: tableX,
+    y: y - rowHeight + 2,
+    width: tableWidth,
+    height: rowHeight,
+    color: headerBg,
+    borderColor,
+    borderWidth: 1,
+  });
+
+  let x = tableX;
+  for (const col of columns) {
+    const label = fitTextToWidth(boldFont, col.label, textSize, col.width - 8);
+    const labelWidth = measureTextWidth(boldFont, label, textSize);
+    page.drawText(label, {
+      x: x + ((col.width - labelWidth) / 2),
+      y: y - 15,
+      size: textSize,
+      font: boldFont,
+      color: textColor,
+    });
+    x += col.width;
+    if (x < tableX + tableWidth - 0.5) {
+      page.drawLine({
+        start: { x, y: y - rowHeight + 2 },
+        end: { x, y: y + 2 },
+        thickness: 0.8,
+        color: borderColor,
+      });
+    }
+  }
+  y -= rowHeight;
+
+  if (!Array.isArray(rows) || rows.length === 0) {
+    page.drawText("No rows found.", {
+      x: margin,
+      y: y - 20,
+      size: 11,
+      font,
+      color: textColor,
+    });
+    return pdfDoc.save();
+  }
+
+  const row = rows[0] || {};
+  page.drawRectangle({
+    x: tableX,
+    y: y - rowHeight + 2,
+    width: tableWidth,
+    height: rowHeight,
+    color: oddBg,
+    borderColor,
+    borderWidth: 1,
+  });
+
+  x = tableX;
+  for (const col of columns) {
+    const value = fitTextToWidth(font, formatLkwMasterCell(row?.[col.key], "text"), textSize, col.width - 8);
+    const valueWidth = measureTextWidth(font, value, textSize);
+    page.drawText(value, {
+      x: x + ((col.width - valueWidth) / 2),
+      y: y - 15,
+      size: textSize,
+      font,
+      color: textColor,
+    });
+    x += col.width;
+    if (x < tableX + tableWidth - 0.5) {
+      page.drawLine({
+        start: { x, y: y - rowHeight + 2 },
+        end: { x, y: y + 2 },
+        thickness: 0.5,
+        color: borderColor,
+      });
+    }
+  }
+
+  return pdfDoc.save();
+}
+
 async function buildLkwMasterPdfWithPdfLib({ userId, rows, title }) {
   const pdfDoc = await PDFDocument.create();
   const font = await pdfDoc.embedFont(StandardFonts.Helvetica);
@@ -4088,6 +4258,8 @@ async function handleHistory(request, env) {
       filename = makeEinnahmenFilename();
     } else if (reportType === "diesel") {
       filename = makeDieselFilename();
+    } else if (reportType === "diesel_lkw_card") {
+      filename = makeDieselLkwCardFilename(params?.lkw_id);
     } else if (reportType === "bonus") {
       filename = makeBonusFilename(params?.year, params?.month);
     } else if (REPORT_TYPE_TO_DOCK_KIND[reportType]) {
@@ -4400,6 +4572,14 @@ function validateGeneratePayload(body) {
     return { ok: true, reportType };
   }
 
+  if (reportType === "diesel_lkw_card") {
+    const lkwId = String(body.lkw_id || "").trim().slice(0, 40);
+    if (!lkwId) {
+      return { ok: false, status: 400, error: "Missing lkw_id" };
+    }
+    return { ok: true, reportType, lkwId };
+  }
+
   if (reportType === "bonus") {
     const year = Number.parseInt(String(body.year ?? ""), 10);
     const period = String(body.period || "month").trim().toLowerCase() === "year" ? "year" : "month";
@@ -4465,6 +4645,7 @@ async function handleGenerateWithBody(body, env, enforceRateLimit = true) {
     && valid.reportType !== "data_data"
     && valid.reportType !== "einnahmen"
     && valid.reportType !== "diesel"
+    && valid.reportType !== "diesel_lkw_card"
     && valid.reportType !== "bonus"
     && valid.reportType !== "lkw_single"
     && valid.reportType !== "lkw_all"
@@ -4829,6 +5010,61 @@ async function handleGenerateWithBody(body, env, enforceRateLimit = true) {
       pdfBytes = buildSimplePdf({
         title: "Diesel Snapshot",
         subtitle: `Generated at ${new Date().toISOString()} UTC | user ${auth.userId}`,
+        lines,
+        pageWidth: 842,
+        pageHeight: 595,
+      });
+    }
+  } else if (valid.reportType === "diesel_lkw_card") {
+    let rows;
+    const filterLkwId = safeText(valid.lkwId, "").trim();
+    try {
+      const result = await queryNeon(
+        dbConnectionString,
+        DIESEL_LKW_CARD_SQL,
+        [filterLkwId],
+      );
+      rows = result.rows || [];
+    } catch (err) {
+      return json(
+        {
+          ok: false,
+          error: "Failed to execute SQL query",
+          code: "SQL_ERROR",
+          details: String(err?.message || err || "unknown error"),
+        },
+        500,
+        { "Cache-Control": "no-store" },
+      );
+    }
+
+    filename = makeDieselLkwCardFilename(filterLkwId);
+    outputKey = `diesel_lkw_card:${filterLkwId}`;
+    try {
+      pdfBytes = await buildDieselLkwCardPdfWithPdfLib({
+        userId: auth.userId,
+        rows,
+        lkwId: filterLkwId,
+      });
+    } catch (err) {
+      pdfEngine = "legacy-fallback";
+      const lines = [];
+      lines.push("LKW-ID | LKW-Nummer | DKV Card | Shell Card | Tankpool Card");
+      lines.push("-".repeat(110));
+      for (const row of rows) {
+        lines.push(
+          [
+            safeText(row.lkw_id, ""),
+            safeText(row.lkw_nummer, ""),
+            formatLkwMasterCell(row.dkv_card, "text"),
+            formatLkwMasterCell(row.shell_card, "text"),
+            formatLkwMasterCell(row.tankpool_card, "text"),
+          ].join(" | "),
+        );
+      }
+      pdfBytes = buildSimplePdf({
+        title: `Diesel - LKW Karte ${filterLkwId}`,
+        subtitle: `Generated at ${new Date().toISOString()} UTC, user ${auth.userId}`,
         lines,
         pageWidth: 842,
         pageHeight: 595,
