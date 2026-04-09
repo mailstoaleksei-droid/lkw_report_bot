@@ -2809,10 +2809,13 @@ function buildBonusYearMatrixRows(rows = [], year) {
       const out = {
         fahrer_id: row.fahrer_id,
         fahrer_name: row.fahrer_name,
+        year_total: 0,
       };
       for (let month = 1; month <= 12; month += 1) {
-        out[`m${month}`] = toNumberSafe(row.finals[month], 0);
+        const finalValue = toNumberSafe(row.finals[month], 0);
+        out[`m${month}`] = finalValue;
         out[`m${month}_label`] = `${BONUS_MONTHS_SHORT[month - 1]} ${year} Final`;
+        out.year_total += finalValue;
       }
       return out;
     })
@@ -3094,7 +3097,7 @@ async function buildBonusYearPdfWithPdfLib({
   const font = await pdfDoc.embedFont(StandardFonts.Helvetica);
   const boldFont = await pdfDoc.embedFont(StandardFonts.HelveticaBold);
 
-  const pageSize = [1040, 595];
+  const pageSize = [1120, 595];
   const margin = 18;
   const rowHeight = 14;
   const textSize = 7;
@@ -3113,6 +3116,7 @@ async function buildBonusYearPdfWithPdfLib({
       width: 66,
       finalCol: true,
     })),
+    { key: "year_total", label: `${year} Total`, width: 74, finalCol: true },
   ];
   const tableWidth = columns.reduce((sum, col) => sum + col.width, 0);
   const tableX = margin;
@@ -4534,14 +4538,15 @@ async function handleGenerateWithBody(body, env, enforceRateLimit = true) {
       const lines = [];
       if (valid.period === "year") {
         const matrixRows = buildBonusYearMatrixRows(rows, valid.year);
-        lines.push(`ID | Fahrer | ${BONUS_MONTHS_SHORT.map((m) => `${m} ${valid.year} Final`).join(" | ")}`);
-        lines.push("-".repeat(220));
+        lines.push(`ID | Fahrer | ${BONUS_MONTHS_SHORT.map((m) => `${m} ${valid.year} Final`).join(" | ")} | ${valid.year} Total`);
+        lines.push("-".repeat(240));
         for (const row of matrixRows) {
           lines.push(
             [
               safeText(row.fahrer_id, ""),
               safeText(row.fahrer_name, ""),
               ...Array.from({ length: 12 }, (_, idx) => formatMoneyInt(row[`m${idx + 1}`])),
+              formatMoneyInt(row.year_total),
             ].join(" | "),
           );
         }

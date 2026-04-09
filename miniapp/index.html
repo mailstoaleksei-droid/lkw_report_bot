@@ -1822,7 +1822,7 @@
         hintYf: "Vehicle mileage and fuel consumption",
         hintEinnahmen: "Total revenue report for all operations",
         hintDiesel: "Generate 2-page Diesel PDF from sheet ranges",
-        hintBonus: "Select year and month or whole year with optional Fahrer filter",
+        hintBonus: "Select year and optional Fahrer filter for whole-year bonus report",
         hintDataPlan: "Select process, year and week for Data/Plan report",
         hintDataPlanPlan: "Plan: selected week + 3 weeks",
         hintDataPlanData: "Data: selected week only (7 days)",
@@ -1916,7 +1916,7 @@
         hintYf: "Пробег и расход топлива транспорта",
         hintEinnahmen: "Отчет по общей выручке",
         hintDiesel: "Сформировать 2-страничный Diesel PDF по диапазонам листа",
-        hintBonus: "Выберите год и месяц или весь год, при необходимости укажите фильтр Fahrer",
+        hintBonus: "Выберите год и при необходимости укажите фильтр Fahrer для годового Bonus отчета",
         hintDataPlan: "Выберите процесс, год и неделю для отчета Data/Plan",
         hintDataPlanPlan: "Plan: выбранная неделя + 3 недели",
         hintDataPlanData: "Data: только выбранная неделя (7 дней)",
@@ -3020,17 +3020,12 @@
         <div class="field">
           <label>${L("period")}</label>
           <select id="bonusPeriod">
-            <option value="month">${L("month")}</option>
             <option value="year">${L("wholeYear")}</option>
           </select>
         </div>
         <div class="field">
           <label>${L("year")}</label>
           <select id="bonusYear">${buildYearOptions(2025, 2035)}</select>
-        </div>
-        <div class="field" id="bonusMonthBox">
-          <label>${L("month")}</label>
-          <select id="bonusMonth">${buildMonthOptions()}</select>
         </div>
         <div class="field">
           <label>${L("fahrerFilter")}</label>
@@ -3042,27 +3037,17 @@
       const now = new Date();
       const pEl = $("bonusPeriod");
       const yEl = $("bonusYear");
-      const mEl = $("bonusMonth");
-      const monthBox = $("bonusMonthBox");
-      const syncBonusPeriod = () => {
-        if (monthBox) monthBox.style.display = (pEl?.value === "year") ? "none" : "block";
-      };
       if (pEl) {
-        pEl.value = "month";
-        pEl.onchange = syncBonusPeriod;
+        pEl.value = "year";
       }
       if (yEl) yEl.value = String(now.getFullYear());
-      if (mEl) mEl.value = String(now.getMonth() + 1);
-      syncBonusPeriod();
 
       $("btnPrimary").textContent = L("generate");
       $("btnPrimary").onclick = async () => {
-        const period = String($("bonusPeriod")?.value || "month");
+        const period = "year";
         const year = Number($("bonusYear")?.value);
-        const month = Number($("bonusMonth")?.value);
         const driverQuery = String($("bonusDriverQuery")?.value || "").trim();
-        const needsMonth = period !== "year";
-        if (!Number.isFinite(year) || year < 2025 || year > 2035 || (needsMonth && (!Number.isFinite(month) || month < 1 || month > 12))) {
+        if (!Number.isFinite(year) || year < 2025 || year > 2035) {
           haptic("error");
           showToast(L("invalidYearMonth"));
           return;
@@ -3072,7 +3057,6 @@
           year,
           driver_query: driverQuery,
         };
-        if (needsMonth) payload.month = month;
         await sendReportGenerate("bonus", payload);
       };
 
