@@ -22,7 +22,7 @@ import tempfile
 import time
 from dataclasses import dataclass
 from decimal import Decimal, InvalidOperation, ROUND_HALF_UP
-from datetime import date, datetime
+from datetime import date, datetime, timedelta
 from pathlib import Path
 from typing import Iterable
 
@@ -637,6 +637,10 @@ def _parse_int_like(value: object) -> int | None:
 def _parse_duration_minutes(value: object) -> int:
     if value is None:
         return 0
+
+    if isinstance(value, timedelta):
+        total_minutes = int((Decimal(str(value.total_seconds())) / Decimal("60")).to_integral_value(rounding=ROUND_HALF_UP))
+        return total_minutes if total_minutes > 0 else 0
 
     if isinstance(value, datetime):
         return (value.hour * 60) + value.minute
