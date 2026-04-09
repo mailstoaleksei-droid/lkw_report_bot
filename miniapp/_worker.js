@@ -1700,6 +1700,20 @@ async function buildDataPlanPdfWithPdfLib({ year, week, userId, rows }) {
   const headerBg = rgb(0.93, 0.96, 1);
   const oddBg = rgb(0.985, 0.99, 1);
   const textColor = rgb(0.08, 0.14, 0.24);
+  const statusBg = rgb(0.92, 0.92, 0.92);
+  const urlaubBg = rgb(1, 0.86, 0.66);
+
+  const getCellStyle = (rawValue) => {
+    const value = safeText(rawValue, "").trim();
+    const upper = value.toUpperCase();
+    const isStatus = ["O.F.", "VERKAUFT", "WERKSTATT", "WERKSTATTWAGEN"].some((token) => upper.includes(token));
+    const isUrlaub = /(?:^|\s)U$/.test(value);
+    return {
+      fill: isStatus ? statusBg : (isUrlaub ? urlaubBg : null),
+      font: isStatus ? boldFont : font,
+      size: isStatus ? textSize + 2 : textSize,
+    };
+  };
 
   const startLabel = weekDefs.length
     ? `${weekDefs[0].iso_year}/W${pad2(weekDefs[0].iso_week)}`
@@ -1745,8 +1759,9 @@ async function buildDataPlanPdfWithPdfLib({ year, week, userId, rows }) {
     let x = tableX;
     for (const col of columns) {
       const label = fitTextToWidth(boldFont, col.label, textSize, col.width - 8);
+      const labelWidth = measureTextWidth(boldFont, label, textSize);
       page.drawText(label, {
-        x: x + 4,
+        x: x + ((col.width - labelWidth) / 2),
         y: y - 9,
         size: textSize,
         font: boldFont,
@@ -1786,12 +1801,24 @@ async function buildDataPlanPdfWithPdfLib({ year, week, userId, rows }) {
 
     let x = tableX;
     for (const col of columns) {
-      const value = fitTextToWidth(font, safeText(row?.[col.key], ""), textSize, col.width - 8);
+      const rawValue = safeText(row?.[col.key], "");
+      const style = getCellStyle(rawValue);
+      if (style.fill) {
+        page.drawRectangle({
+          x,
+          y: y - rowHeight + 2,
+          width: col.width,
+          height: rowHeight,
+          color: style.fill,
+        });
+      }
+      const value = fitTextToWidth(style.font, rawValue, style.size, col.width - 8);
+      const tx = x + ((col.width - measureTextWidth(style.font, value, style.size)) / 2);
       page.drawText(value, {
-        x: x + 4,
-        y: y - 9,
-        size: textSize,
-        font,
+        x: tx,
+        y: y - (style.size > textSize ? 10 : 9),
+        size: style.size,
+        font: style.font,
         color: textColor,
       });
       x += col.width;
@@ -1833,19 +1860,6 @@ async function buildDataPlanPdfWithPdfLib({ year, week, userId, rows }) {
       idx += 1;
     }
   }
-
-  const statsRows = buildDriverAssignmentStats(weekDefs, matrixRows);
-  ({ page, y } = drawStatsTableAndChart({
-    pdfDoc,
-    page,
-    pageSize,
-    margin,
-    y: y - 8,
-    title: "Statistics by Week",
-    statsRows,
-    font,
-    boldFont,
-  }));
 
   return pdfDoc.save();
 }
@@ -1949,6 +1963,20 @@ async function buildDataWeekPdfWithPdfLib({ year, week, userId, rows }) {
   const headerBg = rgb(0.93, 0.96, 1);
   const oddBg = rgb(0.985, 0.99, 1);
   const textColor = rgb(0.08, 0.14, 0.24);
+  const statusBg = rgb(0.92, 0.92, 0.92);
+  const urlaubBg = rgb(1, 0.86, 0.66);
+
+  const getCellStyle = (rawValue) => {
+    const value = safeText(rawValue, "").trim();
+    const upper = value.toUpperCase();
+    const isStatus = ["O.F.", "VERKAUFT", "WERKSTATT", "WERKSTATTWAGEN"].some((token) => upper.includes(token));
+    const isUrlaub = /(?:^|\s)U$/.test(value);
+    return {
+      fill: isStatus ? statusBg : (isUrlaub ? urlaubBg : null),
+      font: isStatus ? boldFont : font,
+      size: isStatus ? textSize + 2 : textSize,
+    };
+  };
 
   const startLabel = dayDefs.length ? dayDefs[0].label : "";
   const endLabel = dayDefs.length ? dayDefs[dayDefs.length - 1].label : "";
@@ -1990,8 +2018,9 @@ async function buildDataWeekPdfWithPdfLib({ year, week, userId, rows }) {
     let x = tableX;
     for (const col of columns) {
       const label = fitTextToWidth(boldFont, col.label, textSize, col.width - 8);
+      const labelWidth = measureTextWidth(boldFont, label, textSize);
       page.drawText(label, {
-        x: x + 4,
+        x: x + ((col.width - labelWidth) / 2),
         y: y - 9,
         size: textSize,
         font: boldFont,
@@ -2031,12 +2060,24 @@ async function buildDataWeekPdfWithPdfLib({ year, week, userId, rows }) {
 
     let x = tableX;
     for (const col of columns) {
-      const value = fitTextToWidth(font, safeText(row?.[col.key], ""), textSize, col.width - 8);
+      const rawValue = safeText(row?.[col.key], "");
+      const style = getCellStyle(rawValue);
+      if (style.fill) {
+        page.drawRectangle({
+          x,
+          y: y - rowHeight + 2,
+          width: col.width,
+          height: rowHeight,
+          color: style.fill,
+        });
+      }
+      const value = fitTextToWidth(style.font, rawValue, style.size, col.width - 8);
+      const tx = x + ((col.width - measureTextWidth(style.font, value, style.size)) / 2);
       page.drawText(value, {
-        x: x + 4,
-        y: y - 9,
-        size: textSize,
-        font,
+        x: tx,
+        y: y - (style.size > textSize ? 10 : 9),
+        size: style.size,
+        font: style.font,
         color: textColor,
       });
       x += col.width;
@@ -2078,19 +2119,6 @@ async function buildDataWeekPdfWithPdfLib({ year, week, userId, rows }) {
       idx += 1;
     }
   }
-
-  const statsRows = buildDriverAssignmentStats(dayDefs, matrixRows);
-  ({ page, y } = drawStatsTableAndChart({
-    pdfDoc,
-    page,
-    pageSize,
-    margin,
-    y: y - 8,
-    title: "Statistics by Day",
-    statsRows,
-    font,
-    boldFont,
-  }));
 
   return pdfDoc.save();
 }
