@@ -705,8 +705,8 @@ FROM report_yf_fahrer_monthly
 WHERE month_index = $1::int
   AND (
     $2::text = ''
-    OR lower(fahrer_name) = lower($2::text)
-    OR lower(fahrer_name) LIKE lower($3::text)
+    OR regexp_replace(lower(trim(fahrer_name)), '\s+', ' ', 'g') = regexp_replace(lower(trim($2::text)), '\s+', ' ', 'g')
+    OR regexp_replace(lower(trim(fahrer_name)), '\s+', ' ', 'g') LIKE regexp_replace(lower(trim($3::text)), '\s+', ' ', 'g')
   )
 ORDER BY fahrer_name ASC;
 `;
@@ -729,7 +729,7 @@ WHERE report_year = $1::int
   AND iso_week = $2::int
   AND (
     $3::text = ''
-    OR lower(lkw_nummer) = lower($3::text)
+    OR lower(replace(trim(lkw_nummer), ' ', '')) = lower(replace(trim($3::text), ' ', ''))
   )
 ORDER BY report_date ASC, source_row ASC, lkw_nummer ASC;
 `;
@@ -6038,6 +6038,24 @@ async function buildMetaWithAccess(request, env) {
         meta.lookups = meta.lookups || {};
         meta.lookups.yf_drivers = (yfDriversResult.rows || [])
           .map((row) => safeText(row.fahrer_name, ""))
+          .filter(Boolean);
+      } catch {
+        // Optional lookup only.
+      }
+      try {
+        const yfLkwResult = await queryNeon(
+          dbConnectionString,
+          `
+            SELECT DISTINCT lkw_nummer
+            FROM report_yf_lkw_daily
+            WHERE COALESCE(lkw_nummer, '') <> ''
+            ORDER BY lkw_nummer
+          `,
+          [],
+        );
+        meta.lookups = meta.lookups || {};
+        meta.lookups.yf_lkw_numbers = (yfLkwResult.rows || [])
+          .map((row) => safeText(row.lkw_nummer, ""))
           .filter(Boolean);
       } catch {
         // Optional lookup only.

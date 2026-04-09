@@ -2353,6 +2353,20 @@
       }
     }
 
+    async function populateYfLkwSelect(selectId) {
+      const select = $(selectId);
+      if (!select) return;
+      try {
+        const meta = await fetchMetaServer();
+        const items = Array.isArray(meta?.lookups?.yf_lkw_numbers) ? meta.lookups.yf_lkw_numbers : [];
+        const opts = [`<option value="">${L("choose")}</option>`]
+          .concat(items.map((item) => `<option value="${escapeHtml(item)}">${escapeHtml(item)}</option>`));
+        select.innerHTML = opts.join("");
+      } catch (err) {
+        select.innerHTML = `<option value="">${escapeHtml(err?.message || "Failed to load Yellow Fox LKW list")}</option>`;
+      }
+    }
+
     function formatDateTimeLocal(isoString) {
       const ts = Date.parse(String(isoString || ""));
       if (!Number.isFinite(ts)) return L("noEtlUpdate");
@@ -3171,7 +3185,7 @@
         const now = new Date();
         if ($("yfLkwYear")) $("yfLkwYear").value = String(now.getFullYear());
         if ($("yfLkwWeek")) $("yfLkwWeek").value = String(getISOWeek(now));
-        await populateLkwNummerSelect("yfLkwVehicle");
+        await populateYfLkwSelect("yfLkwVehicle");
 
         $("yfLkwRun").onclick = async () => {
           const year = Number($("yfLkwYear")?.value);
