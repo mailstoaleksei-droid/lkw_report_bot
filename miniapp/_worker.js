@@ -466,6 +466,32 @@ WHERE report_year = $1::int
 ORDER BY final DESC, fahrer_name ASC, fahrer_id ASC;
 `;
 
+const BONUS_YEARLY_SQL = `
+SELECT
+  report_year,
+  report_month,
+  month_start,
+  fahrer_id,
+  fahrer_name,
+  COALESCE(days, 0)::numeric AS days,
+  COALESCE(km, 0)::numeric AS km,
+  COALESCE(pct_km, 0)::numeric AS pct_km,
+  COALESCE(ct, 0)::numeric AS ct,
+  COALESCE(pct_ct, 0)::numeric AS pct_ct,
+  COALESCE(bonus, 0)::numeric AS bonus,
+  COALESCE(penalty, 0)::numeric AS penalty,
+  COALESCE(final, 0)::numeric AS final
+FROM report_bonus_dynamik_monthly
+WHERE report_year = $1::int
+  AND (
+    $2::text = ''
+    OR lower(fahrer_id) = lower($2::text)
+    OR lower(fahrer_id) LIKE lower($3::text)
+    OR lower(fahrer_name) LIKE lower($3::text)
+  )
+ORDER BY fahrer_name ASC, fahrer_id ASC, report_month ASC;
+`;
+
 const DOCK_KIND_TO_REPORT_TYPE = {
   "lkw-list": "lkw_list",
   "drivers-list": "drivers_list",
@@ -808,9 +834,12 @@ function makeDieselFilename(at = new Date()) {
   return `diesel_${formatUtcDateStamp(at)}.pdf`;
 }
 
-function makeBonusFilename(year, month, at = new Date()) {
+function makeBonusFilename(year, month, at = new Date(), period = "month") {
   const y = Number.parseInt(String(year), 10);
   const m = Number.parseInt(String(month), 10);
+  if (period === "year" && Number.isFinite(y) && y > 0) {
+    return `bonus_${y}_year.pdf`;
+  }
   if (Number.isFinite(y) && Number.isFinite(m) && y > 0 && m >= 1 && m <= 12) {
     return `bonus_${y}_${pad2(m)}.pdf`;
   }
@@ -2081,6 +2110,21 @@ const EINNAHMEN_MONTHS_DE = [
   "Dezember",
 ];
 
+const BONUS_MONTHS_SHORT = [
+  "Jan",
+  "Feb",
+  "Mar",
+  "Apr",
+  "May",
+  "Jun",
+  "Jul",
+  "Aug",
+  "Sep",
+  "Oct",
+  "Nov",
+  "Dec",
+];
+
 function toNumberSafe(value, fallback = 0) {
   if (typeof value === "number" && Number.isFinite(value)) return value;
   const raw = String(value ?? "").trim();
@@ -2738,6 +2782,44 @@ function buildBonusMatrixRows(rows = []) {
   }));
 }
 
+function buildBonusYearMatrixRows(rows = [], year) {
+  const normalized = buildBonusMatrixRows(rows);
+  const byDriver = new Map();
+  for (const row of normalized) {
+    const key = `${safeText(row?.fahrer_id, "")}__${safeText(row?.fahrer_name, "")}`;
+    if (!byDriver.has(key)) {
+      byDriver.set(key, {
+        fahrer_id: safeText(row?.fahrer_id, ""),
+        fahrer_name: safeText(row?.fahrer_name, ""),
+        finals: {},
+      });
+    }
+    const target = byDriver.get(key);
+    const month = toIntSafe(row?.report_month, 0);
+    if (month >= 1 && month <= 12) {
+      target.finals[month] = toNumberSafe(row?.final, 0);
+    }
+  }
+
+  return [...byDriver.values()]
+    .map((row) => {
+      const out = {
+        fahrer_id: row.fahrer_id,
+        fahrer_name: row.fahrer_name,
+      };
+      for (let month = 1; month <= 12; month += 1) {
+        out[`m${month}`] = toNumberSafe(row.finals[month], 0);
+        out[`m${month}_label`] = `${BONUS_MONTHS_SHORT[month - 1]} ${year} Final`;
+      }
+      return out;
+    })
+    .sort((a, b) => {
+      const nameDiff = safeText(a.fahrer_name, "").localeCompare(safeText(b.fahrer_name, ""));
+      if (nameDiff !== 0) return nameDiff;
+      return safeText(a.fahrer_id, "").localeCompare(safeText(b.fahrer_id, ""));
+    });
+}
+
 function summarizeBonusRows(rows = []) {
   const out = {
     drivers: rows.length,
@@ -2843,8 +2925,9 @@ async function buildBonusPdfWithPdfLib({
 
     let x = tableX;
     for (const col of columns) {
+      const labelWidth = measureTextWidth(boldFont, col.label, textSize);
       page.drawText(col.label, {
-        x: x + 4,
+        x: x + ((col.width - labelWidth) / 2),
         y: y - 9,
         size: textSize,
         font: boldFont,
@@ -2898,16 +2981,16 @@ async function buildBonusPdfWithPdfLib({
     let x = tableX;
     for (let i = 0; i < columns.length; i += 1) {
       const col = columns[i];
-      const value = fitTextToWidth(font, values[i], textSize, col.width - 8);
-      const isNumeric = i >= 2;
-      const tx = isNumeric
-        ? x + col.width - 4 - measureTextWidth(font, value, textSize)
-        : x + 4;
+      const isFinal = col.key === "final";
+      const cellFont = isFinal ? boldFont : font;
+      const cellSize = isFinal ? textSize + 1 : textSize;
+      const value = fitTextToWidth(cellFont, values[i], cellSize, col.width - 8);
+      const tx = x + ((col.width - measureTextWidth(cellFont, value, cellSize)) / 2);
       page.drawText(value, {
         x: tx,
-        y: y - 9,
-        size: textSize,
-        font,
+        y: y - (isFinal ? 10 : 9),
+        size: cellSize,
+        font: cellFont,
         color: textColor,
       });
       x += col.width;
@@ -2997,100 +3080,175 @@ async function buildBonusPdfWithPdfLib({
   });
   y -= statsBoxHeight + 8;
 
-  const chartHeight = 170;
-  ensureSpace(chartHeight + 6);
-  const chartX = margin;
-  const chartY = y - chartHeight;
-  const chartWidth = tableWidth;
-  const plotPadTop = 24;
-  const plotPadBottom = 30;
-  const plotPadLeft = 38;
-  const plotPadRight = 12;
-  const plotHeight = chartHeight - plotPadTop - plotPadBottom;
-  const plotWidth = chartWidth - plotPadLeft - plotPadRight;
-  const baselineY = chartY + plotPadBottom;
-  const plotX = chartX + plotPadLeft;
-  const barColor = rgb(0.3, 0.56, 0.84);
+  return pdfDoc.save();
+}
 
-  page.drawRectangle({
-    x: chartX,
-    y: chartY,
-    width: chartWidth,
-    height: chartHeight,
-    borderColor,
-    borderWidth: 1,
-    color: rgb(0.99, 0.995, 1),
-  });
-  page.drawText("Top Fahrer by Final", {
-    x: chartX + 8,
-    y: chartY + chartHeight - 12,
-    size: 9,
-    font: boldFont,
-    color: textColor,
-  });
+async function buildBonusYearPdfWithPdfLib({
+  userId, year, driverQuery, rows,
+}) {
+  const matrixRows = buildBonusYearMatrixRows(rows, year);
+  const pdfDoc = await PDFDocument.create();
+  const font = await pdfDoc.embedFont(StandardFonts.Helvetica);
+  const boldFont = await pdfDoc.embedFont(StandardFonts.HelveticaBold);
 
-  const topRows = matrixRows
-    .slice()
-    .sort((a, b) => toNumberSafe(b.final, 0) - toNumberSafe(a.final, 0))
-    .slice(0, 10);
-  const maxFinal = Math.max(1, ...topRows.map((row) => Math.max(0, toNumberSafe(row.final, 0))));
+  const pageSize = [1040, 595];
+  const margin = 18;
+  const rowHeight = 14;
+  const textSize = 7;
+  const textColor = rgb(0.08, 0.14, 0.24);
+  const borderColor = rgb(0.74, 0.8, 0.9);
+  const headerBg = rgb(0.93, 0.96, 1);
+  const oddBg = rgb(0.985, 0.99, 1);
+  const filterLabel = safeText(driverQuery, "").trim();
 
-  for (let g = 0; g <= 4; g += 1) {
-    const ratio = g / 4;
-    const gy = baselineY + (plotHeight * ratio);
-    page.drawLine({
-      start: { x: plotX, y: gy },
-      end: { x: plotX + plotWidth, y: gy },
-      thickness: 0.35,
-      color: rgb(0.86, 0.9, 0.95),
+  const columns = [
+    { key: "fahrer_id", label: "ID", width: 48, finalCol: false },
+    { key: "fahrer_name", label: "Fahrer", width: 150, finalCol: false },
+    ...Array.from({ length: 12 }, (_, idx) => ({
+      key: `m${idx + 1}`,
+      label: `${BONUS_MONTHS_SHORT[idx]} ${year} Final`,
+      width: 66,
+      finalCol: true,
+    })),
+  ];
+  const tableWidth = columns.reduce((sum, col) => sum + col.width, 0);
+  const tableX = margin;
+
+  let page = pdfDoc.addPage(pageSize);
+  let y = page.getHeight() - margin;
+
+  const drawPageHeader = () => {
+    page.drawText("Bonus (Year Overview)", {
+      x: margin,
+      y,
+      size: 13,
+      font: boldFont,
+      color: textColor,
     });
-  }
+    y -= 16;
+    page.drawText(
+      `Period: ${year} whole year | Filter: ${filterLabel || "all Fahrer"} | Generated: ${new Date().toISOString()} UTC | User: ${userId}`,
+      {
+        x: margin,
+        y,
+        size: 8,
+        font,
+        color: rgb(0.24, 0.3, 0.4),
+      },
+    );
+    y -= 14;
+  };
 
-  const groupWidth = plotWidth / Math.max(1, topRows.length);
-  const barWidth = Math.max(10, Math.min(20, groupWidth * 0.55));
-  for (let i = 0; i < topRows.length; i += 1) {
-    const row = topRows[i];
-    const value = Math.max(0, toNumberSafe(row?.final, 0));
-    const barHeight = Math.max(0, Math.floor((value / maxFinal) * plotHeight));
-    const centerX = plotX + (i * groupWidth) + (groupWidth / 2);
-    const barX = centerX - (barWidth / 2);
+  const drawHeaderRow = () => {
     page.drawRectangle({
-      x: barX,
-      y: baselineY,
-      width: barWidth,
-      height: barHeight,
-      color: barColor,
+      x: tableX,
+      y: y - rowHeight + 2,
+      width: tableWidth,
+      height: rowHeight,
+      color: headerBg,
+      borderColor,
+      borderWidth: 1,
     });
 
-    const label = fitTextToWidth(font, shortenDriverName(row?.fahrer_name, 12), 6, groupWidth - 2);
-    page.drawText(label, {
-      x: centerX - (measureTextWidth(font, label, 6) / 2),
-      y: chartY + 3,
-      size: 6,
+    let x = tableX;
+    for (const col of columns) {
+      const label = fitTextToWidth(boldFont, col.label, textSize, col.width - 6);
+      const labelWidth = measureTextWidth(boldFont, label, textSize);
+      page.drawText(label, {
+        x: x + ((col.width - labelWidth) / 2),
+        y: y - 9,
+        size: textSize,
+        font: boldFont,
+        color: textColor,
+      });
+      x += col.width;
+      if (x < tableX + tableWidth - 0.5) {
+        page.drawLine({
+          start: { x, y: y - rowHeight + 2 },
+          end: { x, y: y + 2 },
+          thickness: 0.8,
+          color: borderColor,
+        });
+      }
+    }
+    y -= rowHeight;
+  };
+
+  const ensureSpace = (needHeight) => {
+    if (y - needHeight >= margin) return;
+    page = pdfDoc.addPage(pageSize);
+    y = page.getHeight() - margin;
+    drawPageHeader();
+    drawHeaderRow();
+  };
+
+  const drawRow = (row, idx) => {
+    if (idx % 2 === 1) {
+      page.drawRectangle({
+        x: tableX,
+        y: y - rowHeight + 2,
+        width: tableWidth,
+        height: rowHeight,
+        color: oddBg,
+      });
+    }
+
+    let x = tableX;
+    for (const col of columns) {
+      const isFinal = Boolean(col.finalCol);
+      const cellFont = isFinal ? boldFont : font;
+      const cellSize = isFinal ? textSize + 1 : textSize;
+      const rawValue = col.key === "fahrer_id"
+        ? safeText(row?.fahrer_id, "")
+        : col.key === "fahrer_name"
+          ? safeText(row?.fahrer_name, "")
+          : formatMoneyInt(row?.[col.key]);
+      const value = fitTextToWidth(cellFont, rawValue, cellSize, col.width - 8);
+      const tx = x + ((col.width - measureTextWidth(cellFont, value, cellSize)) / 2);
+      page.drawText(value, {
+        x: tx,
+        y: y - (isFinal ? 10 : 9),
+        size: cellSize,
+        font: cellFont,
+        color: textColor,
+      });
+      x += col.width;
+      if (x < tableX + tableWidth - 0.5) {
+        page.drawLine({
+          start: { x, y: y - rowHeight + 2 },
+          end: { x, y: y + 2 },
+          thickness: 0.5,
+          color: borderColor,
+        });
+      }
+    }
+    page.drawLine({
+      start: { x: tableX, y: y - rowHeight + 2 },
+      end: { x: tableX + tableWidth, y: y - rowHeight + 2 },
+      thickness: 0.5,
+      color: borderColor,
+    });
+    y -= rowHeight;
+  };
+
+  drawPageHeader();
+  drawHeaderRow();
+
+  if (!matrixRows.length) {
+    ensureSpace(20);
+    page.drawText("No rows found for selected year/filter.", {
+      x: margin,
+      y: y - 10,
+      size: 9,
       font,
       color: textColor,
     });
+    return pdfDoc.save();
+  }
 
-    const vLabel = formatMoneyInt(value);
-    if (barHeight >= 18) {
-      const innerLabelX = barX + Math.max(1.5, (barWidth * 0.5) - 2.5);
-      page.drawText(vLabel, {
-        x: innerLabelX,
-        y: baselineY + 2,
-        size: 6,
-        font,
-        color: rgb(0.96, 0.98, 1),
-        rotate: degrees(90),
-      });
-    } else {
-      page.drawText(vLabel, {
-        x: centerX - (measureTextWidth(font, vLabel, 6) / 2),
-        y: baselineY + barHeight + 2,
-        size: 6,
-        font,
-        color: textColor,
-      });
-    }
+  for (let idx = 0; idx < matrixRows.length; idx += 1) {
+    ensureSpace(rowHeight + 2);
+    drawRow(matrixRows[idx], idx);
   }
 
   return pdfDoc.save();
@@ -3905,6 +4063,7 @@ function validateGeneratePayload(body) {
 
   if (reportType === "bonus") {
     const year = Number.parseInt(String(body.year ?? ""), 10);
+    const period = String(body.period || "month").trim().toLowerCase() === "year" ? "year" : "month";
     const month = Number.parseInt(String(body.month ?? ""), 10);
     const yearParam = report.params.find((p) => p.id === "year");
     const monthParam = report.params.find((p) => p.id === "month");
@@ -3912,14 +4071,23 @@ function validateGeneratePayload(body) {
     const maxYear = toInt(yearParam?.max, 2100);
     const minMonth = toInt(monthParam?.min, 1);
     const maxMonth = toInt(monthParam?.max, 12);
-    if (!Number.isFinite(year) || !Number.isFinite(month)) {
+    const driverQuery = String(body.driver_query || "").trim().slice(0, 120);
+    if (!Number.isFinite(year)) {
       return { ok: false, status: 400, error: "Invalid year/month" };
     }
-    if (!(year >= minYear && year <= maxYear && month >= minMonth && month <= maxMonth)) {
+    if (!(year >= minYear && year <= maxYear)) {
       return { ok: false, status: 400, error: "Year/month out of range" };
     }
-    const driverQuery = String(body.driver_query || "").trim().slice(0, 120);
-    return { ok: true, reportType, year, month, driverQuery };
+    if (period === "year") {
+      return { ok: true, reportType, year, month: 0, period, driverQuery };
+    }
+    if (!Number.isFinite(month)) {
+      return { ok: false, status: 400, error: "Invalid year/month" };
+    }
+    if (!(month >= minMonth && month <= maxMonth)) {
+      return { ok: false, status: 400, error: "Year/month out of range" };
+    }
+    return { ok: true, reportType, year, month, period, driverQuery };
   }
 
   return { ok: true, reportType };
@@ -4320,8 +4488,10 @@ async function handleGenerateWithBody(body, env, enforceRateLimit = true) {
     try {
       const result = await queryNeon(
         dbConnectionString,
-        BONUS_MONTHLY_SQL,
-        [valid.year, valid.month, driverQuery, likeQuery],
+        valid.period === "year" ? BONUS_YEARLY_SQL : BONUS_MONTHLY_SQL,
+        valid.period === "year"
+          ? [valid.year, driverQuery, likeQuery]
+          : [valid.year, valid.month, driverQuery, likeQuery],
       );
       rows = result.rows || [];
     } catch (err) {
@@ -4337,43 +4507,67 @@ async function handleGenerateWithBody(body, env, enforceRateLimit = true) {
       );
     }
 
-    filename = makeBonusFilename(valid.year, valid.month);
-    outputKey = `bonus:${valid.year}:${pad2(valid.month)}:${driverQuery || "all"}`;
+    filename = makeBonusFilename(valid.year, valid.month, new Date(), valid.period);
+    outputKey = valid.period === "year"
+      ? `bonus:${valid.year}:year:${driverQuery || "all"}`
+      : `bonus:${valid.year}:${pad2(valid.month)}:${driverQuery || "all"}`;
     try {
-      pdfBytes = await buildBonusPdfWithPdfLib({
-        userId: auth.userId,
-        year: valid.year,
-        month: valid.month,
-        driverQuery,
-        rows,
-      });
+      pdfBytes = valid.period === "year"
+        ? await buildBonusYearPdfWithPdfLib({
+          userId: auth.userId,
+          year: valid.year,
+          driverQuery,
+          rows,
+        })
+        : await buildBonusPdfWithPdfLib({
+          userId: auth.userId,
+          year: valid.year,
+          month: valid.month,
+          driverQuery,
+          rows,
+        });
     } catch (err) {
       pdfEngine = "legacy-fallback";
-      const matrixRows = buildBonusMatrixRows(rows);
       const lines = [];
-      lines.push("ID | Fahrer | Days | KM | %KM | CT | %CT | Bonus | Penalty | Final");
-      lines.push("-".repeat(140));
-      for (const row of matrixRows) {
-        lines.push(
-          [
-            safeText(row.fahrer_id, ""),
-            safeText(row.fahrer_name, ""),
-            String(toIntSafe(row.days, 0)),
-            formatMoneyInt(row.km),
-            formatPercent(row.pct_km, 1),
-            String(toIntSafe(row.ct, 0)),
-            formatPercent(row.pct_ct, 1),
-            formatMoney(row.bonus),
-            formatMoney(row.penalty),
-            formatMoneyInt(row.final),
-          ].join(" | "),
-        );
+      if (valid.period === "year") {
+        const matrixRows = buildBonusYearMatrixRows(rows, valid.year);
+        lines.push(`ID | Fahrer | ${BONUS_MONTHS_SHORT.map((m) => `${m} ${valid.year} Final`).join(" | ")}`);
+        lines.push("-".repeat(220));
+        for (const row of matrixRows) {
+          lines.push(
+            [
+              safeText(row.fahrer_id, ""),
+              safeText(row.fahrer_name, ""),
+              ...Array.from({ length: 12 }, (_, idx) => formatMoneyInt(row[`m${idx + 1}`])),
+            ].join(" | "),
+          );
+        }
+      } else {
+        const matrixRows = buildBonusMatrixRows(rows);
+        lines.push("ID | Fahrer | Days | KM | %KM | CT | %CT | Bonus | Penalty | Final");
+        lines.push("-".repeat(140));
+        for (const row of matrixRows) {
+          lines.push(
+            [
+              safeText(row.fahrer_id, ""),
+              safeText(row.fahrer_name, ""),
+              String(toIntSafe(row.days, 0)),
+              formatMoneyInt(row.km),
+              formatPercent(row.pct_km, 1),
+              String(toIntSafe(row.ct, 0)),
+              formatPercent(row.pct_ct, 1),
+              formatMoney(row.bonus),
+              formatMoney(row.penalty),
+              formatMoneyInt(row.final),
+            ].join(" | "),
+          );
+        }
       }
       pdfBytes = buildSimplePdf({
-        title: `Bonus - ${valid.year}/${pad2(valid.month)}`,
+        title: valid.period === "year" ? `Bonus - ${valid.year} (whole year)` : `Bonus - ${valid.year}/${pad2(valid.month)}`,
         subtitle: `Generated at ${new Date().toISOString()} UTC, user ${auth.userId}`,
         lines,
-        pageWidth: 842,
+        pageWidth: valid.period === "year" ? 1040 : 842,
         pageHeight: 595,
       });
     }
@@ -4386,7 +4580,8 @@ async function handleGenerateWithBody(body, env, enforceRateLimit = true) {
   }
   if ("year" in valid && "month" in valid) {
     reportParams.year = valid.year;
-    reportParams.month = valid.month;
+    if (valid.period === "month") reportParams.month = valid.month;
+    reportParams.period = safeText(valid.period, "month");
     if (safeText(valid.driverQuery, "").trim()) {
       reportParams.driver_query = safeText(valid.driverQuery, "").trim();
     }
@@ -4433,6 +4628,7 @@ async function handleGenerateGet(request, env) {
     year: url.searchParams.get("year"),
     week: url.searchParams.get("week"),
     month: url.searchParams.get("month"),
+    period: url.searchParams.get("period") || "",
     driver_query: url.searchParams.get("driver_query") || "",
     disposition: url.searchParams.get("disposition") || "",
   };

@@ -1822,7 +1822,7 @@
         hintYf: "Vehicle mileage and fuel consumption",
         hintEinnahmen: "Total revenue report for all operations",
         hintDiesel: "Generate 2-page Diesel PDF from sheet ranges",
-        hintBonus: "Select year/month and optional Fahrer filter",
+        hintBonus: "Select year and month or whole year with optional Fahrer filter",
         hintDataPlan: "Select process, year and week for Data/Plan report",
         hintDataPlanPlan: "Plan: selected week + 3 weeks",
         hintDataPlanData: "Data: selected week only (7 days)",
@@ -1836,6 +1836,7 @@
         year: "Year",
         week: "Week",
         month: "Month",
+        wholeYear: "Whole year",
         fahrerFilter: "Fahrer ID or surname (optional)",
         allTime: "All time",
         driver: "Driver",
@@ -1915,7 +1916,7 @@
         hintYf: "Пробег и расход топлива транспорта",
         hintEinnahmen: "Отчет по общей выручке",
         hintDiesel: "Сформировать 2-страничный Diesel PDF по диапазонам листа",
-        hintBonus: "Выберите год/месяц и при необходимости фильтр Fahrer",
+        hintBonus: "Выберите год и месяц или весь год, при необходимости укажите фильтр Fahrer",
         hintDataPlan: "Выберите процесс, год и неделю для отчета Data/Plan",
         hintDataPlanPlan: "Plan: выбранная неделя + 3 недели",
         hintDataPlanData: "Data: только выбранная неделя (7 дней)",
@@ -1929,6 +1930,7 @@
         year: "Год",
         week: "Неделя",
         month: "Месяц",
+        wholeYear: "Весь год",
         fahrerFilter: "ID Fahrer или фамилия (необязательно)",
         allTime: "За все время",
         driver: "Водитель",
@@ -2043,6 +2045,7 @@
       if (payload && payload.year !== undefined) u.searchParams.set("year", String(payload.year));
       if (payload && payload.week !== undefined) u.searchParams.set("week", String(payload.week));
       if (payload && payload.month !== undefined) u.searchParams.set("month", String(payload.month));
+      if (payload && payload.period !== undefined) u.searchParams.set("period", String(payload.period));
       if (payload && payload.driver_query !== undefined && String(payload.driver_query).trim()) {
         u.searchParams.set("driver_query", String(payload.driver_query).trim());
       }
@@ -3015,10 +3018,17 @@
 
       setForm(`
         <div class="field">
+          <label>${L("period")}</label>
+          <select id="bonusPeriod">
+            <option value="month">${L("month")}</option>
+            <option value="year">${L("wholeYear")}</option>
+          </select>
+        </div>
+        <div class="field">
           <label>${L("year")}</label>
           <select id="bonusYear">${buildYearOptions(2025, 2035)}</select>
         </div>
-        <div class="field">
+        <div class="field" id="bonusMonthBox">
           <label>${L("month")}</label>
           <select id="bonusMonth">${buildMonthOptions()}</select>
         </div>
@@ -3030,26 +3040,40 @@
       setNote(L("hintBonus"));
 
       const now = new Date();
+      const pEl = $("bonusPeriod");
       const yEl = $("bonusYear");
       const mEl = $("bonusMonth");
+      const monthBox = $("bonusMonthBox");
+      const syncBonusPeriod = () => {
+        if (monthBox) monthBox.style.display = (pEl?.value === "year") ? "none" : "block";
+      };
+      if (pEl) {
+        pEl.value = "month";
+        pEl.onchange = syncBonusPeriod;
+      }
       if (yEl) yEl.value = String(now.getFullYear());
       if (mEl) mEl.value = String(now.getMonth() + 1);
+      syncBonusPeriod();
 
       $("btnPrimary").textContent = L("generate");
       $("btnPrimary").onclick = async () => {
+        const period = String($("bonusPeriod")?.value || "month");
         const year = Number($("bonusYear")?.value);
         const month = Number($("bonusMonth")?.value);
         const driverQuery = String($("bonusDriverQuery")?.value || "").trim();
-        if (!Number.isFinite(year) || !Number.isFinite(month) || year < 2025 || year > 2035 || month < 1 || month > 12) {
+        const needsMonth = period !== "year";
+        if (!Number.isFinite(year) || year < 2025 || year > 2035 || (needsMonth && (!Number.isFinite(month) || month < 1 || month > 12))) {
           haptic("error");
           showToast(L("invalidYearMonth"));
           return;
         }
-        await sendReportGenerate("bonus", {
+        const payload = {
+          period,
           year,
-          month,
           driver_query: driverQuery,
-        });
+        };
+        if (needsMonth) payload.month = month;
+        await sendReportGenerate("bonus", payload);
       };
 
       openSheet();
