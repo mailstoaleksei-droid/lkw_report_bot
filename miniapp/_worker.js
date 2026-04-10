@@ -3025,6 +3025,148 @@ function drawEinnahmenFirmChartPage({ pdfDoc, font, boldFont, userId, rows }) {
   }
 }
 
+function drawEinnahmenFirmBubblePage({ pdfDoc, font, boldFont, userId, rows }) {
+  const pageSize = [1190, 842];
+  const page = pdfDoc.addPage(pageSize);
+  const margin = 28;
+  const textColor = rgb(0.08, 0.14, 0.24);
+  const borderColor = rgb(0.74, 0.8, 0.9);
+  const cardBg = rgb(0.99, 0.995, 1);
+  const spherePalette = [
+    rgb(0.33, 0.56, 0.86),
+    rgb(0.96, 0.55, 0.18),
+    rgb(0.45, 0.71, 0.39),
+    rgb(0.68, 0.57, 0.86),
+    rgb(0.84, 0.37, 0.48),
+    rgb(0.18, 0.67, 0.72),
+    rgb(0.58, 0.58, 0.62),
+    rgb(0.74, 0.62, 0.34),
+  ];
+
+  let y = page.getHeight() - margin;
+  page.drawText("Einnahmen nach Firma - Sphere View (Top 20 by Total)", {
+    x: margin,
+    y,
+    size: 16,
+    font: boldFont,
+    color: textColor,
+  });
+  y -= 18;
+  page.drawText(`Generated: ${new Date().toISOString()} UTC | User: ${userId}`, {
+    x: margin,
+    y,
+    size: 8,
+    font,
+    color: rgb(0.24, 0.3, 0.4),
+  });
+  y -= 18;
+
+  const chartX = margin;
+  const chartY = 56;
+  const chartWidth = page.getWidth() - (margin * 2);
+  const chartHeight = y - chartY;
+  page.drawRectangle({
+    x: chartX,
+    y: chartY,
+    width: chartWidth,
+    height: chartHeight,
+    borderColor,
+    borderWidth: 1,
+    color: cardBg,
+  });
+
+  const bubbleRows = [...(rows || [])]
+    .sort((a, b) => toNumberSafe(b?.total, 0) - toNumberSafe(a?.total, 0))
+    .slice(0, 20);
+  if (!bubbleRows.length) {
+    page.drawText("No rows found.", {
+      x: margin + 12,
+      y: y - 20,
+      size: 10,
+      font,
+      color: textColor,
+    });
+    return;
+  }
+
+  const cols = 5;
+  const rowsCount = Math.ceil(bubbleRows.length / cols);
+  const innerPadX = 22;
+  const innerPadY = 18;
+  const cellW = (chartWidth - (innerPadX * 2)) / cols;
+  const cellH = (chartHeight - (innerPadY * 2)) / rowsCount;
+  const maxTotal = Math.max(1, ...bubbleRows.map((row) => toNumberSafe(row?.total, 0)));
+  const minTotal = Math.min(...bubbleRows.map((row) => toNumberSafe(row?.total, 0)));
+  const minRadius = Math.max(26, Math.min(cellW, cellH) * 0.18);
+  const maxRadius = Math.max(minRadius + 4, Math.min(cellW, cellH) * 0.33);
+
+  const radiusFor = (value) => {
+    const n = toNumberSafe(value, 0);
+    if (Math.abs(maxTotal - minTotal) < 0.0001) return (minRadius + maxRadius) / 2;
+    const t = (n - minTotal) / (maxTotal - minTotal);
+    return minRadius + (t * (maxRadius - minRadius));
+  };
+
+  for (let idx = 0; idx < bubbleRows.length; idx += 1) {
+    const row = bubbleRows[idx];
+    const col = idx % cols;
+    const line = Math.floor(idx / cols);
+    const cx = chartX + innerPadX + (col * cellW) + (cellW / 2);
+    const cellTop = chartY + chartHeight - innerPadY - (line * cellH);
+    const radius = radiusFor(row?.total);
+    const cy = cellTop - (cellH * 0.42);
+    const baseColor = spherePalette[idx % spherePalette.length];
+
+    page.drawCircle({
+      x: cx,
+      y: cy,
+      size: radius,
+      color: baseColor,
+      borderColor: rgb(0.88, 0.93, 0.98),
+      borderWidth: 1.2,
+    });
+    page.drawCircle({
+      x: cx - (radius * 0.22),
+      y: cy + (radius * 0.22),
+      size: Math.max(6, radius * 0.38),
+      color: rgb(0.95, 0.98, 1),
+      opacity: 0.3,
+    });
+    page.drawCircle({
+      x: cx + (radius * 0.18),
+      y: cy - (radius * 0.16),
+      size: Math.max(6, radius * 0.82),
+      borderColor: rgb(0.2, 0.28, 0.38),
+      borderWidth: 0.5,
+      opacity: 0.14,
+    });
+
+    const totalLabel = formatMoneyInt(row?.total);
+    const labelMaxWidth = Math.max(34, (radius * 2) - 10);
+    const totalSize = Math.max(8, Math.min(14, radius * 0.28));
+    const totalText = fitTextToWidth(boldFont, totalLabel, totalSize, labelMaxWidth);
+    const totalWidth = measureTextWidth(boldFont, totalText, totalSize);
+    page.drawText(totalText, {
+      x: cx - (totalWidth / 2),
+      y: cy - (totalSize * 0.35),
+      size: totalSize,
+      font: boldFont,
+      color: rgb(1, 1, 1),
+    });
+
+    const firmLabelSize = 8.4;
+    const firmLabel = fitTextToWidth(boldFont, safeText(row?.firm_name, ""), firmLabelSize, cellW - 16);
+    const firmLabelWidth = measureTextWidth(boldFont, firmLabel, firmLabelSize);
+    page.drawText(firmLabel, {
+      x: cx - (firmLabelWidth / 2),
+      y: Math.max(chartY + 8, cy - radius - 18),
+      size: firmLabelSize,
+      font: boldFont,
+      color: textColor,
+    });
+  }
+}
+
 async function buildEinnahmenFirmPdfWithPdfLib({ userId, rows }) {
   const matrixRows = buildEinnahmenFirmRows(rows);
   const pdfDoc = await PDFDocument.create();
@@ -3183,6 +3325,7 @@ async function buildEinnahmenFirmPdfWithPdfLib({ userId, rows }) {
   }
 
   drawEinnahmenFirmChartPage({ pdfDoc, font, boldFont, userId, rows: matrixRows });
+  drawEinnahmenFirmBubblePage({ pdfDoc, font, boldFont, userId, rows: matrixRows });
   return pdfDoc.save();
 }
 
