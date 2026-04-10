@@ -6560,6 +6560,87 @@ async function handleGenerateGet(request, env) {
   return handleGenerateWithBody(body, env, false);
 }
 
+async function handleEtlRun(request, env) {
+  const body = await parseJsonBody(request);
+  const auth = await validateTelegramInitData(body?.initData || "", env);
+  if (!auth.ok) {
+    return json({ ok: false, error: auth.error }, 403, {
+      "Cache-Control": "no-store",
+    });
+  }
+
+  const dbConnectionString = getDbConnectionString(env);
+  if (!dbConnectionString) {
+    return json({ ok: false, error: "Database connection is not configured" }, 500, {
+      "Cache-Control": "no-store",
+    });
+  }
+
+  try {
+    const allowed = await isUserAllowedInDb(auth.userId, env, dbConnectionString);
+    if (!allowed) {
+      return json({ ok: false, error: "Access denied" }, 403, {
+        "Cache-Control": "no-store",
+      });
+    }
+  } catch {
+    return json({ ok: false, error: "Access check failed" }, 500, {
+      "Cache-Control": "no-store",
+    });
+  }
+
+  const triggerUrl = String(env.ETL_TRIGGER_URL || "").trim();
+  if (!triggerUrl) {
+    return json(
+      { ok: false, error: "ETL trigger is not configured", code: "NOT_CONFIGURED" },
+      501,
+      { "Cache-Control": "no-store" },
+    );
+  }
+
+  const headers = { "Content-Type": "application/json" };
+  const triggerToken = String(env.ETL_TRIGGER_TOKEN || "").trim();
+  if (triggerToken) headers.Authorization = `Bearer ${triggerToken}`;
+
+  try {
+    const resp = await fetch(triggerUrl, {
+      method: "POST",
+      headers,
+      body: JSON.stringify({
+        initData: body?.initData || "",
+        requested_by: auth.userId,
+        source: "miniapp",
+      }),
+    });
+    const text = await resp.text();
+    let payload = {};
+    try {
+      payload = text ? JSON.parse(text) : {};
+    } catch {
+      payload = { ok: resp.ok, raw: text };
+    }
+    return json(
+      {
+        ok: !!payload?.ok && resp.ok,
+        status: payload?.status || (resp.ok ? "started" : "failed"),
+        error: payload?.error || null,
+        source: "etl-trigger-proxy",
+      },
+      resp.ok ? 200 : resp.status || 500,
+      { "Cache-Control": "no-store" },
+    );
+  } catch (err) {
+    return json(
+      {
+        ok: false,
+        error: String(err?.message || err || "ETL trigger failed"),
+      },
+      502,
+      { "Cache-Control": "no-store" },
+    );
+  }
+}
+
 async function buildMetaWithAccess(request, env) {
   const meta = buildMeta(env);
   const url = new URL(request.url);
@@ -6753,6 +6834,10 @@ export default {
 
     if (request.method === "POST" && url.pathname === "/api/generate") {
       return handleGenerate(request, env);
+    }
+
+    if (request.method === "POST" && url.pathname === "/api/etl/run") {
+      return handleEtlRun(request, env);
     }
     
     if (request.method === "GET" && url.pathname === "/api/generate") {

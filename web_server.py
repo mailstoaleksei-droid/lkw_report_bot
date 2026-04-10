@@ -16,7 +16,10 @@ import hmac
 import json
 import logging
 import pathlib
+import subprocess
+import sys
 import time
+from datetime import datetime, timezone
 from typing import Callable
 from urllib.parse import parse_qsl
 
@@ -39,6 +42,8 @@ _bot_token: str = ""
 # Rate limiting for /api/generate
 _api_cooldowns: dict[int, float] = {}
 _API_COOLDOWN_SEC = 5
+_etl_trigger_cooldowns: dict[int, float] = {}
+_ETL_TRIGGER_COOLDOWN_SEC = 30
 
 # initData auth_date must not be older than this (seconds)
 _INIT_DATA_MAX_AGE_SEC = 300  # 5 minutes
@@ -117,12 +122,77 @@ async def handle_api_reports(request: web.Request) -> web.Response:
     return web.json_response(data)
 
 
+def _get_etl_meta() -> dict:
+    """
+    Read ETL freshness metadata from PostgreSQL (etl_log).
+    Returns a safe dict even if DB is unavailable.
+    """
+    stale_after_hours_raw = os.getenv("ETL_STALE_AFTER_HOURS", "4").strip() or "4"
+    try:
+        stale_after_hours = max(1, int(stale_after_hours_raw))
+    except ValueError:
+        stale_after_hours = 4
+    stale_after_sec = stale_after_hours * 3600
+
+    meta = {
+        "last_import_at": None,
+        "age_sec": None,
+        "is_stale": True,
+        "stale_after_hours": stale_after_hours,
+        "source_name": None,
+    }
+
+    db_url = (os.getenv("DATABASE_URL") or "").strip()
+    if not db_url:
+        return meta
+
+    try:
+        import psycopg  # type: ignore
+
+        with psycopg.connect(db_url) as conn:
+            with conn.cursor() as cur:
+                cur.execute(
+                    """
+                    SELECT
+                        source_name,
+                        COALESCE(finished_at, started_at) AS import_ts
+                    FROM etl_log
+                    WHERE status = 'success'
+                    ORDER BY COALESCE(finished_at, started_at) DESC
+                    LIMIT 1
+                    """
+                )
+                row = cur.fetchone()
+                if not row:
+                    return meta
+
+                source_name, import_ts = row
+                if import_ts is None:
+                    return meta
+
+                if getattr(import_ts, "tzinfo", None) is None:
+                    import_ts = import_ts.replace(tzinfo=timezone.utc)
+                import_utc = import_ts.astimezone(timezone.utc)
+                now_utc = datetime.now(timezone.utc)
+                age_sec = max(0, int((now_utc - import_utc).total_seconds()))
+
+                meta["last_import_at"] = import_utc.isoformat()
+                meta["age_sec"] = age_sec
+                meta["is_stale"] = age_sec > stale_after_sec
+                meta["source_name"] = source_name
+                return meta
+    except Exception:
+        logger.exception("Failed to load ETL meta from DB")
+        return meta
+
+
 async def handle_api_meta(request: web.Request) -> web.Response:
     """Return metadata for Mini App UI."""
     schedule_enabled = os.getenv("SCHEDULE_ENABLED", "false").lower() in ("true", "1", "yes")
     cron = os.getenv("SCHEDULE_CRON", "0 10 * * 1")
     timezone = os.getenv("SCHEDULE_TIMEZONE", "Europe/Berlin")
     report_type = os.getenv("SCHEDULE_REPORT_TYPE", "bericht")
+    etl_meta = await asyncio.to_thread(_get_etl_meta)
 
     return web.json_response({
         "ok": True,
@@ -132,6 +202,7 @@ async def handle_api_meta(request: web.Request) -> web.Response:
             "timezone": timezone,
             "report_type": report_type,
         },
+        "etl": etl_meta,
         "reports_count": len(get_all_reports_api()),
     })
 
@@ -214,6 +285,70 @@ async def handle_api_generate(request: web.Request) -> web.Response:
     return web.json_response({"ok": True, "message": "Report generation started"})
 
 
+def _etl_lock_path() -> pathlib.Path:
+    return pathlib.Path(os.environ.get("TEMP", r"C:\Windows\Temp")) / "lkw_etl_pipeline.lock"
+
+
+def _is_etl_running() -> bool:
+    return _etl_lock_path().exists()
+
+
+def _spawn_etl_pipeline() -> None:
+    py = pathlib.Path(BASE_DIR) / ".venv" / "Scripts" / "python.exe"
+    if not py.exists():
+        py = pathlib.Path(sys.executable)
+    script = pathlib.Path(BASE_DIR) / "run_etl_pipeline.py"
+    creationflags = getattr(subprocess, "CREATE_NO_WINDOW", 0) | getattr(subprocess, "DETACHED_PROCESS", 0)
+    subprocess.Popen(
+        [str(py), str(script)],
+        cwd=BASE_DIR,
+        stdout=subprocess.DEVNULL,
+        stderr=subprocess.DEVNULL,
+        creationflags=creationflags,
+    )
+
+
+async def handle_api_etl_run(request: web.Request) -> web.Response:
+    try:
+        body = await request.json()
+    except Exception:
+        body = {}
+
+    shared_token = (os.getenv("ETL_TRIGGER_TOKEN") or "").strip()
+    auth_header = (request.headers.get("Authorization") or "").strip()
+    using_shared_token = bool(shared_token) and auth_header == f"Bearer {shared_token}"
+
+    user_id: int | None = None
+    if not using_shared_token:
+        init_data_raw = body.get("initData", "")
+        validated = _validate_init_data(init_data_raw)
+        if not validated:
+          return web.json_response({"ok": False, "error": "Invalid initData"}, status=403)
+
+        user_id = _extract_user_id(validated)
+        whitelist = _whitelist_fn()
+        if not user_id or user_id not in whitelist:
+            return web.json_response({"ok": False, "error": "Access denied"}, status=403)
+
+        now = time.time()
+        last = _etl_trigger_cooldowns.get(user_id, 0)
+        if now - last < _ETL_TRIGGER_COOLDOWN_SEC:
+            wait = int(_ETL_TRIGGER_COOLDOWN_SEC - (now - last))
+            return web.json_response({"ok": False, "error": f"Please wait {wait}s"}, status=429)
+        _etl_trigger_cooldowns[user_id] = now
+
+    if _is_etl_running():
+        return web.json_response({"ok": True, "status": "already_running"})
+
+    try:
+        await asyncio.to_thread(_spawn_etl_pipeline)
+        logger.info("ETL trigger accepted user=%s via=%s", user_id, "token" if using_shared_token else "initData")
+        return web.json_response({"ok": True, "status": "started"})
+    except Exception:
+        logger.exception("Failed to start ETL pipeline")
+        return web.json_response({"ok": False, "error": "Failed to start ETL"}, status=500)
+
+
 def _log_task_exception(task: asyncio.Task) -> None:
     """Callback to log unhandled exceptions from background tasks."""
     if task.cancelled():
@@ -293,6 +428,7 @@ def create_web_app() -> web.Application:
     app.router.add_get("/healthz", handle_healthz)
     app.router.add_get("/api/reports", handle_api_reports)
     app.router.add_get("/api/meta", handle_api_meta)
+    app.router.add_post("/api/etl/run", handle_api_etl_run)
     app.router.add_post("/api/generate", handle_api_generate)
     app.router.add_static("/static/", MINIAPP_DIR, show_index=False)
     return app
