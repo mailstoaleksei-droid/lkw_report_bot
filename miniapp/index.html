@@ -1832,6 +1832,7 @@
         hintYfDriverMonth: "Select month and driver to generate monthly Yellow Fox driver metrics",
         hintYfLkwWeek: "Select year, week and LKW to generate Yellow Fox truck metrics",
         hintEinnahmen: "Total revenue report for all operations",
+        hintEinnahmenFirms: "Company turnover by month from Bericht_Dispo BS:CF with table and chart",
         hintDiesel: "Generate 2-page Diesel PDF from sheet ranges",
         hintDieselCard: "Select LKW and generate PDF with DKV, Shell and Tankpool card numbers",
         hintBonus: "Generate Bonus as whole year or as selected year/month with optional Fahrer filter",
@@ -1931,6 +1932,7 @@
         hintYfDriverMonth: "Выберите месяц и водителя для PDF с месячными показателями Yellow Fox",
         hintYfLkwWeek: "Выберите год, неделю и LKW для PDF с показателями работы машины Yellow Fox",
         hintEinnahmen: "Отчет по общей выручке",
+        hintEinnahmenFirms: "Оборот фирм по месяцам из Bericht_Dispo BS:CF с таблицей и графиком",
         hintDiesel: "Сформировать 2-страничный Diesel PDF по диапазонам листа",
         hintDieselCard: "Выберите LKW и сформируйте PDF с номерами карт DKV, Shell и Tankpool",
         hintBonus: "Сформируйте Bonus за весь год или за выбранные год/месяц, при необходимости укажите Fahrer",
@@ -2109,6 +2111,9 @@
       }
       if (type === "einnahmen") {
         return buildGenerateDirectUrl("einnahmen", {}, initData || "", disposition);
+      }
+      if (type === "einnahmen_firm") {
+        return buildGenerateDirectUrl("einnahmen_firm", {}, initData || "", disposition);
       }
       if (type === "diesel") {
         return buildGenerateDirectUrl("diesel", {}, initData || "", disposition);
@@ -3205,15 +3210,73 @@
     }
 
     function openEinnahmen() {
-      setSheetHeader("Einnahmen", L("hintEinnahmen"), "Quick");
-      setSheetCloseAction("back", closeSheet);
-      setSegments([], "", () => {});
-      setForm(`<div class="note">${L("hintEinnahmen")}</div>`);
-      setNote("");
-      $("btnPrimary").textContent = L("generate");
-      $("btnPrimary").onclick = async () => {
-        await sendReportGenerate("einnahmen", {});
+      const renderMenu = () => {
+        setSheetHeader("Einnahmen", L("hintEinnahmen"), "PDF");
+        setSheetCloseAction("back", closeSheet);
+        setSegments([], "", () => {});
+        setForm(`
+          <div class="field">
+            <label>Choose report</label>
+            <div class="note">${L("hintEinnahmen")}</div>
+            <div class="note-actions">
+              <button type="button" class="btn btn-primary" id="einnahmenChooseTotal">Gesamt</button>
+            </div>
+          </div>
+          <div class="field">
+            <label>Choose report</label>
+            <div class="note">${L("hintEinnahmenFirms")}</div>
+            <div class="note-actions">
+              <button type="button" class="btn btn-primary" id="einnahmenChooseFirms">Firm / Monat</button>
+            </div>
+          </div>
+        `);
+        setNote("");
+        hideSheetFooter();
+        $("einnahmenChooseTotal").onclick = () => renderTotal();
+        $("einnahmenChooseFirms").onclick = () => renderFirms();
       };
+
+      const renderTotal = () => {
+        setSheetHeader("Einnahmen", L("hintEinnahmen"), "PDF");
+        setSheetCloseAction("back", renderMenu);
+        setSegments([], "", () => {});
+        setForm(`
+          <div class="field">
+            <label>Gesamt</label>
+            <div class="note">${L("hintEinnahmen")}</div>
+            <div class="note-actions">
+              <button type="button" class="btn btn-primary" id="einnahmenRunTotal">${L("generate")}</button>
+            </div>
+          </div>
+        `);
+        setNote("");
+        hideSheetFooter();
+        $("einnahmenRunTotal").onclick = async () => {
+          await sendReportGenerate("einnahmen", {});
+        };
+      };
+
+      const renderFirms = () => {
+        setSheetHeader("Einnahmen", L("hintEinnahmenFirms"), "PDF");
+        setSheetCloseAction("back", renderMenu);
+        setSegments([], "", () => {});
+        setForm(`
+          <div class="field">
+            <label>Firm / Monat</label>
+            <div class="note">${L("hintEinnahmenFirms")}</div>
+            <div class="note-actions">
+              <button type="button" class="btn btn-primary" id="einnahmenRunFirms">${L("generate")}</button>
+            </div>
+          </div>
+        `);
+        setNote("");
+        hideSheetFooter();
+        $("einnahmenRunFirms").onclick = async () => {
+          await sendReportGenerate("einnahmen_firm", {});
+        };
+      };
+
+      renderMenu();
       openSheet();
     }
 

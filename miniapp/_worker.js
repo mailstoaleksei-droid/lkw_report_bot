@@ -113,6 +113,22 @@ const REPORTS = [
     params: [],
   },
   {
+    id: "einnahmen_firm",
+    enabled: true,
+    icon: "money",
+    name: {
+      en: "Einnahmen (Companies by Month)",
+      ru: "Einnahmen (оборот фирм по месяцам)",
+      de: "Einnahmen (Firmenumsatz pro Monat)",
+    },
+    description: {
+      en: "Top 20 companies from Bericht_Dispo BS:CF with monthly comparison chart",
+      ru: "Первые 20 фирм из Bericht_Dispo BS:CF с таблицей и графиком сравнения по месяцам",
+      de: "Erste 20 Firmen aus Bericht_Dispo BS:CF mit Tabelle und Monatsvergleichsgrafik",
+    },
+    params: [],
+  },
+  {
     id: "diesel",
     enabled: true,
     icon: "fuel",
@@ -552,6 +568,27 @@ SELECT
   COALESCE(gesamt, 0)::numeric AS gesamt
 FROM report_einnahmen_monthly
 ORDER BY month_index;
+`;
+
+const EINNAHMEN_FIRM_SQL = `
+SELECT
+  row_index,
+  firm_name,
+  COALESCE(january, 0)::numeric AS january,
+  COALESCE(february, 0)::numeric AS february,
+  COALESCE(march, 0)::numeric AS march,
+  COALESCE(april, 0)::numeric AS april,
+  COALESCE(may, 0)::numeric AS may,
+  COALESCE(june, 0)::numeric AS june,
+  COALESCE(july, 0)::numeric AS july,
+  COALESCE(august, 0)::numeric AS august,
+  COALESCE(september, 0)::numeric AS september,
+  COALESCE(october, 0)::numeric AS october,
+  COALESCE(november, 0)::numeric AS november,
+  COALESCE(december, 0)::numeric AS december,
+  COALESCE(total, 0)::numeric AS total
+FROM report_einnahmen_firm_monthly
+ORDER BY row_index;
 `;
 
 const DIESEL_MONTHLY_SQL = `
@@ -1040,6 +1077,10 @@ function makeDataWeekFilename(year, week) {
 
 function makeEinnahmenFilename(at = new Date()) {
   return `einnahmen_${formatUtcDateStamp(at)}.pdf`;
+}
+
+function makeEinnahmenFirmFilename(at = new Date()) {
+  return `einnahmen_firms_${formatUtcDateStamp(at)}.pdf`;
 }
 
 function makeDieselFilename(at = new Date()) {
@@ -2759,6 +2800,387 @@ async function buildEinnahmenPdfWithPdfLib({ userId, rows }) {
     }
   }
 
+  return pdfDoc.save();
+}
+
+const EINNAHMEN_FIRM_MONTHS = [
+  { key: "january", label: "Januar" },
+  { key: "february", label: "Februar" },
+  { key: "march", label: "Maerz" },
+  { key: "april", label: "April" },
+  { key: "may", label: "Mai" },
+  { key: "june", label: "Juni" },
+  { key: "july", label: "Juli" },
+  { key: "august", label: "August" },
+  { key: "september", label: "September" },
+  { key: "october", label: "Oktober" },
+  { key: "november", label: "November" },
+  { key: "december", label: "Dezember" },
+];
+
+function buildEinnahmenFirmRows(rows = []) {
+  return (rows || [])
+    .map((row) => ({
+      row_index: toIntSafe(row?.row_index, 0),
+      firm_name: safeText(row?.firm_name, ""),
+      january: toNumberSafe(row?.january, 0),
+      february: toNumberSafe(row?.february, 0),
+      march: toNumberSafe(row?.march, 0),
+      april: toNumberSafe(row?.april, 0),
+      may: toNumberSafe(row?.may, 0),
+      june: toNumberSafe(row?.june, 0),
+      july: toNumberSafe(row?.july, 0),
+      august: toNumberSafe(row?.august, 0),
+      september: toNumberSafe(row?.september, 0),
+      october: toNumberSafe(row?.october, 0),
+      november: toNumberSafe(row?.november, 0),
+      december: toNumberSafe(row?.december, 0),
+      total: toNumberSafe(row?.total, 0),
+    }))
+    .filter((row) => row.row_index > 0 && row.firm_name)
+    .sort((a, b) => rowOrderValue(a.row_index, a.firm_name) - rowOrderValue(b.row_index, b.firm_name))
+    .slice(0, 20);
+}
+
+function rowOrderValue(rowIndex, firmName) {
+  return (toIntSafe(rowIndex, 0) * 1000) + (safeText(firmName, "").length ? 0 : 999);
+}
+
+function getEinnahmenFirmActiveMonths(rows = []) {
+  const active = EINNAHMEN_FIRM_MONTHS.filter(({ key }) => rows.some((row) => hasValueData(row?.[key])));
+  return active.length ? active : EINNAHMEN_FIRM_MONTHS.slice(0, 3);
+}
+
+function formatEinnahmenFirmCell(value) {
+  return formatEinnahmenCell(value);
+}
+
+function drawEinnahmenFirmChartPage({ pdfDoc, font, boldFont, userId, rows }) {
+  const pageSize = [1190, 842];
+  const page = pdfDoc.addPage(pageSize);
+  const margin = 28;
+  const textColor = rgb(0.08, 0.14, 0.24);
+  const borderColor = rgb(0.74, 0.8, 0.9);
+  const cardBg = rgb(0.99, 0.995, 1);
+  const seriesPalette = [
+    rgb(0.31, 0.55, 0.84),
+    rgb(0.96, 0.53, 0.16),
+    rgb(0.7, 0.7, 0.72),
+    rgb(0.24, 0.68, 0.4),
+    rgb(0.63, 0.42, 0.82),
+    rgb(0.84, 0.28, 0.39),
+    rgb(0.17, 0.64, 0.68),
+    rgb(0.61, 0.52, 0.35),
+    rgb(0.47, 0.63, 0.19),
+    rgb(0.2, 0.32, 0.55),
+    rgb(0.84, 0.46, 0.71),
+    rgb(0.55, 0.55, 0.55),
+  ];
+
+  let y = page.getHeight() - margin;
+  page.drawText("Einnahmen nach Firma (Bericht_Dispo BS:CF)", {
+    x: margin,
+    y,
+    size: 16,
+    font: boldFont,
+    color: textColor,
+  });
+  y -= 18;
+  page.drawText(`Generated: ${new Date().toISOString()} UTC | User: ${userId}`, {
+    x: margin,
+    y,
+    size: 8,
+    font,
+    color: rgb(0.24, 0.3, 0.4),
+  });
+  y -= 18;
+
+  const chartX = margin;
+  const chartY = 72;
+  const chartWidth = page.getWidth() - (margin * 2);
+  const chartHeight = y - chartY;
+  page.drawRectangle({
+    x: chartX,
+    y: chartY,
+    width: chartWidth,
+    height: chartHeight,
+    borderColor,
+    borderWidth: 1,
+    color: cardBg,
+  });
+
+  if (!rows.length) {
+    page.drawText("No rows found.", {
+      x: margin + 12,
+      y: y - 20,
+      size: 10,
+      font,
+      color: textColor,
+    });
+    return;
+  }
+
+  const months = getEinnahmenFirmActiveMonths(rows);
+  const maxVal = Math.max(
+    1,
+    ...rows.flatMap((row) => months.map(({ key }) => toNumberSafe(row?.[key], 0))),
+  );
+  const labelColWidth = 330;
+  const legendHeight = 28;
+  const plotPadTop = 18;
+  const plotPadBottom = 28 + legendHeight;
+  const plotPadRight = 24;
+  const plotX = chartX + labelColWidth;
+  const plotY = chartY + plotPadBottom;
+  const plotWidth = chartWidth - labelColWidth - plotPadRight;
+  const plotHeight = chartHeight - plotPadTop - plotPadBottom;
+  const groupHeight = plotHeight / rows.length;
+  const baselineX = plotX;
+
+  page.drawLine({
+    start: { x: baselineX, y: plotY - 4 },
+    end: { x: baselineX, y: plotY + plotHeight + 2 },
+    thickness: 1,
+    color: rgb(0.82, 0.84, 0.88),
+  });
+
+  for (let rowIdx = 0; rowIdx < rows.length; rowIdx += 1) {
+    const row = rows[rowIdx];
+    const groupTop = plotY + plotHeight - (rowIdx * groupHeight);
+    const groupBottom = groupTop - groupHeight;
+    const label = fitTextToWidth(boldFont, safeText(row?.firm_name, ""), 9, labelColWidth - 18);
+    const labelWidth = measureTextWidth(boldFont, label, 9);
+    page.drawText(label, {
+      x: chartX + labelColWidth - labelWidth - 14,
+      y: groupBottom + (groupHeight / 2) - 4,
+      size: 9,
+      font: boldFont,
+      color: rgb(0.34, 0.34, 0.36),
+    });
+
+    const seriesGap = 3;
+    const availableHeight = Math.max(12, groupHeight - 8);
+    const barHeight = Math.max(4, Math.min(16, (availableHeight - (seriesGap * (months.length - 1))) / Math.max(1, months.length)));
+    const blockHeight = (barHeight * months.length) + (seriesGap * (months.length - 1));
+    let barY = groupBottom + ((groupHeight - blockHeight) / 2);
+
+    for (let monthIdx = 0; monthIdx < months.length; monthIdx += 1) {
+      const monthDef = months[monthIdx];
+      const value = toNumberSafe(row?.[monthDef.key], 0);
+      const barWidth = Math.max(0, (value / maxVal) * (plotWidth - 24));
+      const color = seriesPalette[monthIdx % seriesPalette.length];
+      if (barWidth > 0) {
+        page.drawRectangle({
+          x: baselineX,
+          y: barY,
+          width: barWidth,
+          height: barHeight,
+          color,
+        });
+      }
+      if (hasValueData(value)) {
+        const valueLabel = formatMoneyInt(value);
+        page.drawText(valueLabel, {
+          x: baselineX + barWidth + 6,
+          y: barY + Math.max(0, (barHeight - 8) / 2),
+          size: 8,
+          font: boldFont,
+          color,
+        });
+      }
+      barY += barHeight + seriesGap;
+    }
+  }
+
+  const legendY = chartY + 12;
+  const legendGap = 16;
+  let legendX = chartX + 22;
+  let legendRowY = legendY;
+  for (let monthIdx = 0; monthIdx < months.length; monthIdx += 1) {
+    const monthDef = months[monthIdx];
+    const color = seriesPalette[monthIdx % seriesPalette.length];
+    const labelWidth = measureTextWidth(boldFont, monthDef.label, 9);
+    if (legendX + 14 + labelWidth > chartX + chartWidth - 24) {
+      legendX = chartX + 22;
+      legendRowY += 14;
+    }
+    page.drawRectangle({
+      x: legendX,
+      y: legendRowY,
+      width: 10,
+      height: 10,
+      color,
+    });
+    legendX += 14;
+    page.drawText(monthDef.label, {
+      x: legendX,
+      y: legendRowY + 1,
+      size: 9,
+      font: boldFont,
+      color: textColor,
+    });
+    legendX += labelWidth + legendGap;
+  }
+}
+
+async function buildEinnahmenFirmPdfWithPdfLib({ userId, rows }) {
+  const matrixRows = buildEinnahmenFirmRows(rows);
+  const pdfDoc = await PDFDocument.create();
+  const font = await pdfDoc.embedFont(StandardFonts.Helvetica);
+  const boldFont = await pdfDoc.embedFont(StandardFonts.HelveticaBold);
+
+  const pageSize = [1190, 842];
+  const margin = 22;
+  const rowHeight = 16;
+  const textSize = 6.6;
+  const textColor = rgb(0.08, 0.14, 0.24);
+  const borderColor = rgb(0.74, 0.8, 0.9);
+  const headerBg = rgb(0.93, 0.96, 1);
+  const oddBg = rgb(0.985, 0.99, 1);
+  const columns = resolveAutoColumns({
+    columns: [
+      { key: "firm_name", label: "Firm", width: "auto", min_width: 220, max_width: 330 },
+      ...EINNAHMEN_FIRM_MONTHS.map((month) => ({ key: month.key, label: month.label, width: "auto", min_width: 54, max_width: 78 })),
+      { key: "total", label: "Total", width: "auto", min_width: 68, max_width: 92 },
+    ],
+    rows: matrixRows,
+    font,
+    size: textSize,
+    maxTableWidth: pageSize[0] - (margin * 2),
+  });
+  const tableWidth = columns.reduce((sum, c) => sum + c.width, 0);
+  const tableX = margin + ((pageSize[0] - (margin * 2) - tableWidth) / 2);
+
+  let page = pdfDoc.addPage(pageSize);
+  let y = page.getHeight() - margin;
+
+  const drawPageHeader = () => {
+    page.drawText("Einnahmen nach Firma (Bericht_Dispo BS:CF)", {
+      x: margin,
+      y,
+      size: 15,
+      font: boldFont,
+      color: textColor,
+    });
+    y -= 16;
+    page.drawText(`Rows: first 20 | Generated: ${new Date().toISOString()} UTC | User: ${userId}`, {
+      x: margin,
+      y,
+      size: 8,
+      font,
+      color: rgb(0.24, 0.3, 0.4),
+    });
+    y -= 14;
+  };
+
+  const drawHeaderRow = () => {
+    page.drawRectangle({
+      x: tableX,
+      y: y - rowHeight + 2,
+      width: tableWidth,
+      height: rowHeight,
+      color: headerBg,
+      borderColor,
+      borderWidth: 1,
+    });
+    let x = tableX;
+    for (const col of columns) {
+      const label = fitTextToWidth(boldFont, col.label, textSize, col.width - 8);
+      const labelWidth = measureTextWidth(boldFont, label, textSize);
+      page.drawText(label, {
+        x: x + ((col.width - labelWidth) / 2),
+        y: y - 9,
+        size: textSize,
+        font: boldFont,
+        color: textColor,
+      });
+      x += col.width;
+      if (x < tableX + tableWidth - 0.5) {
+        page.drawLine({
+          start: { x, y: y - rowHeight + 2 },
+          end: { x, y: y + 2 },
+          thickness: 0.7,
+          color: borderColor,
+        });
+      }
+    }
+    y -= rowHeight;
+  };
+
+  const ensureSpace = (needHeight) => {
+    if (y - needHeight >= margin) return;
+    page = pdfDoc.addPage(pageSize);
+    y = page.getHeight() - margin;
+    drawPageHeader();
+    drawHeaderRow();
+  };
+
+  const drawRow = (row, idx) => {
+    if (idx % 2 === 1) {
+      page.drawRectangle({
+        x: tableX,
+        y: y - rowHeight + 2,
+        width: tableWidth,
+        height: rowHeight,
+        color: oddBg,
+      });
+    }
+    let x = tableX;
+    for (let i = 0; i < columns.length; i += 1) {
+      const col = columns[i];
+      const isTotal = col.key === "total";
+      const cellFont = isTotal ? boldFont : font;
+      const cellSize = isTotal ? textSize + 1.4 : textSize;
+      const rawValue = col.key === "firm_name"
+        ? safeText(row?.firm_name, "")
+        : formatEinnahmenFirmCell(row?.[col.key]);
+      const value = fitTextToWidth(cellFont, rawValue, cellSize, col.width - 8);
+      const valueWidth = measureTextWidth(cellFont, value, cellSize);
+      page.drawText(value, {
+        x: x + ((col.width - valueWidth) / 2),
+        y: y - (isTotal ? 10 : 9),
+        size: cellSize,
+        font: cellFont,
+        color: textColor,
+      });
+      x += col.width;
+      if (x < tableX + tableWidth - 0.5) {
+        page.drawLine({
+          start: { x, y: y - rowHeight + 2 },
+          end: { x, y: y + 2 },
+          thickness: 0.45,
+          color: borderColor,
+        });
+      }
+    }
+    page.drawLine({
+      start: { x: tableX, y: y - rowHeight + 2 },
+      end: { x: tableX + tableWidth, y: y - rowHeight + 2 },
+      thickness: 0.45,
+      color: borderColor,
+    });
+    y -= rowHeight;
+  };
+
+  drawPageHeader();
+  drawHeaderRow();
+
+  if (!matrixRows.length) {
+    page.drawText("No rows found.", {
+      x: margin,
+      y: y - 10,
+      size: 10,
+      font,
+      color: textColor,
+    });
+  } else {
+    for (let idx = 0; idx < matrixRows.length; idx += 1) {
+      ensureSpace(rowHeight + 2);
+      drawRow(matrixRows[idx], idx);
+    }
+  }
+
+  drawEinnahmenFirmChartPage({ pdfDoc, font, boldFont, userId, rows: matrixRows });
   return pdfDoc.save();
 }
 
@@ -4733,6 +5155,8 @@ async function handleHistory(request, env) {
       filename = makeDataWeekFilename(isoYear, isoWeek);
     } else if (reportType === "einnahmen") {
       filename = makeEinnahmenFilename();
+    } else if (reportType === "einnahmen_firm") {
+      filename = makeEinnahmenFirmFilename();
     } else if (reportType === "diesel") {
       filename = makeDieselFilename();
     } else if (reportType === "diesel_lkw_card") {
@@ -5150,6 +5574,7 @@ async function handleGenerateWithBody(body, env, enforceRateLimit = true) {
     && valid.reportType !== "data_plan"
     && valid.reportType !== "data_data"
     && valid.reportType !== "einnahmen"
+    && valid.reportType !== "einnahmen_firm"
     && valid.reportType !== "diesel"
     && valid.reportType !== "diesel_lkw_card"
     && valid.reportType !== "yf_driver_month"
@@ -5437,6 +5862,65 @@ async function handleGenerateWithBody(body, env, enforceRateLimit = true) {
         lines,
         pageWidth: 842,
         pageHeight: 595,
+      });
+    }
+  } else if (valid.reportType === "einnahmen_firm") {
+    let rows;
+    try {
+      const result = await queryNeon(dbConnectionString, EINNAHMEN_FIRM_SQL, []);
+      rows = result.rows || [];
+    } catch (err) {
+      return json(
+        {
+          ok: false,
+          error: "Failed to execute SQL query",
+          code: "SQL_ERROR",
+          details: String(err?.message || err || "unknown error"),
+        },
+        500,
+        { "Cache-Control": "no-store" },
+      );
+    }
+
+    filename = makeEinnahmenFirmFilename();
+    outputKey = `einnahmen_firm:${formatUtcDateStamp(new Date())}`;
+    try {
+      pdfBytes = await buildEinnahmenFirmPdfWithPdfLib({
+        userId: auth.userId,
+        rows,
+      });
+    } catch (err) {
+      pdfEngine = "legacy-fallback";
+      const matrixRows = buildEinnahmenFirmRows(rows);
+      const lines = [];
+      lines.push("Firm | Januar | Februar | Maerz | April | Mai | Juni | Juli | August | September | Oktober | November | Dezember | Total");
+      lines.push("-".repeat(220));
+      for (const row of matrixRows) {
+        lines.push(
+          [
+            safeText(row.firm_name, ""),
+            formatEinnahmenFirmCell(row.january),
+            formatEinnahmenFirmCell(row.february),
+            formatEinnahmenFirmCell(row.march),
+            formatEinnahmenFirmCell(row.april),
+            formatEinnahmenFirmCell(row.may),
+            formatEinnahmenFirmCell(row.june),
+            formatEinnahmenFirmCell(row.july),
+            formatEinnahmenFirmCell(row.august),
+            formatEinnahmenFirmCell(row.september),
+            formatEinnahmenFirmCell(row.october),
+            formatEinnahmenFirmCell(row.november),
+            formatEinnahmenFirmCell(row.december),
+            formatEinnahmenFirmCell(row.total),
+          ].join(" | "),
+        );
+      }
+      pdfBytes = buildSimplePdf({
+        title: "Einnahmen nach Firma (Bericht_Dispo BS:CF)",
+        subtitle: `Generated at ${new Date().toISOString()} UTC, user ${auth.userId}`,
+        lines,
+        pageWidth: 1190,
+        pageHeight: 842,
       });
     }
   } else if (valid.reportType === "diesel") {

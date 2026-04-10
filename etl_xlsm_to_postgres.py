@@ -291,6 +291,26 @@ class EinnahmenMonthRow:
 
 
 @dataclass
+class EinnahmenFirmRow:
+    row_index: int
+    firm_name: str
+    january: Decimal
+    february: Decimal
+    march: Decimal
+    april: Decimal
+    may: Decimal
+    june: Decimal
+    july: Decimal
+    august: Decimal
+    september: Decimal
+    october: Decimal
+    november: Decimal
+    december: Decimal
+    total: Decimal
+    raw_payload: dict[str, object]
+
+
+@dataclass
 class BonusDynamikRow:
     report_year: int
     report_month: int
@@ -491,6 +511,65 @@ def extract_einnahmen_months(wb) -> list[EinnahmenMonthRow]:
                 },
             )
         )
+    return rows
+
+
+def extract_einnahmen_firm_rows(wb) -> list[EinnahmenFirmRow]:
+    if BERICHT_DISPO_SHEET not in wb.sheetnames:
+        return []
+
+    ws = wb[BERICHT_DISPO_SHEET]
+    col_map = {
+        "firm_name": 71,   # BS
+        "january": 72,     # BT
+        "february": 73,    # BU
+        "march": 74,       # BV
+        "april": 75,       # BW
+        "may": 76,         # BX
+        "june": 77,        # BY
+        "july": 78,        # BZ
+        "august": 79,      # CA
+        "september": 80,   # CB
+        "october": 81,     # CC
+        "november": 82,    # CD
+        "december": 83,    # CE
+        "total": 84,       # CF
+    }
+
+    rows: list[EinnahmenFirmRow] = []
+    for row_idx in range(3, 23):  # first 20 rows after header
+        firm_name = _clean_text(ws.cell(row=row_idx, column=col_map["firm_name"]).value)
+        if not firm_name:
+            continue
+
+        raw_payload = {
+            "sheet": BERICHT_DISPO_SHEET,
+            "source_range": f"BS{row_idx}:CF{row_idx}",
+        }
+        for key, col_idx in col_map.items():
+            raw_payload[key] = ws.cell(row=row_idx, column=col_idx).value
+
+        rows.append(
+            EinnahmenFirmRow(
+                row_index=row_idx - 2,
+                firm_name=firm_name,
+                january=_parse_decimal(ws.cell(row=row_idx, column=col_map["january"]).value),
+                february=_parse_decimal(ws.cell(row=row_idx, column=col_map["february"]).value),
+                march=_parse_decimal(ws.cell(row=row_idx, column=col_map["march"]).value),
+                april=_parse_decimal(ws.cell(row=row_idx, column=col_map["april"]).value),
+                may=_parse_decimal(ws.cell(row=row_idx, column=col_map["may"]).value),
+                june=_parse_decimal(ws.cell(row=row_idx, column=col_map["june"]).value),
+                july=_parse_decimal(ws.cell(row=row_idx, column=col_map["july"]).value),
+                august=_parse_decimal(ws.cell(row=row_idx, column=col_map["august"]).value),
+                september=_parse_decimal(ws.cell(row=row_idx, column=col_map["september"]).value),
+                october=_parse_decimal(ws.cell(row=row_idx, column=col_map["october"]).value),
+                november=_parse_decimal(ws.cell(row=row_idx, column=col_map["november"]).value),
+                december=_parse_decimal(ws.cell(row=row_idx, column=col_map["december"]).value),
+                total=_parse_decimal(ws.cell(row=row_idx, column=col_map["total"]).value),
+                raw_payload=raw_payload,
+            )
+        )
+
     return rows
 
 
@@ -950,6 +1029,32 @@ def _ensure_einnahmen_table(cur) -> None:
     )
 
 
+def _ensure_einnahmen_firm_table(cur) -> None:
+    cur.execute(
+        """
+        CREATE TABLE IF NOT EXISTS report_einnahmen_firm_monthly (
+            row_index SMALLINT PRIMARY KEY CHECK (row_index BETWEEN 1 AND 20),
+            firm_name TEXT NOT NULL,
+            january NUMERIC(14, 2) NOT NULL DEFAULT 0,
+            february NUMERIC(14, 2) NOT NULL DEFAULT 0,
+            march NUMERIC(14, 2) NOT NULL DEFAULT 0,
+            april NUMERIC(14, 2) NOT NULL DEFAULT 0,
+            may NUMERIC(14, 2) NOT NULL DEFAULT 0,
+            june NUMERIC(14, 2) NOT NULL DEFAULT 0,
+            july NUMERIC(14, 2) NOT NULL DEFAULT 0,
+            august NUMERIC(14, 2) NOT NULL DEFAULT 0,
+            september NUMERIC(14, 2) NOT NULL DEFAULT 0,
+            october NUMERIC(14, 2) NOT NULL DEFAULT 0,
+            november NUMERIC(14, 2) NOT NULL DEFAULT 0,
+            december NUMERIC(14, 2) NOT NULL DEFAULT 0,
+            total NUMERIC(14, 2) NOT NULL DEFAULT 0,
+            raw_payload JSONB NOT NULL DEFAULT '{}'::jsonb,
+            updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+        )
+        """
+    )
+
+
 def _ensure_bonus_table(cur) -> None:
     cur.execute(
         """
@@ -1100,6 +1205,7 @@ def run_etl(database_url: str, xlsm_path: Path) -> dict[str, int]:
             trucks = extract_trucks(wb)
             drivers = extract_drivers(wb)
             einnahmen_rows = extract_einnahmen_months(wb)
+            einnahmen_firm_rows = extract_einnahmen_firm_rows(wb)
             bonus_rows = extract_bonus_dynamik_months(wb)
             diesel_rows = extract_diesel_months(wb)
             yf_fahrer_rows = extract_yf_fahrer_months(wb)
@@ -1120,6 +1226,7 @@ def run_etl(database_url: str, xlsm_path: Path) -> dict[str, int]:
                     company_ids[name] = _upsert_company(cur, name)
 
                 _ensure_einnahmen_table(cur)
+                _ensure_einnahmen_firm_table(cur)
                 _ensure_bonus_table(cur)
                 _ensure_diesel_table(cur)
                 _ensure_yf_fahrer_table(cur)
@@ -1217,6 +1324,55 @@ def run_etl(database_url: str, xlsm_path: Path) -> dict[str, int]:
                             rec.nahverkehr,
                             rec.logistics,
                             rec.gesamt,
+                            json.dumps(rec.raw_payload, ensure_ascii=False),
+                        ),
+                    )
+                    rows_inserted += 1
+
+                cur.execute("DELETE FROM report_einnahmen_firm_monthly")
+                rows_deleted += int(cur.rowcount or 0)
+                for rec in einnahmen_firm_rows:
+                    cur.execute(
+                        """
+                        INSERT INTO report_einnahmen_firm_monthly (
+                            row_index,
+                            firm_name,
+                            january,
+                            february,
+                            march,
+                            april,
+                            may,
+                            june,
+                            july,
+                            august,
+                            september,
+                            october,
+                            november,
+                            december,
+                            total,
+                            raw_payload,
+                            updated_at
+                        )
+                        VALUES (
+                            %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s::jsonb, NOW()
+                        )
+                        """,
+                        (
+                            rec.row_index,
+                            rec.firm_name,
+                            rec.january,
+                            rec.february,
+                            rec.march,
+                            rec.april,
+                            rec.may,
+                            rec.june,
+                            rec.july,
+                            rec.august,
+                            rec.september,
+                            rec.october,
+                            rec.november,
+                            rec.december,
+                            rec.total,
                             json.dumps(rec.raw_payload, ensure_ascii=False),
                         ),
                     )
@@ -1400,7 +1556,7 @@ def run_etl(database_url: str, xlsm_path: Path) -> dict[str, int]:
                     WHERE id = %s
                     """,
                     (
-                        len(trucks) + len(drivers) + len(einnahmen_rows) + len(bonus_rows) + len(diesel_rows) + len(yf_fahrer_rows) + len(yf_lkw_rows),
+                        len(trucks) + len(drivers) + len(einnahmen_rows) + len(einnahmen_firm_rows) + len(bonus_rows) + len(diesel_rows) + len(yf_fahrer_rows) + len(yf_lkw_rows),
                         rows_inserted,
                         rows_updated,
                         rows_deleted,
@@ -1410,6 +1566,7 @@ def run_etl(database_url: str, xlsm_path: Path) -> dict[str, int]:
                                 "trucks": len(trucks),
                                 "drivers": len(drivers),
                                 "einnahmen_months": len(einnahmen_rows),
+                                "einnahmen_firms": len(einnahmen_firm_rows),
                                 "bonus_rows": len(bonus_rows),
                                 "diesel_months": len(diesel_rows),
                                 "yf_fahrer_rows": len(yf_fahrer_rows),
@@ -1428,6 +1585,7 @@ def run_etl(database_url: str, xlsm_path: Path) -> dict[str, int]:
                 "trucks": len(trucks),
                 "drivers": len(drivers),
                 "einnahmen_months": len(einnahmen_rows),
+                "einnahmen_firms": len(einnahmen_firm_rows),
                 "bonus_rows": len(bonus_rows),
                 "diesel_months": len(diesel_rows),
                 "yf_fahrer_rows": len(yf_fahrer_rows),
@@ -1474,6 +1632,7 @@ def main() -> int:
         f"ETL success: companies={result['companies']} "
         f"trucks={result['trucks']} drivers={result['drivers']} "
         f"einnahmen_months={result['einnahmen_months']} "
+        f"einnahmen_firms={result['einnahmen_firms']} "
         f"bonus_rows={result['bonus_rows']} "
         f"diesel_months={result['diesel_months']} "
         f"yf_fahrer_rows={result['yf_fahrer_rows']} "

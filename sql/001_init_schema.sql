@@ -112,6 +112,26 @@ CREATE TABLE IF NOT EXISTS report_einnahmen_monthly (
     updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 
+CREATE TABLE IF NOT EXISTS report_einnahmen_firm_monthly (
+    row_index SMALLINT PRIMARY KEY CHECK (row_index BETWEEN 1 AND 20),
+    firm_name TEXT NOT NULL,
+    january NUMERIC(14, 2) NOT NULL DEFAULT 0,
+    february NUMERIC(14, 2) NOT NULL DEFAULT 0,
+    march NUMERIC(14, 2) NOT NULL DEFAULT 0,
+    april NUMERIC(14, 2) NOT NULL DEFAULT 0,
+    may NUMERIC(14, 2) NOT NULL DEFAULT 0,
+    june NUMERIC(14, 2) NOT NULL DEFAULT 0,
+    july NUMERIC(14, 2) NOT NULL DEFAULT 0,
+    august NUMERIC(14, 2) NOT NULL DEFAULT 0,
+    september NUMERIC(14, 2) NOT NULL DEFAULT 0,
+    october NUMERIC(14, 2) NOT NULL DEFAULT 0,
+    november NUMERIC(14, 2) NOT NULL DEFAULT 0,
+    december NUMERIC(14, 2) NOT NULL DEFAULT 0,
+    total NUMERIC(14, 2) NOT NULL DEFAULT 0,
+    raw_payload JSONB NOT NULL DEFAULT '{}'::JSONB,
+    updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
 CREATE TABLE IF NOT EXISTS report_bonus_dynamik_monthly (
     report_year SMALLINT NOT NULL CHECK (report_year BETWEEN 2020 AND 2100),
     report_month SMALLINT NOT NULL CHECK (report_month BETWEEN 1 AND 12),
