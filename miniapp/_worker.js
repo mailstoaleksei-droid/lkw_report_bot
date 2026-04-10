@@ -2852,7 +2852,9 @@ function getEinnahmenFirmActiveMonths(rows = []) {
 }
 
 function formatEinnahmenFirmCell(value) {
-  return formatEinnahmenCell(value);
+  const n = toNumberSafe(value, 0);
+  if (Math.abs(n) < 0.0000001) return "";
+  return formatMoneyInt(n);
 }
 
 function drawEinnahmenFirmChartPage({ pdfDoc, font, boldFont, userId, rows }) {
