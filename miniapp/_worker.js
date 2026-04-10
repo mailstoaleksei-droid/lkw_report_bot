@@ -3096,15 +3096,14 @@ function drawEinnahmenFirmBubblePage({ pdfDoc, font, boldFont, userId, rows }) {
   const cellW = (chartWidth - (innerPadX * 2)) / cols;
   const cellH = (chartHeight - (innerPadY * 2)) / rowsCount;
   const maxTotal = Math.max(1, ...bubbleRows.map((row) => toNumberSafe(row?.total, 0)));
-  const minTotal = Math.min(...bubbleRows.map((row) => toNumberSafe(row?.total, 0)));
-  const minRadius = Math.max(26, Math.min(cellW, cellH) * 0.18);
-  const maxRadius = Math.max(minRadius + 4, Math.min(cellW, cellH) * 0.33);
+  const maxRadius = Math.max(24, Math.min(cellW, cellH) * 0.34);
+  const minVisibleRadius = 4;
 
   const radiusFor = (value) => {
     const n = toNumberSafe(value, 0);
-    if (Math.abs(maxTotal - minTotal) < 0.0001) return (minRadius + maxRadius) / 2;
-    const t = (n - minTotal) / (maxTotal - minTotal);
-    return minRadius + (t * (maxRadius - minRadius));
+    if (n <= 0) return 0;
+    // Bubble area is proportional to value, so diameter visually follows the data scale.
+    return Math.max(minVisibleRadius, maxRadius * Math.sqrt(n / maxTotal));
   };
 
   for (let idx = 0; idx < bubbleRows.length; idx += 1) {
@@ -3117,29 +3116,31 @@ function drawEinnahmenFirmBubblePage({ pdfDoc, font, boldFont, userId, rows }) {
     const cy = cellTop - (cellH * 0.42);
     const baseColor = spherePalette[idx % spherePalette.length];
 
-    page.drawCircle({
-      x: cx,
-      y: cy,
-      size: radius,
-      color: baseColor,
-      borderColor: rgb(0.88, 0.93, 0.98),
-      borderWidth: 1.2,
-    });
-    page.drawCircle({
-      x: cx - (radius * 0.22),
-      y: cy + (radius * 0.22),
-      size: Math.max(6, radius * 0.38),
-      color: rgb(0.95, 0.98, 1),
-      opacity: 0.3,
-    });
-    page.drawCircle({
-      x: cx + (radius * 0.18),
-      y: cy - (radius * 0.16),
-      size: Math.max(6, radius * 0.82),
-      borderColor: rgb(0.2, 0.28, 0.38),
-      borderWidth: 0.5,
-      opacity: 0.14,
-    });
+    if (radius > 0) {
+      page.drawCircle({
+        x: cx,
+        y: cy,
+        size: radius,
+        color: baseColor,
+        borderColor: rgb(0.88, 0.93, 0.98),
+        borderWidth: 1.2,
+      });
+      page.drawCircle({
+        x: cx - (radius * 0.22),
+        y: cy + (radius * 0.22),
+        size: Math.max(3, radius * 0.38),
+        color: rgb(0.95, 0.98, 1),
+        opacity: 0.3,
+      });
+      page.drawCircle({
+        x: cx + (radius * 0.18),
+        y: cy - (radius * 0.16),
+        size: Math.max(3, radius * 0.82),
+        borderColor: rgb(0.2, 0.28, 0.38),
+        borderWidth: 0.5,
+        opacity: 0.14,
+      });
+    }
 
     const totalLabel = formatMoneyInt(row?.total);
     const labelMaxWidth = Math.max(34, (radius * 2) - 10);
