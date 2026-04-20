@@ -95,6 +95,8 @@
     - workday rule: idle only when `0 <= Strecke < 50 km`
     - kilometer anomalies (`< 0` or unusually high daily mileage `> 2000 km`) are listed separately and still counted as workdays
     - PDF includes monthly summary, idle days, weekend flag, anomaly note, and daily detail table
+    - `Fahrzeug / Fahrer / Zeitraum` line emphasized in bold and larger font
+    - `Regel` and `Datenhinweis` note blocks left-aligned with centered vertical placement
     - table values centered
   - centered table layout
   - live ETL data loaded and verified

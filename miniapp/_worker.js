@@ -5088,6 +5088,13 @@ async function buildYfLkwMonthPdfWithPdfLib({ userId, year, month, lkwId, rows }
   };
 
   const drawNote = ({ page, x, yTop, width, height, bgColor, border, title, body }) => {
+    const titleSize = 10;
+    const bodySize = 9;
+    const lineGap = 4;
+    const contentHeight = titleSize + lineGap + bodySize;
+    const contentTop = yTop - ((height - contentHeight) / 2);
+    const bodyText = fitTextToWidth(font, body, bodySize, width - 24);
+
     page.drawRectangle({
       x,
       y: yTop - height,
@@ -5099,15 +5106,15 @@ async function buildYfLkwMonthPdfWithPdfLib({ userId, year, month, lkwId, rows }
     });
     page.drawText(title, {
       x: x + 12,
-      y: yTop - 18,
-      size: 10,
+      y: contentTop - titleSize,
+      size: titleSize,
       font: boldFont,
       color: textColor,
     });
-    page.drawText(fitTextToWidth(font, body, 9, width - 24), {
+    page.drawText(bodyText, {
       x: x + 12,
-      y: yTop - 34,
-      size: 9,
+      y: contentTop - titleSize - lineGap - bodySize,
+      size: bodySize,
       font,
       color: textColor,
     });
@@ -5127,22 +5134,22 @@ async function buildYfLkwMonthPdfWithPdfLib({ userId, year, month, lkwId, rows }
   summaryPage.drawText(`Fahrzeug: ${model.lkwId}`, {
     x: margin,
     y,
-    size: 10,
-    font,
+    size: 12,
+    font: boldFont,
     color: textColor,
   });
   summaryPage.drawText(`Fahrer: ${model.driverLabel}`, {
     x: margin + 180,
     y,
-    size: 10,
-    font,
+    size: 12,
+    font: boldFont,
     color: textColor,
   });
   summaryPage.drawText(`Zeitraum: ${model.periodLabel}`, {
     x: margin + 460,
     y,
-    size: 10,
-    font,
+    size: 12,
+    font: boldFont,
     color: textColor,
   });
   y -= 24;
