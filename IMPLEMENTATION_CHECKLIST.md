@@ -38,7 +38,9 @@
 - [x] ETL freshness monitor active (`ETL_STALE_AFTER_HOURS=4`)
 - [x] ETL schedule updated:
   - Day: hourly (07:00-18:00)
-  - Night: every 3 hours (21:00-06:00)
+  - Night periodic ETL disabled to reduce load
+  - Source-change watcher limited to 07:00-18:00
+  - Freshness monitor limited to 07:00-18:00
 
 ## 4) Reports Implemented in Mini App
 - [x] `Bericht` (year/week)
