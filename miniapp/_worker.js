@@ -4579,11 +4579,12 @@ function formatSlashDateToDot(value) {
 
 function buildYfLkwMonthModel(rows = [], { year, month, lkwId }) {
   const WORKDAY_STRECKE_MIN_KM = 50;
+  const ANOMALY_STRECKE_MAX_KM = 2000;
   const dailyRows = (rows || []).map((row) => {
     const streckeKm = toNumberSafe(row?.strecke_km, 0);
     const isWeekend = toBoolish(row?.is_weekend);
     const drivers = safeText(row?.drivers_final, "").trim();
-    const isAnomaly = streckeKm < 0;
+    const isAnomaly = streckeKm < 0 || streckeKm > ANOMALY_STRECKE_MAX_KM;
     const isIdle = streckeKm >= 0 && streckeKm < WORKDAY_STRECKE_MIN_KM;
     return {
       reportDate: safeText(row?.report_date, ""),
@@ -4634,12 +4635,13 @@ function buildYfLkwMonthModel(rows = [], { year, month, lkwId }) {
     periodLabel: `${monthNameDe(month)} ${year}`,
     driverLabel: driverLabel.length > 60 ? `${driverLabel.slice(0, 57)}...` : driverLabel,
     workdayThresholdKm: WORKDAY_STRECKE_MIN_KM,
+    anomalyThresholdKm: ANOMALY_STRECKE_MAX_KM,
     dailyRows,
     idleRows,
     anomalies,
     summaryRows: [
       { metric: "Kalendertage", value: String(calendarDays) },
-      { metric: `Arbeitstage (Strecke < 0 oder >= ${WORKDAY_STRECKE_MIN_KM} km)`, value: String(workDays) },
+      { metric: `Arbeitstage (Anomalie oder Strecke >= ${WORKDAY_STRECKE_MIN_KM} km)`, value: String(workDays) },
       { metric: `Stillstandstage (0 <= Strecke < ${WORKDAY_STRECKE_MIN_KM} km)`, value: String(idleRows.length) },
       { metric: "Stillstand am Wochenende", value: String(idleWeekend) },
       { metric: "Stillstand werktags", value: String(idleWeekday) },
@@ -5192,7 +5194,7 @@ async function buildYfLkwMonthPdfWithPdfLib({ userId, year, month, lkwId, rows }
     bgColor: noteInfoBg,
     border: noteInfoBorder,
     title: "Regel",
-    body: `Nur 0 bis ${model.workdayThresholdKm - 1} km gelten als Stillstand. Negative Kilometerwerte werden als Anomalie markiert und als Arbeitstag gezaehlt.`,
+    body: `Nur 0 bis ${model.workdayThresholdKm - 1} km gelten als Stillstand. Kilometerwerte < 0 oder > ${model.anomalyThresholdKm} km werden als Anomalie markiert und als Arbeitstag gezaehlt.`,
   });
 
   if (model.anomalies.length) {

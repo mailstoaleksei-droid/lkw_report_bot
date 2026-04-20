@@ -93,7 +93,7 @@
     - params: `year`, `month`, `LKW`
     - daily driver value taken from column `Y` / `Drivers final`
     - workday rule: idle only when `0 <= Strecke < 50 km`
-    - negative kilometer anomalies are listed separately and still counted as workdays
+    - kilometer anomalies (`< 0` or unusually high daily mileage `> 2000 km`) are listed separately and still counted as workdays
     - PDF includes monthly summary, idle days, weekend flag, anomaly note, and daily detail table
     - table values centered
   - centered table layout
