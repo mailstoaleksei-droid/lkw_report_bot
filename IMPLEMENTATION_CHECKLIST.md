@@ -127,6 +127,7 @@
 - [x] Report selection flow opens full-screen:
   - tile submenus open as full-screen sheets
   - report criteria screens remain full-screen on next steps
+- [x] Report tiles remain clickable even when access badge shows a warning state
 - [x] Top action buttons:
   - Gear -> show Telegram user ID
   - Bell -> show last ETL update times

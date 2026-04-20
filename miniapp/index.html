@@ -3729,7 +3729,7 @@
         $("accessBadge").textContent = L("no");
         $("accessBadge").className = "badge no";
         $("accessIcon").innerHTML = '<img src="icons/close.svg" alt="" width="20" height="20">';
-        $("menu").classList.add("disabled");
+        $("menu").classList.remove("disabled");
       } else if (access.state === "auth_error") {
         $("accessMsg").textContent = L("accessAuthIssue");
         $("accessBadge").textContent = L("pending");
