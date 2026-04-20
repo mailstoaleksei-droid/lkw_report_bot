@@ -128,6 +128,7 @@
   - tile submenus open as full-screen sheets
   - report criteria screens remain full-screen on next steps
 - [x] Report tiles remain clickable even when access badge shows a warning state
+- [x] Report tile handlers are wired before access/API checks so slow `/api/meta` does not block opening menus
 - [x] Top action buttons:
   - Gear -> show Telegram user ID
   - Bell -> show last ETL update times

@@ -2284,6 +2284,31 @@
       return d.getUTCFullYear();
     }
 
+    function withTimeout(promise, timeoutMs, fallbackValue) {
+      return new Promise((resolve) => {
+        let settled = false;
+        const timer = setTimeout(() => {
+          if (settled) return;
+          settled = true;
+          resolve(fallbackValue);
+        }, timeoutMs);
+
+        Promise.resolve(promise)
+          .then((value) => {
+            if (settled) return;
+            settled = true;
+            clearTimeout(timer);
+            resolve(value);
+          })
+          .catch(() => {
+            if (settled) return;
+            settled = true;
+            clearTimeout(timer);
+            resolve(fallbackValue);
+          });
+      });
+    }
+
     function buildWeekOptions() {
       let out = "";
       for (let i = 1; i <= 53; i += 1) {
@@ -2293,14 +2318,19 @@
     }
 
     async function checkAccessServer() {
+      let timer = null;
       try {
         const ctx = getTgContext();
         const metaUrl = new URL("/api/meta", window.location.origin);
         if (ctx.initData) metaUrl.searchParams.set("initData", ctx.initData);
 
+        const controller = typeof AbortController === "function" ? new AbortController() : null;
+        timer = controller ? setTimeout(() => controller.abort(), 3500) : null;
+
         const resp = await fetch(metaUrl.toString(), {
           cache: "no-store",
           headers: { "Accept": "application/json" },
+          ...(controller ? { signal: controller.signal } : {}),
         });
         if (!resp.ok) return { state: "pending" };
 
@@ -2330,6 +2360,8 @@
         return { state: "pending" };
       } catch {
         return { state: "pending" };
+      } finally {
+        if (timer) clearTimeout(timer);
       }
     }
 
@@ -3712,12 +3744,21 @@
       $("welcomeSub").textContent = `${name}`.trim();
       $("sectionBrand").innerHTML = "GROO&nbsp;&nbsp;GmbH";
 
+      // Wire static UI before any network-dependent checks so tiles stay clickable.
+      setSheetCloseAction("close", closeSheet);
+      $("sheet").onclick = (e) => {
+        if (e.target === $("sheet")) closeSheet();
+      };
+      wireMenu();
+      wireDock();
+      wireTopActions();
+
       // Access check
       $("accessMsg").textContent = L("checking");
       $("accessBadge").textContent = "...";
       $("accessIcon").innerHTML = '<img src="icons/lock.svg" alt="" width="20" height="20">';
 
-      const access = await checkAccessServer();
+      const access = await withTimeout(checkAccessServer(), 4000, { state: "pending" });
       if (access.state === "ok") {
         $("accessMsg").textContent = L("accessOk");
         $("accessBadge").textContent = L("ok");
@@ -3743,16 +3784,6 @@
         $("accessIcon").innerHTML = '<img src="icons/lock.svg" alt="" width="20" height="20">';
         $("menu").classList.remove("disabled");
       }
-
-      // Wire events
-      setSheetCloseAction("close", closeSheet);
-      $("sheet").onclick = (e) => { 
-        if (e.target === $("sheet")) closeSheet(); 
-      };
-
-      wireMenu();
-      wireDock();
-      wireTopActions();
     }
 
     main();
