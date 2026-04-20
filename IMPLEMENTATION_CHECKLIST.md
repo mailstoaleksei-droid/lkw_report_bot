@@ -92,8 +92,9 @@
   - report 3: LKW/month from `YF`
     - params: `year`, `month`, `LKW`
     - daily driver value taken from column `Y` / `Drivers final`
-    - workday rule: `Strecke >= 50 km`
-    - PDF includes monthly summary, idle days, weekend flag, and daily detail table
+    - workday rule: idle only when `0 <= Strecke < 50 km`
+    - negative kilometer anomalies are listed separately and still counted as workdays
+    - PDF includes monthly summary, idle days, weekend flag, anomaly note, and daily detail table
     - table values centered
   - centered table layout
   - live ETL data loaded and verified

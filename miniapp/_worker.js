@@ -4583,6 +4583,8 @@ function buildYfLkwMonthModel(rows = [], { year, month, lkwId }) {
     const streckeKm = toNumberSafe(row?.strecke_km, 0);
     const isWeekend = toBoolish(row?.is_weekend);
     const drivers = safeText(row?.drivers_final, "").trim();
+    const isAnomaly = streckeKm < 0;
+    const isIdle = streckeKm >= 0 && streckeKm < WORKDAY_STRECKE_MIN_KM;
     return {
       reportDate: safeText(row?.report_date, ""),
       reportDateLabel: formatSlashDateToDot(row?.report_date),
@@ -4592,8 +4594,9 @@ function buildYfLkwMonthModel(rows = [], { year, month, lkwId }) {
       streckeKm,
       streckeLabel: `${formatMoneyInt(streckeKm)} km`,
       driversFinal: drivers || "-",
-      worked: streckeKm >= WORKDAY_STRECKE_MIN_KM,
-      workedLabel: streckeKm >= WORKDAY_STRECKE_MIN_KM ? "Ja" : "Nein",
+      isAnomaly,
+      worked: !isIdle,
+      workedLabel: !isIdle ? "Ja" : "Nein",
       sourceRows: toIntSafe(row?.source_rows, 0),
     };
   });
@@ -4616,7 +4619,7 @@ function buildYfLkwMonthModel(rows = [], { year, month, lkwId }) {
   }
 
   const anomalies = dailyRows
-    .filter((row) => row.streckeKm < 0)
+    .filter((row) => row.isAnomaly)
     .map((row) => `${row.reportDateLabel}: ${formatMoneyInt(row.streckeKm)} km`);
 
   const dataDays = dailyRows.filter((row) => row.sourceRows > 0).length;
@@ -4636,11 +4639,12 @@ function buildYfLkwMonthModel(rows = [], { year, month, lkwId }) {
     anomalies,
     summaryRows: [
       { metric: "Kalendertage", value: String(calendarDays) },
-      { metric: `Arbeitstage (Strecke >= ${WORKDAY_STRECKE_MIN_KM} km)`, value: String(workDays) },
-      { metric: `Stillstandstage (Strecke < ${WORKDAY_STRECKE_MIN_KM} km)`, value: String(idleRows.length) },
+      { metric: `Arbeitstage (Strecke < 0 oder >= ${WORKDAY_STRECKE_MIN_KM} km)`, value: String(workDays) },
+      { metric: `Stillstandstage (0 <= Strecke < ${WORKDAY_STRECKE_MIN_KM} km)`, value: String(idleRows.length) },
       { metric: "Stillstand am Wochenende", value: String(idleWeekend) },
       { metric: "Stillstand werktags", value: String(idleWeekday) },
       { metric: "Tage mit Datenzeilen", value: String(dataDays) },
+      { metric: "Tage mit Kilometer-Anomalie", value: String(anomalies.length) },
       { metric: "Gesamtkilometer (netto)", value: `${formatMoneyInt(totalKm)} km` },
       { metric: "Durchschnitt km pro Arbeitstag", value: `${formatMoneyInt(avgKmPerWorkday)} km` },
     ],
@@ -5188,7 +5192,7 @@ async function buildYfLkwMonthPdfWithPdfLib({ userId, year, month, lkwId, rows }
     bgColor: noteInfoBg,
     border: noteInfoBorder,
     title: "Regel",
-    body: `Tage mit Strecke unter ${model.workdayThresholdKm} km gelten als Stillstandstage.`,
+    body: `Nur 0 bis ${model.workdayThresholdKm - 1} km gelten als Stillstand. Negative Kilometerwerte werden als Anomalie markiert und als Arbeitstag gezaehlt.`,
   });
 
   if (model.anomalies.length) {
@@ -6893,12 +6897,13 @@ async function handleGenerateWithBody(body, env, enforceRateLimit = true) {
       lines.push("-".repeat(120));
       for (const row of rows) {
         const streckeKm = toNumberSafe(row.strecke_km, 0);
+        const isIdle = streckeKm >= 0 && streckeKm < 50;
         lines.push([
           formatSlashDateToDot(row.report_date),
           formatYfWeekdayDe(row.dayweek),
           safeText(row.drivers_final, "-"),
           `${formatMoneyInt(streckeKm)} km`,
-          streckeKm >= 50 ? "Ja" : "Nein",
+          !isIdle ? "Ja" : "Nein",
           toBoolish(row.is_weekend) ? "Ja" : "Nein",
         ].join(" | "));
       }
