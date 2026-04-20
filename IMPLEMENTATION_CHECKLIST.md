@@ -124,6 +124,9 @@
 - [x] History list from `reports_log`
 - [x] Open report from history
 - [x] Delete selected / delete all history entries
+- [x] Report selection flow opens full-screen:
+  - tile submenus open as full-screen sheets
+  - report criteria screens remain full-screen on next steps
 - [x] Top action buttons:
   - Gear -> show Telegram user ID
   - Bell -> show last ETL update times

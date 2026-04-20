@@ -38,6 +38,7 @@
 
     *{ box-sizing:border-box; margin:0; padding:0; }
     html,body{ height:100%; overflow-x:hidden; }
+    body.sheet-open{ overflow:hidden; }
     body{
       color:var(--text);
       font-family: -apple-system, BlinkMacSystemFont, 'SF Pro Display', ui-sans-serif, system-ui, Segoe UI, Roboto, Arial, sans-serif;
@@ -428,7 +429,7 @@
       transform: translateX(2px) scale(0.98);
     }
 
-    /* Bottom sheet */
+    /* Full-screen sheet */
     .sheet{
       position:fixed;
       inset:0;
@@ -438,6 +439,7 @@
       backdrop-filter: blur(8px);
       -webkit-backdrop-filter: blur(8px);
       animation: fadeIn .3s ease;
+      overflow:hidden;
     }
     .sheet.show{ display:block; }
     
@@ -448,11 +450,9 @@
     
     .sheet-panel{
       position:absolute;
-      bottom:0;
-      left:0;
-      right:0;
+      inset:0;
       background: linear-gradient(180deg, rgba(236,248,255,.28), rgba(177,222,255,.16));
-      border-radius: 28px 28px 0 0;
+      border-radius: 0;
       border:1px solid rgba(173,224,255,.44);
       border-bottom:0;
       box-shadow: 
@@ -460,7 +460,10 @@
         0 0 0 1px rgba(233,247,255,.18) inset;
       backdrop-filter: blur(30px);
       -webkit-backdrop-filter: blur(30px);
-      max-height:85vh;
+      width:100vw;
+      height:100vh;
+      height:100dvh;
+      max-height:none;
       display:flex;
       flex-direction:column;
       animation: slideUp .4s cubic-bezier(0.16, 1, 0.3, 1);
@@ -473,16 +476,11 @@
     }
     
     .sheet-handle{
-      width:40px;
-      height:5px;
-      background: rgba(255,255,255,.25);
-      border-radius:999px;
-      margin:12px auto 8px;
-      flex-shrink:0;
+      display:none;
     }
     
     .sheet-header{
-      padding:16px 24px 20px;
+      padding: calc(var(--safe-top) + 16px) 24px 20px;
       border-bottom:1px solid rgba(255,255,255,.10);
       flex-shrink:0;
     }
@@ -599,6 +597,7 @@
       padding:24px;
       overflow-y:auto;
       flex:1;
+      min-height:0;
       scrollbar-width: thin;
       scrollbar-color: rgba(255,255,255,.15) transparent;
     }
@@ -2852,13 +2851,27 @@
     // === SHEET MANAGEMENT ===
     function openSheet() {
       haptic("impact");
+      document.body.classList.add("sheet-open");
+      ensureSheetFullscreen();
       $("sheet").classList.add("show");
     }
 
     function closeSheet() {
       haptic("impact");
       $("sheet").classList.remove("show");
+      document.body.classList.remove("sheet-open");
       clearPdfUrl();
+    }
+
+    function ensureSheetFullscreen() {
+      try {
+        Telegram?.WebApp?.expand?.();
+      } catch {}
+      try {
+        if (typeof Telegram?.WebApp?.requestFullscreen === "function") {
+          Telegram.WebApp.requestFullscreen();
+        }
+      } catch {}
     }
 
     function setSheetCloseAction(mode = "close", handler = closeSheet) {
