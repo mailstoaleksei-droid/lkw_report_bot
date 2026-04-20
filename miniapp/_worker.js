@@ -232,6 +232,42 @@ const REPORTS = [
     ],
   },
   {
+    id: "yf_lkw_month",
+    enabled: true,
+    icon: "chart",
+    name: {
+      en: "Yellow Fox (LKW Monthly)",
+      ru: "Yellow Fox (машина за месяц)",
+      de: "Yellow Fox (LKW pro Monat)",
+    },
+    description: {
+      en: "Monthly LKW operation summary from sheet YF",
+      ru: "Месячная сводка по работе машины с листа YF",
+      de: "Monatliche LKW-Zusammenfassung aus Blatt YF",
+    },
+    params: [
+      {
+        id: "year",
+        type: "year",
+        label: { en: "Year", ru: "Год" },
+        min: 2025,
+        max: 2035,
+      },
+      {
+        id: "month",
+        type: "month",
+        label: { en: "Month", ru: "Месяц" },
+        min: 1,
+        max: 12,
+      },
+      {
+        id: "lkw_id",
+        type: "text",
+        label: { en: "LKW", ru: "LKW" },
+      },
+    ],
+  },
+  {
     id: "bonus",
     enabled: true,
     icon: "bonus",
@@ -771,6 +807,57 @@ WHERE report_year = $1::int
 ORDER BY report_date ASC, source_row ASC, lkw_nummer ASC;
 `;
 
+const YF_LKW_MONTH_SQL = `
+WITH params AS (
+  SELECT
+    make_date($1::int, $2::int, 1) AS month_start,
+    (make_date($1::int, $2::int, 1) + interval '1 month - 1 day')::date AS month_end,
+    lower(replace(trim($3::text), ' ', '')) AS lkw_norm,
+    trim($3::text) AS lkw_raw
+),
+calendar AS (
+  SELECT gs::date AS report_date
+  FROM params p
+  CROSS JOIN generate_series(p.month_start, p.month_end, interval '1 day') AS gs
+),
+daily AS (
+  SELECT
+    y.report_date::date AS report_date,
+    max(NULLIF(trim(y.lkw_nummer), '')) AS lkw_nummer,
+    max(NULLIF(trim(y.dayweek), '')) AS dayweek,
+    sum(COALESCE(y.strecke_km, 0))::numeric AS strecke_km,
+    min(COALESCE(y.km_start, 0))::numeric AS km_start,
+    max(COALESCE(y.km_end, 0))::numeric AS km_end,
+    string_agg(
+      DISTINCT NULLIF(trim(y.drivers_final), ''),
+      ' / '
+      ORDER BY NULLIF(trim(y.drivers_final), '')
+    ) AS drivers_final,
+    count(*)::int AS source_rows
+  FROM report_yf_lkw_daily y
+  CROSS JOIN params p
+  WHERE y.report_date BETWEEN p.month_start AND p.month_end
+    AND lower(replace(trim(y.lkw_nummer), ' ', '')) = p.lkw_norm
+  GROUP BY y.report_date::date
+)
+SELECT
+  $1::int AS report_year,
+  $2::int AS month_index,
+  COALESCE(d.lkw_nummer, p.lkw_raw) AS lkw_nummer,
+  to_char(c.report_date, 'DD/MM/YYYY') AS report_date,
+  COALESCE(d.dayweek, trim(to_char(c.report_date, 'FMDay'))) AS dayweek,
+  CASE WHEN extract(isodow FROM c.report_date) IN (6, 7) THEN true ELSE false END AS is_weekend,
+  COALESCE(d.strecke_km, 0)::numeric AS strecke_km,
+  COALESCE(d.km_start, 0)::numeric AS km_start,
+  COALESCE(d.km_end, 0)::numeric AS km_end,
+  COALESCE(d.drivers_final, '') AS drivers_final,
+  COALESCE(d.source_rows, 0)::int AS source_rows
+FROM calendar c
+CROSS JOIN params p
+LEFT JOIN daily d ON d.report_date = c.report_date
+ORDER BY c.report_date ASC;
+`;
+
 const DRIVERS_LIST_SQL = `
 SELECT
   d.external_id AS fahrer_id,
@@ -1116,6 +1203,16 @@ function makeYfLkwWeekFilename(year, week, lkwId, at = new Date()) {
   const lkw = sanitizeFilenamePart(lkwId);
   if (Number.isFinite(y) && Number.isFinite(w) && y > 0 && w >= 1 && w <= 53) {
     return `yf_lkw_${y}_w${pad2(w)}${lkw ? `_${lkw}` : ""}.pdf`;
+  }
+  return `yf_lkw_${formatUtcDateStamp(at)}.pdf`;
+}
+
+function makeYfLkwMonthFilename(year, month, lkwId, at = new Date()) {
+  const y = Number.parseInt(String(year), 10);
+  const m = Number.parseInt(String(month), 10);
+  const lkw = sanitizeFilenamePart(lkwId);
+  if (Number.isFinite(y) && Number.isFinite(m) && y > 0 && m >= 1 && m <= 12) {
+    return `yf_lkw_${y}_${pad2(m)}${lkw ? `_${lkw}` : ""}.pdf`;
   }
   return `yf_lkw_${formatUtcDateStamp(at)}.pdf`;
 }
@@ -4456,6 +4553,100 @@ function formatYfDaysHours(totalMinutes) {
   return `${days} d ${hours} h`;
 }
 
+const YF_WEEKDAY_LABELS_DE = {
+  monday: "Montag",
+  tuesday: "Dienstag",
+  wednesday: "Mittwoch",
+  thursday: "Donnerstag",
+  friday: "Freitag",
+  saturday: "Samstag",
+  sunday: "Sonntag",
+};
+
+function formatYfWeekdayDe(value) {
+  const raw = safeText(value, "").trim();
+  if (!raw) return "-";
+  const key = raw.toLowerCase();
+  return YF_WEEKDAY_LABELS_DE[key] || raw;
+}
+
+function formatSlashDateToDot(value) {
+  const raw = safeText(value, "").trim();
+  const m = /^(\d{2})\/(\d{2})\/(\d{4})$/.exec(raw);
+  if (!m) return raw || "-";
+  return `${m[1]}.${m[2]}.${m[3]}`;
+}
+
+function buildYfLkwMonthModel(rows = [], { year, month, lkwId }) {
+  const WORKDAY_STRECKE_MIN_KM = 50;
+  const dailyRows = (rows || []).map((row) => {
+    const streckeKm = toNumberSafe(row?.strecke_km, 0);
+    const isWeekend = toBoolish(row?.is_weekend);
+    const drivers = safeText(row?.drivers_final, "").trim();
+    return {
+      reportDate: safeText(row?.report_date, ""),
+      reportDateLabel: formatSlashDateToDot(row?.report_date),
+      weekday: formatYfWeekdayDe(row?.dayweek),
+      isWeekend,
+      weekendLabel: isWeekend ? "Ja" : "Nein",
+      streckeKm,
+      streckeLabel: `${formatMoneyInt(streckeKm)} km`,
+      driversFinal: drivers || "-",
+      worked: streckeKm >= WORKDAY_STRECKE_MIN_KM,
+      workedLabel: streckeKm >= WORKDAY_STRECKE_MIN_KM ? "Ja" : "Nein",
+      sourceRows: toIntSafe(row?.source_rows, 0),
+    };
+  });
+
+  const calendarDays = dailyRows.length;
+  const workDays = dailyRows.filter((row) => row.worked).length;
+  const idleRows = dailyRows.filter((row) => !row.worked);
+  const idleWeekend = idleRows.filter((row) => row.isWeekend).length;
+  const idleWeekday = idleRows.filter((row) => !row.isWeekend).length;
+  const totalKm = dailyRows.reduce((sum, row) => sum + row.streckeKm, 0);
+  const avgKmPerWorkday = workDays > 0 ? (totalKm / workDays) : 0;
+  const uniqueDrivers = new Set();
+  for (const row of dailyRows) {
+    const raw = safeText(row.driversFinal, "").trim();
+    if (!raw || raw === "-") continue;
+    for (const part of raw.split("/")) {
+      const token = part.trim();
+      if (token) uniqueDrivers.add(token);
+    }
+  }
+
+  const anomalies = dailyRows
+    .filter((row) => row.streckeKm < 0)
+    .map((row) => `${row.reportDateLabel}: ${formatMoneyInt(row.streckeKm)} km`);
+
+  const dataDays = dailyRows.filter((row) => row.sourceRows > 0).length;
+  const driverLabel = uniqueDrivers.size
+    ? Array.from(uniqueDrivers).join(", ")
+    : "Kein Fahrer";
+
+  return {
+    lkwId: safeText(lkwId, "-"),
+    year,
+    month,
+    periodLabel: `${monthNameDe(month)} ${year}`,
+    driverLabel: driverLabel.length > 60 ? `${driverLabel.slice(0, 57)}...` : driverLabel,
+    workdayThresholdKm: WORKDAY_STRECKE_MIN_KM,
+    dailyRows,
+    idleRows,
+    anomalies,
+    summaryRows: [
+      { metric: "Kalendertage", value: String(calendarDays) },
+      { metric: `Arbeitstage (Strecke >= ${WORKDAY_STRECKE_MIN_KM} km)`, value: String(workDays) },
+      { metric: `Stillstandstage (Strecke < ${WORKDAY_STRECKE_MIN_KM} km)`, value: String(idleRows.length) },
+      { metric: "Stillstand am Wochenende", value: String(idleWeekend) },
+      { metric: "Stillstand werktags", value: String(idleWeekday) },
+      { metric: "Tage mit Datenzeilen", value: String(dataDays) },
+      { metric: "Gesamtkilometer (netto)", value: `${formatMoneyInt(totalKm)} km` },
+      { metric: "Durchschnitt km pro Arbeitstag", value: `${formatMoneyInt(avgKmPerWorkday)} km` },
+    ],
+  };
+}
+
 async function buildYfDriverMonthPdfWithPdfLib({ userId, month, driverQuery, rows }) {
   const pdfDoc = await PDFDocument.create();
   const font = await pdfDoc.embedFont(StandardFonts.Helvetica);
@@ -4773,6 +4964,330 @@ async function buildYfLkwWeekPdfWithPdfLib({ userId, year, week, lkwId, rows }) 
   for (let idx = 0; idx < rows.length; idx += 1) {
     ensureSpace(rowHeight + 2);
     drawRow(rows[idx], idx);
+  }
+
+  return pdfDoc.save();
+}
+
+async function buildYfLkwMonthPdfWithPdfLib({ userId, year, month, lkwId, rows }) {
+  const pdfDoc = await PDFDocument.create();
+  const font = await pdfDoc.embedFont(StandardFonts.Helvetica);
+  const boldFont = await pdfDoc.embedFont(StandardFonts.HelveticaBold);
+  const model = buildYfLkwMonthModel(rows, { year, month, lkwId });
+
+  const pageSize = [1040, 595];
+  const margin = 24;
+  const textColor = rgb(0.08, 0.14, 0.24);
+  const mutedColor = rgb(0.24, 0.3, 0.4);
+  const borderColor = rgb(0.74, 0.8, 0.9);
+  const headerBg = rgb(0.18, 0.36, 0.57);
+  const oddBg = rgb(0.985, 0.99, 1);
+  const noteWarnBg = rgb(1, 0.95, 0.94);
+  const noteWarnBorder = rgb(0.91, 0.76, 0.73);
+  const noteInfoBg = rgb(0.92, 0.97, 0.9);
+  const noteInfoBorder = rgb(0.72, 0.84, 0.68);
+
+  const drawTable = ({
+    page,
+    startX,
+    startY,
+    columns,
+    rows: tableRows,
+    rowHeight = 18,
+    textSize = 8,
+    includeHeader = true,
+  }) => {
+    const tableWidth = columns.reduce((sum, col) => sum + col.width, 0);
+    let y = startY;
+
+    if (includeHeader) {
+      page.drawRectangle({
+        x: startX,
+        y: y - rowHeight,
+        width: tableWidth,
+        height: rowHeight,
+        color: headerBg,
+        borderColor,
+        borderWidth: 1,
+      });
+
+      let x = startX;
+      for (const col of columns) {
+        const label = fitTextToWidth(boldFont, col.label, textSize, col.width - 8);
+        const labelWidth = measureTextWidth(boldFont, label, textSize);
+        page.drawText(label, {
+          x: x + ((col.width - labelWidth) / 2),
+          y: y - rowHeight + ((rowHeight - textSize) / 2) + 2,
+          size: textSize,
+          font: boldFont,
+          color: rgb(1, 1, 1),
+        });
+        x += col.width;
+        if (x < startX + tableWidth - 0.5) {
+          page.drawLine({
+            start: { x, y: y - rowHeight },
+            end: { x, y },
+            thickness: 0.8,
+            color: borderColor,
+          });
+        }
+      }
+      y -= rowHeight;
+    }
+
+    for (let rowIdx = 0; rowIdx < tableRows.length; rowIdx += 1) {
+      if (rowIdx % 2 === 1) {
+        page.drawRectangle({
+          x: startX,
+          y: y - rowHeight,
+          width: tableWidth,
+          height: rowHeight,
+          color: oddBg,
+        });
+      }
+
+      let cellX = startX;
+      for (let colIdx = 0; colIdx < columns.length; colIdx += 1) {
+        const col = columns[colIdx];
+        const raw = safeText(tableRows[rowIdx][colIdx], "");
+        const value = fitTextToWidth(font, raw, textSize, col.width - 8);
+        const valueWidth = measureTextWidth(font, value, textSize);
+        page.drawText(value, {
+          x: cellX + ((col.width - valueWidth) / 2),
+          y: y - rowHeight + ((rowHeight - textSize) / 2) + 2,
+          size: textSize,
+          font,
+          color: textColor,
+        });
+        cellX += col.width;
+        if (cellX < startX + tableWidth - 0.5) {
+          page.drawLine({
+            start: { x: cellX, y: y - rowHeight },
+            end: { x: cellX, y },
+            thickness: 0.5,
+            color: borderColor,
+          });
+        }
+      }
+      page.drawLine({
+        start: { x: startX, y: y - rowHeight },
+        end: { x: startX + tableWidth, y: y - rowHeight },
+        thickness: 0.5,
+        color: borderColor,
+      });
+      y -= rowHeight;
+    }
+
+    return { bottomY: y, tableWidth };
+  };
+
+  const drawNote = ({ page, x, yTop, width, height, bgColor, border, title, body }) => {
+    page.drawRectangle({
+      x,
+      y: yTop - height,
+      width,
+      height,
+      color: bgColor,
+      borderColor: border,
+      borderWidth: 1,
+    });
+    page.drawText(title, {
+      x: x + 12,
+      y: yTop - 18,
+      size: 10,
+      font: boldFont,
+      color: textColor,
+    });
+    page.drawText(fitTextToWidth(font, body, 9, width - 24), {
+      x: x + 12,
+      y: yTop - 34,
+      size: 9,
+      font,
+      color: textColor,
+    });
+  };
+
+  const summaryPage = pdfDoc.addPage(pageSize);
+  let y = pageSize[1] - margin;
+
+  summaryPage.drawText("Fahrzeugbericht", {
+    x: margin,
+    y,
+    size: 22,
+    font: boldFont,
+    color: rgb(0.12, 0.34, 0.58),
+  });
+  y -= 24;
+  summaryPage.drawText(`Fahrzeug: ${model.lkwId}`, {
+    x: margin,
+    y,
+    size: 10,
+    font,
+    color: textColor,
+  });
+  summaryPage.drawText(`Fahrer: ${model.driverLabel}`, {
+    x: margin + 180,
+    y,
+    size: 10,
+    font,
+    color: textColor,
+  });
+  summaryPage.drawText(`Zeitraum: ${model.periodLabel}`, {
+    x: margin + 460,
+    y,
+    size: 10,
+    font,
+    color: textColor,
+  });
+  y -= 24;
+
+  const summaryColumns = [
+    { label: "Kennzahl", width: 330 },
+    { label: "Wert", width: 130 },
+  ];
+  const idleColumns = [
+    { label: "Datum", width: 110 },
+    { label: "Wochentag", width: 132 },
+    { label: "Wochenende", width: 110 },
+  ];
+  const summaryRows = model.summaryRows.map((row) => [row.metric, row.value]);
+  const idleRows = (model.idleRows.length ? model.idleRows : [{
+    reportDateLabel: "-",
+    weekday: "-",
+    weekendLabel: "-",
+  }]).map((row) => [row.reportDateLabel, row.weekday, row.weekendLabel]);
+
+  const summaryTable = drawTable({
+    page: summaryPage,
+    startX: margin,
+    startY: y,
+    columns: summaryColumns,
+    rows: summaryRows,
+    rowHeight: 19,
+    textSize: 9,
+  });
+  const idleTableWidth = idleColumns.reduce((sum, col) => sum + col.width, 0);
+  const idleX = pageSize[0] - margin - idleTableWidth;
+  const idleTable = drawTable({
+    page: summaryPage,
+    startX: idleX,
+    startY: y,
+    columns: idleColumns,
+    rows: idleRows,
+    rowHeight: 19,
+    textSize: 9,
+  });
+
+  const noteTop = Math.min(summaryTable.bottomY, idleTable.bottomY) - 18;
+  drawNote({
+    page: summaryPage,
+    x: margin,
+    yTop: noteTop,
+    width: pageSize[0] - (margin * 2),
+    height: 34,
+    bgColor: noteInfoBg,
+    border: noteInfoBorder,
+    title: "Regel",
+    body: `Tage mit Strecke unter ${model.workdayThresholdKm} km gelten als Stillstandstage.`,
+  });
+
+  if (model.anomalies.length) {
+    drawNote({
+      page: summaryPage,
+      x: margin,
+      yTop: noteTop - 46,
+      width: pageSize[0] - (margin * 2),
+      height: 34,
+      bgColor: noteWarnBg,
+      border: noteWarnBorder,
+      title: "Datenhinweis",
+      body: model.anomalies.join(" | "),
+    });
+  }
+
+  summaryPage.drawText(`Generated: ${new Date().toISOString()} UTC | User: ${userId}`, {
+    x: margin,
+    y: margin - 2,
+    size: 8,
+    font,
+    color: mutedColor,
+  });
+
+  const dailyColumns = [
+    { label: "Datum", width: 90 },
+    { label: "Wochentag", width: 118 },
+    { label: "Fahrer", width: 280 },
+    { label: "Strecke", width: 96 },
+    { label: "Arbeitstag", width: 96 },
+    { label: "Wochenende", width: 102 },
+  ];
+  const dailyWidth = dailyColumns.reduce((sum, col) => sum + col.width, 0);
+  const dailyX = margin + ((pageSize[0] - (margin * 2) - dailyWidth) / 2);
+  const dailyRows = model.dailyRows.map((row) => [
+    row.reportDateLabel,
+    row.weekday,
+    row.driversFinal,
+    row.streckeLabel,
+    row.workedLabel,
+    row.weekendLabel,
+  ]);
+
+  let dailyPage = pdfDoc.addPage(pageSize);
+  let dailyY = pageSize[1] - margin;
+  const dailyRowHeight = 16;
+  const dailyTextSize = 8;
+
+  const drawDailyHeader = () => {
+    dailyPage.drawText("Tagesuebersicht", {
+      x: margin,
+      y: dailyY,
+      size: 16,
+      font: boldFont,
+      color: textColor,
+    });
+    dailyY -= 16;
+    dailyPage.drawText(`Fahrzeug: ${model.lkwId} | Zeitraum: ${model.periodLabel}`, {
+      x: margin,
+      y: dailyY,
+      size: 8,
+      font,
+      color: mutedColor,
+    });
+    dailyY -= 16;
+    drawTable({
+      page: dailyPage,
+      startX: dailyX,
+      startY: dailyY,
+      columns: dailyColumns,
+      rows: [],
+      rowHeight: dailyRowHeight,
+      textSize: dailyTextSize,
+      includeHeader: true,
+    });
+    dailyY -= dailyRowHeight;
+  };
+
+  const ensureDailySpace = () => {
+    if (dailyY - dailyRowHeight >= margin) return;
+    dailyPage = pdfDoc.addPage(pageSize);
+    dailyY = pageSize[1] - margin;
+    drawDailyHeader();
+  };
+
+  drawDailyHeader();
+  for (let idx = 0; idx < dailyRows.length; idx += 1) {
+    ensureDailySpace();
+    drawTable({
+      page: dailyPage,
+      startX: dailyX,
+      startY: dailyY,
+      columns: dailyColumns,
+      rows: [dailyRows[idx]],
+      rowHeight: dailyRowHeight,
+      textSize: dailyTextSize,
+      includeHeader: false,
+    });
+    dailyY -= dailyRowHeight;
   }
 
   return pdfDoc.save();
@@ -5656,6 +6171,19 @@ function validateGeneratePayload(body) {
     return { ok: true, reportType, year, week, lkwId };
   }
 
+  if (reportType === "yf_lkw_month") {
+    const year = Number.parseInt(String(body.year ?? ""), 10);
+    const month = Number.parseInt(String(body.month ?? ""), 10);
+    const lkwId = String(body.lkw_id || "").trim().slice(0, 80);
+    if (!Number.isFinite(year) || !Number.isFinite(month) || year < 2025 || year > 2035 || month < 1 || month > 12) {
+      return { ok: false, status: 400, error: "Invalid year/month" };
+    }
+    if (!lkwId) {
+      return { ok: false, status: 400, error: "Missing lkw_id" };
+    }
+    return { ok: true, reportType, year, month, lkwId };
+  }
+
   if (reportType === "bonus") {
     const year = Number.parseInt(String(body.year ?? ""), 10);
     const period = String(body.period || "month").trim().toLowerCase() === "year" ? "year" : "month";
@@ -5725,6 +6253,7 @@ async function handleGenerateWithBody(body, env, enforceRateLimit = true) {
     && valid.reportType !== "diesel_lkw_card"
     && valid.reportType !== "yf_driver_month"
     && valid.reportType !== "yf_lkw_week"
+    && valid.reportType !== "yf_lkw_month"
     && valid.reportType !== "bonus"
     && valid.reportType !== "lkw_single"
     && valid.reportType !== "lkw_all"
@@ -6324,6 +6853,63 @@ async function handleGenerateWithBody(body, env, enforceRateLimit = true) {
         pageHeight: 595,
       });
     }
+  } else if (valid.reportType === "yf_lkw_month") {
+    let rows;
+    const lkwId = safeText(valid.lkwId, "").trim();
+    try {
+      const result = await queryNeon(
+        dbConnectionString,
+        YF_LKW_MONTH_SQL,
+        [valid.year, valid.month, lkwId],
+      );
+      rows = result.rows || [];
+    } catch (err) {
+      return json(
+        {
+          ok: false,
+          error: "Failed to execute SQL query",
+          code: "SQL_ERROR",
+          details: String(err?.message || err || "unknown error"),
+        },
+        500,
+        { "Cache-Control": "no-store" },
+      );
+    }
+
+    filename = makeYfLkwMonthFilename(valid.year, valid.month, lkwId);
+    outputKey = `yf_lkw_month:${valid.year}:${pad2(valid.month)}:${lkwId}`;
+    try {
+      pdfBytes = await buildYfLkwMonthPdfWithPdfLib({
+        userId: auth.userId,
+        year: valid.year,
+        month: valid.month,
+        lkwId,
+        rows,
+      });
+    } catch (err) {
+      pdfEngine = "legacy-fallback";
+      const lines = [];
+      lines.push("Date | dayweek | Drivers final | Strecke | Workday | Weekend");
+      lines.push("-".repeat(120));
+      for (const row of rows) {
+        const streckeKm = toNumberSafe(row.strecke_km, 0);
+        lines.push([
+          formatSlashDateToDot(row.report_date),
+          formatYfWeekdayDe(row.dayweek),
+          safeText(row.drivers_final, "-"),
+          `${formatMoneyInt(streckeKm)} km`,
+          streckeKm >= 50 ? "Ja" : "Nein",
+          toBoolish(row.is_weekend) ? "Ja" : "Nein",
+        ].join(" | "));
+      }
+      pdfBytes = buildSimplePdf({
+        title: `Yellow Fox - LKW Month ${valid.year}/${pad2(valid.month)}`,
+        subtitle: `Generated at ${new Date().toISOString()} UTC, user ${auth.userId}`,
+        lines,
+        pageWidth: 1040,
+        pageHeight: 595,
+      });
+    }
   } else if (valid.reportType === "lkw_single" || valid.reportType === "lkw_all") {
     let rows;
     const filterLkwId = valid.reportType === "lkw_single" ? safeText(valid.lkwId, "").trim() : "";
@@ -6499,7 +7085,12 @@ async function handleGenerateWithBody(body, env, enforceRateLimit = true) {
     reportParams.month = valid.month;
     reportParams.driver_query = safeText(valid.driverQuery, "").trim();
   }
-  if ("year" in valid && "month" in valid) {
+  if (valid.reportType === "yf_lkw_month") {
+    reportParams.year = valid.year;
+    reportParams.month = valid.month;
+    reportParams.lkw_id = safeText(valid.lkwId, "").trim();
+  }
+  if (valid.reportType === "bonus" && "year" in valid && "month" in valid) {
     reportParams.year = valid.year;
     if (valid.period === "month") reportParams.month = valid.month;
     reportParams.period = safeText(valid.period, "month");
