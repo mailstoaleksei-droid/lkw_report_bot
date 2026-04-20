@@ -41,6 +41,10 @@
   - Night periodic ETL disabled to reduce load
   - Source-change watcher limited to 07:00-18:00
   - Freshness monitor limited to 07:00-18:00
+- [x] ETL stale lock recovery added:
+  - dead PID lock is auto-removed on next run
+  - invalid/corrupted lock file is auto-removed
+  - long-running active ETL still remains protected by lock
 
 ## 4) Reports Implemented in Mini App
 - [x] `Bericht` (year/week)
