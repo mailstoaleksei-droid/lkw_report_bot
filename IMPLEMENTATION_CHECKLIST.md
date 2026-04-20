@@ -1,6 +1,6 @@
 # LKW Telegram Mini App - Implementation Checklist
 
-> Last updated: 2026-04-09
+> Last updated: 2026-04-20
 > Status legend: [ ] pending | [~] in progress | [x] done
 
 ## 1) Infra and Deploy
@@ -16,6 +16,7 @@
 - [x] Env whitelist fallback removed in Worker auth flow
 - [x] Access granted and verified for active users (including `5704951140`, `6863783942`)
 - [x] Per-user API rate limit enabled
+- [x] Mini App access UX distinguishes real `Access denied` from transient Telegram session/auth errors
 
 ## 3) SQL-First Data Pipeline
 - [x] SQL-first architecture is active (no Excel generation in runtime)
@@ -88,6 +89,12 @@
   - report 2: LKW/week from `YF`
     - params: `year`, `week`, `LKW`
     - columns: `Year`, `Month`, `Week`, `LKW`, `Datum`, `dayweek`, `Strecke`, `Kilometerstand Start`, `Kilometerstand Ende`, `Drivers final`
+  - report 3: LKW/month from `YF`
+    - params: `year`, `month`, `LKW`
+    - daily driver value taken from column `Y` / `Drivers final`
+    - workday rule: `Strecke >= 50 km`
+    - PDF includes monthly summary, idle days, weekend flag, and daily detail table
+    - table values centered
   - centered table layout
   - live ETL data loaded and verified
 - [x] `Data/Plan`
