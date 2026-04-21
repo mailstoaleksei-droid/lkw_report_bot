@@ -3526,7 +3526,7 @@
 
       const renderParams = (kind) => {
         const isPlan = kind === "plan";
-        setSheetHeader("Data/Plan", isPlan ? L("hintDataPlanPlan") : L("hintDataPlanData"), "PDF");
+        setSheetHeader(`Data/Plan - ${isPlan ? L("processPlan") : L("processData")}`, isPlan ? L("hintDataPlanPlan") : L("hintDataPlanData"), "PDF");
         setSheetCloseAction("back", renderMenu);
         setSegments([], "", () => {});
         setForm(`
@@ -3605,7 +3605,7 @@
       };
 
       const renderSingle = async () => {
-        setSheetHeader("LKW", L("hintLkw"), "PDF");
+        setSheetHeader("LKW - 1 LKW", L("hintLkw"), "PDF");
         setSheetCloseAction("back", renderMenu);
         setSegments([], "", () => {});
         setForm(`
@@ -3632,7 +3632,7 @@
       };
 
       const renderAll = () => {
-        setSheetHeader("LKW", L("hintLkw"), "PDF");
+        setSheetHeader("LKW - Alle LKW", L("hintLkw"), "PDF");
         setSheetCloseAction("back", renderMenu);
         setSegments([], "", () => {});
         setForm(`
@@ -3663,7 +3663,7 @@
       ];
 
       const render = () => {
-        setSheetHeader("Fahrer", L("hintFahrer"), "Params");
+        setSheetHeader(`Fahrer - ${active === "data" ? L("tabDriverData") : L("tabUrlaub")}`, L("hintFahrer"), "Params");
         setSheetCloseAction("back", backHandler);
         setSegments(tabs, active, (k) => { active = k; render(); });
 
@@ -3724,7 +3724,7 @@
       };
 
       const renderYfDriverMonth = async () => {
-        setSheetHeader("Yellow Fox", L("hintYfDriverMonth"), "PDF");
+        setSheetHeader("Yellow Fox - Fahrer / Monat", L("hintYfDriverMonth"), "PDF");
         setSegments([], "", () => {});
         setSheetCloseAction("back", renderYfMenu);
         setForm(`
@@ -3761,7 +3761,7 @@
       };
 
       const renderYfLkwWeek = async () => {
-        setSheetHeader("Yellow Fox", L("hintYfLkwWeek"), "PDF");
+        setSheetHeader("Yellow Fox - LKW / Woche", L("hintYfLkwWeek"), "PDF");
         setSegments([], "", () => {});
         setSheetCloseAction("back", renderYfMenu);
         setForm(`
@@ -3804,7 +3804,7 @@
       };
 
       const renderYfLkwMonth = async () => {
-        setSheetHeader("Yellow Fox", L("hintYfLkwMonth"), "PDF");
+        setSheetHeader("Yellow Fox - LKW / Monat", L("hintYfLkwMonth"), "PDF");
         setSegments([], "", () => {});
         setSheetCloseAction("back", renderYfMenu);
         setForm(`
@@ -3881,7 +3881,7 @@
       };
 
       const renderTotal = () => {
-        setSheetHeader("Einnahmen", L("hintEinnahmen"), "PDF");
+        setSheetHeader("Einnahmen - Gesamt", L("hintEinnahmen"), "PDF");
         setSheetCloseAction("back", renderMenu);
         setSegments([], "", () => {});
         setForm(`
@@ -3901,7 +3901,7 @@
       };
 
       const renderFirms = () => {
-        setSheetHeader("Einnahmen", L("hintEinnahmenFirms"), "PDF");
+        setSheetHeader("Einnahmen - Firm / Monat", L("hintEinnahmenFirms"), "PDF");
         setSheetCloseAction("back", renderMenu);
         setSegments([], "", () => {});
         setForm(`
@@ -3950,7 +3950,7 @@
       };
 
       const renderSnapshot = () => {
-        setSheetHeader("Diesel", L("hintDiesel"), "PDF");
+        setSheetHeader("Diesel - Diesel PDF", L("hintDiesel"), "PDF");
         setSheetCloseAction("back", renderMenu);
         setSegments([], "", () => {});
         setForm(`
@@ -3970,7 +3970,7 @@
       };
 
       const renderCard = async () => {
-        setSheetHeader("Diesel", L("hintDieselCard"), "PDF");
+        setSheetHeader("Diesel - LKW Karte", L("hintDieselCard"), "PDF");
         setSheetCloseAction("back", renderMenu);
         setSegments([], "", () => {});
         setForm(`
@@ -4027,7 +4027,7 @@
       };
 
       const renderWholeYear = () => {
-        setSheetHeader("Bonus", L("hintBonus"), "PDF");
+        setSheetHeader(`Bonus - ${L("wholeYear")}`, L("hintBonus"), "PDF");
         setSheetCloseAction("back", renderMenu);
         setSegments([], "", () => {});
         setForm(`
@@ -4043,7 +4043,7 @@
             </div>
           </div>
         `);
-        setNote(L("hintBonus"));
+        setNote("");
         hideSheetFooter();
         const now = new Date();
         const yWholeEl = $("bonusYearWhole");
@@ -4065,7 +4065,7 @@
       };
 
       const renderMonth = () => {
-        setSheetHeader("Bonus", L("hintBonus"), "PDF");
+        setSheetHeader(`Bonus - ${L("month")}`, L("hintBonus"), "PDF");
         setSheetCloseAction("back", renderMenu);
         setSegments([], "", () => {});
         setForm(`
@@ -4085,7 +4085,7 @@
             </div>
           </div>
         `);
-        setNote(L("hintBonus"));
+        setNote("");
         hideSheetFooter();
         const now = new Date();
         const yMonthEl = $("bonusYearMonth");
