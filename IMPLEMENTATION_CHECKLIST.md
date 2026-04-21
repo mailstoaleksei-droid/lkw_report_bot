@@ -140,7 +140,7 @@
   - back/close action uses a compact modern graphite minimalist button style
   - submenu labels and notes use dark grey text
   - report parameter labels use light-blue highlighting; select values/placeholders use blue text
-  - main report tiles use dedicated icons: Bericht play triangle, Data/Plan calendar, Yellow Fox fox face, Einnahmen rising chart, Bonus money bag
+  - main report tiles use dedicated icons: Bericht inline play triangle, Data/Plan inline calendar, Yellow Fox inline fox face, Einnahmen rising chart, Bonus inline money bag
 - [x] Top action buttons:
   - Gear -> show Telegram user ID
   - Bell -> show last ETL update times
