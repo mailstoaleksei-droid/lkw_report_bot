@@ -3391,7 +3391,7 @@
 
     function setSheetHeader(title, hint, type) {
       $("sheetTitle").textContent = title;
-      $("sheetHint").textContent = hint;
+      $("sheetHint").innerHTML = escapeHtml(hint).replace(/&lt;br&gt;/g, "<br>");
       $("sheetType").textContent = type;
       setSheetCloseAction("close", closeSheet);
       const footer = $("btnPrimary")?.parentElement;
@@ -3542,7 +3542,7 @@
             </div>
           </div>
         `);
-        setNote(isPlan ? L("hintDataPlanPlan") : L("hintDataPlanData"));
+        setNote("");
         hideSheetFooter();
 
         const yearEl = $("planReportYear");
