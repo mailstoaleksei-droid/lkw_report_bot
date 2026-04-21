@@ -145,6 +145,7 @@
   - `Available Reports` and report submenu hints use updated Russian business descriptions for all main, dock, and history entries
   - Mini App language follows Telegram/browser locale with `de`, `ru`, and `en` dictionaries; hardcoded report UI strings were moved into localization
   - English localization no longer mixes Russian report descriptions when the selected language is `en`
+  - submenu report choice cards no longer show `Choose report`; Data/Plan Plan/Data descriptions are expanded and localized
 - [x] Top action buttons:
   - Gear -> show Telegram user ID
   - Bell -> show last ETL update times

@@ -2089,8 +2089,8 @@
         hintDieselCard: "diesel reports",
         hintBonus: "driver bonus reports",
         hintDataPlan: "driver and LKW work schedule reports",
-        hintDataPlanPlan: "Plan: selected week + 3 weeks",
-        hintDataPlanData: "Data: selected week only (7 days)",
+        hintDataPlanPlan: "LKW work schedule report for 4 weeks<br>Select the week and year<br>The report will include the selected week + the next 3 weeks",
+        hintDataPlanData: "LKW work schedule report by day<br>Select the week and year<br>The report will include daily data for the selected week",
         processPlan: "Plan",
         processData: "Data",
         
@@ -2132,7 +2132,6 @@
         failedLoadHistory: "Failed to load history",
         failedLoadEtlUpdates: "Failed to load ETL updates",
         sending: "Sending...",
-        chooseReport: "Choose report",
         defaultUser: "User",
         fullscreenRequested: "Switched to fullsize",
         pdfReadyNote: "PDF generated successfully.",
@@ -2215,8 +2214,8 @@
         hintDieselCard: "Dieselberichte",
         hintBonus: "Berichte zu Fahrerboni",
         hintDataPlan: "Berichte zum Arbeitsplan von Fahrern und LKW",
-        hintDataPlanPlan: "Plan: ausgewählte Woche + 3 Wochen",
-        hintDataPlanData: "Data: nur ausgewählte Woche (7 Tage)",
+        hintDataPlanPlan: "LKW-Arbeitsplanbericht für 4 Wochen<br>Woche und Jahr auswählen<br>Der Bericht enthält die ausgewählte Woche + die nächsten 3 Wochen",
+        hintDataPlanData: "LKW-Arbeitsplanbericht nach Tagen<br>Woche und Jahr auswählen<br>Der Bericht enthält Tagesdaten für die ausgewählte Woche",
         processPlan: "Plan",
         processData: "Data",
 
@@ -2258,7 +2257,6 @@
         failedLoadHistory: "Historie konnte nicht geladen werden",
         failedLoadEtlUpdates: "ETL Updates konnten nicht geladen werden",
         sending: "Wird gesendet...",
-        chooseReport: "Bericht auswählen",
         defaultUser: "Benutzer",
         fullscreenRequested: "Fullsize geöffnet",
         pdfReadyNote: "PDF wurde erfolgreich generiert.",
@@ -2341,8 +2339,8 @@
         hintDieselCard: "отчеты по дизелю",
         hintBonus: "отчеты по бонусам водителей",
         hintDataPlan: "отчеты по графику работы водителей и LKW",
-        hintDataPlanPlan: "Plan: выбранная неделя + 3 недели",
-        hintDataPlanData: "Data: только выбранная неделя (7 дней)",
+        hintDataPlanPlan: "отчет по графику работы LKW на 4 недели<br>выберите неделю и год<br>отчет включает выбранную неделю + следующие 3 недели",
+        hintDataPlanData: "отчет по графику работы LKW по дням<br>выберите неделю и год<br>отчет включает данные по дням за выбранную неделю",
         processPlan: "Plan",
         processData: "Data",
         
@@ -2384,7 +2382,6 @@
         failedLoadHistory: "Не удалось загрузить историю",
         failedLoadEtlUpdates: "Не удалось загрузить ETL обновления",
         sending: "Отправка...",
-        chooseReport: "Выберите отчет",
         defaultUser: "Пользователь",
         fullscreenRequested: "Открываю Fullsize",
         pdfReadyNote: "PDF успешно сформирован.",
@@ -3509,14 +3506,12 @@
         setSegments([], "", () => {});
         setForm(`
           <div class="field">
-            <label>${L("chooseReport")}</label>
             <div class="note">${L("hintDataPlanPlan")}</div>
             <div class="note-actions">
               <button type="button" class="btn btn-primary" id="dataPlanChoosePlan">${L("processPlan")}</button>
             </div>
           </div>
           <div class="field">
-            <label>${L("chooseReport")}</label>
             <div class="note">${L("hintDataPlanData")}</div>
             <div class="note-actions">
               <button type="button" class="btn btn-primary" id="dataPlanChooseData">${L("processData")}</button>
@@ -3591,14 +3586,12 @@
         setSegments([], "", () => {});
         setForm(`
           <div class="field">
-            <label>${L("chooseReport")}</label>
             <div class="note">${L("hintLkw")}</div>
             <div class="note-actions">
               <button type="button" class="btn btn-primary" id="lkwChooseSingle">1 LKW</button>
             </div>
           </div>
           <div class="field">
-            <label>${L("chooseReport")}</label>
             <div class="note">${L("hintLkw")}</div>
             <div class="note-actions">
               <button type="button" class="btn btn-primary" id="lkwChooseAll">Alle LKW</button>
@@ -3705,21 +3698,18 @@
         setSheetCloseAction("back", backHandler);
         setForm(`
           <div class="field">
-            <label>${L("chooseReport")}</label>
             <div class="note">${L("hintYfDriverMonth")}</div>
             <div class="note-actions">
               <button type="button" class="btn btn-primary" id="yfChooseDriverMonth">Fahrer / Monat</button>
             </div>
           </div>
           <div class="field">
-            <label>${L("chooseReport")}</label>
             <div class="note">${L("hintYfLkwWeek")}</div>
             <div class="note-actions">
               <button type="button" class="btn btn-primary" id="yfChooseLkwWeek">LKW / Woche</button>
             </div>
           </div>
           <div class="field">
-            <label>${L("chooseReport")}</label>
             <div class="note">${L("hintYfLkwMonth")}</div>
             <div class="note-actions">
               <button type="button" class="btn btn-primary" id="yfChooseLkwMonth">LKW / Monat</button>
@@ -3872,14 +3862,12 @@
         setSegments([], "", () => {});
         setForm(`
           <div class="field">
-            <label>${L("chooseReport")}</label>
             <div class="note">${L("hintEinnahmen")}</div>
             <div class="note-actions">
               <button type="button" class="btn btn-primary" id="einnahmenChooseTotal">Gesamt</button>
             </div>
           </div>
           <div class="field">
-            <label>${L("chooseReport")}</label>
             <div class="note">${L("hintEinnahmenFirms")}</div>
             <div class="note-actions">
               <button type="button" class="btn btn-primary" id="einnahmenChooseFirms">Firm / Monat</button>
@@ -3943,14 +3931,12 @@
         setSegments([], "", () => {});
         setForm(`
           <div class="field">
-            <label>${L("chooseReport")}</label>
             <div class="note">${L("hintDiesel")}</div>
             <div class="note-actions">
               <button type="button" class="btn btn-primary" id="dieselChooseSnapshot">Diesel PDF</button>
             </div>
           </div>
           <div class="field">
-            <label>${L("chooseReport")}</label>
             <div class="note">${L("hintDieselCard")}</div>
             <div class="note-actions">
               <button type="button" class="btn btn-primary" id="dieselChooseCard">LKW Karte</button>
@@ -4022,14 +4008,12 @@
         setSegments([], "", () => {});
         setForm(`
           <div class="field">
-            <label>${L("chooseReport")}</label>
             <div class="note">${L("hintBonus")}</div>
             <div class="note-actions">
               <button type="button" class="btn btn-primary" id="bonusChooseWhole">${L("wholeYear")}</button>
             </div>
           </div>
           <div class="field">
-            <label>${L("chooseReport")}</label>
             <div class="note">${L("hintBonus")}</div>
             <div class="note-actions">
               <button type="button" class="btn btn-primary" id="bonusChooseMonth">${L("month")}</button>
