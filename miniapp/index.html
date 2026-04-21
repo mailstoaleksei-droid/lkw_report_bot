@@ -1209,11 +1209,12 @@
     }
 
     body{
+      color: #1f2a3f;
       background:
-        radial-gradient(1200px 760px at 9% -6%, rgba(93,123,241,.34), transparent 62%),
-        radial-gradient(1040px 720px at 90% 4%, rgba(81,166,130,.30), transparent 66%),
-        radial-gradient(980px 700px at 52% 108%, rgba(138,94,211,.28), transparent 66%),
-        linear-gradient(180deg, #1a2639, #121e30);
+        radial-gradient(1100px 740px at 8% -8%, rgba(255,255,255,.62), transparent 62%),
+        radial-gradient(960px 680px at 92% 2%, rgba(218,226,236,.64), transparent 66%),
+        radial-gradient(900px 620px at 52% 108%, rgba(198,207,219,.54), transparent 66%),
+        linear-gradient(180deg, #eef1f5, #d8dee6);
     }
     body::before{
       content: "";
@@ -1222,15 +1223,14 @@
       z-index: 0;
       pointer-events: none;
       background:
-        repeating-linear-gradient(90deg, rgba(183,210,255,.045) 0 1px, transparent 1px 26px),
-        repeating-linear-gradient(0deg, rgba(170,197,242,.04) 0 1px, transparent 1px 24px);
-      mix-blend-mode: screen;
-      opacity: .5;
+        repeating-linear-gradient(90deg, rgba(96,111,132,.065) 0 1px, transparent 1px 26px),
+        repeating-linear-gradient(0deg, rgba(96,111,132,.055) 0 1px, transparent 1px 24px);
+      opacity: .58;
     }
 
     .bg-disks .disk{
-      opacity: .62;
-      filter: saturate(.9);
+      opacity: .44;
+      filter: saturate(.38) brightness(1.08);
     }
 
     .wrap{
@@ -1328,13 +1328,13 @@
     .section-title{
       margin: 0;
       flex: 1 1 auto;
-      color: rgba(231,242,255,.96);
+      color: rgba(39,51,72,.86);
       text-shadow: none;
     }
     .section-brand-inline{
       flex: 0 0 auto;
       text-align: right;
-      color: rgba(231,242,255,.96);
+      color: rgba(39,51,72,.86);
       font-size: inherit;
       font-weight: inherit;
       letter-spacing: .08em;
@@ -1418,7 +1418,7 @@
       display: none;
     }
 
-    /* Bottom 3D clay apps */
+    /* Bottom liquid glass report shortcuts */
     .dock{
       position: fixed;
       left: 50%;
@@ -1442,13 +1442,16 @@
       display: none;
     }
     .dock-item{
-      border: 0;
-      border-radius: 0;
-      background: transparent;
-      box-shadow: none;
-      backdrop-filter: none;
-      -webkit-backdrop-filter: none;
-      padding: 4px 2px;
+      min-height: clamp(64px, 14vw, 82px);
+      border: 1px solid rgba(255,255,255,.66);
+      border-radius: 16px;
+      background: linear-gradient(155deg, rgba(255,255,255,.44), rgba(210,218,228,.20));
+      box-shadow:
+        0 10px 24px rgba(82,96,118,.16),
+        inset 0 1px 0 rgba(255,255,255,.58);
+      backdrop-filter: blur(16px) saturate(118%);
+      -webkit-backdrop-filter: blur(16px) saturate(118%);
+      padding: 8px 4px;
       display: grid;
       justify-items: center;
       align-content: center;
@@ -1458,7 +1461,7 @@
     }
     .dock-item:active{
       transform: scale(.96);
-      background: transparent;
+      background: linear-gradient(155deg, rgba(255,255,255,.54), rgba(202,211,223,.28));
     }
     .dock-icon{
       width: clamp(34px, 9.2vw, 48px);
@@ -1482,8 +1485,61 @@
       font-size: clamp(10px, 2.2vw, 13px);
       line-height: 1.2;
       text-align: center;
-      color: rgba(232,243,255,.96);
+      color: rgba(39,51,72,.88);
       font-weight: 700;
+    }
+
+    .sheet{
+      background: rgba(224,229,236,.68);
+    }
+    .sheet-panel{
+      background: linear-gradient(165deg, rgba(255,255,255,.54), rgba(214,222,232,.30));
+      border-color: rgba(255,255,255,.70);
+      box-shadow: 0 -18px 56px rgba(96,108,128,.24), 0 0 0 1px rgba(255,255,255,.34) inset;
+    }
+    .sheet-top{
+      justify-content: flex-start;
+    }
+    .sheet-type-badge{
+      display:none;
+    }
+    .sheet-close{
+      margin-left: 0;
+      background: linear-gradient(155deg, rgba(255,255,255,.72), rgba(205,215,228,.34));
+      border-color: rgba(255,255,255,.74);
+      color: #233655;
+    }
+    .sheet-title{
+      color: #223655;
+      text-shadow: none;
+    }
+    .sheet-hint{
+      color: rgba(34,54,85,.74);
+    }
+    .report-info-list{
+      display:grid;
+      gap:12px;
+    }
+    .report-info-item{
+      border:1px solid rgba(255,255,255,.68);
+      border-radius:16px;
+      background: linear-gradient(155deg, rgba(255,255,255,.50), rgba(209,218,230,.24));
+      box-shadow: 0 10px 24px rgba(82,96,118,.12), inset 0 1px 0 rgba(255,255,255,.55);
+      backdrop-filter: blur(14px) saturate(116%);
+      -webkit-backdrop-filter: blur(14px) saturate(116%);
+      padding:14px 16px;
+      color:#223655;
+    }
+    .report-info-item strong{
+      display:block;
+      font-size:15px;
+      margin-bottom:4px;
+    }
+    .report-info-item span{
+      display:block;
+      font-size:13px;
+      line-height:1.38;
+      color:rgba(34,54,85,.76);
     }
 
     .history-list{
@@ -1642,6 +1698,7 @@
         <div class="top-actions">
           <button class="top-icon-btn" id="btnSettings" aria-label="Settings">⚙</button>
           <button class="top-icon-btn" id="btnBell" aria-label="ETL updates">🔔</button>
+          <button class="top-icon-btn" id="btnReportsInfo" aria-label="Reports">☰</button>
         </div>
       </div>
       
@@ -1718,10 +1775,6 @@
     </div>
 
     <div class="dock" id="dock">
-      <button class="dock-item" data-dock="history">
-        <span class="dock-icon"><img src="icons/folder.svg" alt="" width="18" height="18"></span>
-        <span class="dock-label" id="dock-history-label">Historie</span>
-      </button>
       <button class="dock-item" data-dock="lkw-list">
         <span class="dock-icon"><img src="icons/truck.svg" alt="" width="18" height="18"></span>
         <span class="dock-label" id="dock-lkw-label">LKW</span>
@@ -1733,6 +1786,10 @@
       <button class="dock-item" data-dock="fuel-cards">
         <span class="dock-icon"><img src="icons/fuel.svg" alt="" width="18" height="18"></span>
         <span class="dock-label" id="dock-fuel-label">Tankkarte</span>
+      </button>
+      <button class="dock-item" data-dock="history">
+        <span class="dock-icon"><img src="icons/folder.svg" alt="" width="18" height="18"></span>
+        <span class="dock-label" id="dock-history-label">Historie</span>
       </button>
     </div>
   </div>
@@ -1788,7 +1845,9 @@
         navHistory: "Historie",
         navLkwList: "LKW",
         navDriversList: "Fahrer",
-        navFuelCards: "Tankkarte",
+        navFuelCards: "Tankkarten",
+        reportsInfoTitle: "Available Reports",
+        reportsInfoHint: "Brief overview of the report menu",
         yourTelegramId: "Your Telegram ID",
         etlTitle: "ETL Updates",
         etlHint: "Last successful imports",
@@ -1861,7 +1920,7 @@
         driver: "Driver",
         generate: "Generate",
         send: "Send",
-        openFullscreen: "Open full screen",
+        openFullscreen: "Open fullsize",
         
         // Tabs
         tabMileage: "Mileage",
@@ -1876,7 +1935,7 @@
         backendNotReady: "Backend is not connected yet",
         invalidYear: "Invalid year",
         invalidYearMonth: "Invalid year/month",
-        fullscreenRequested: "Switched to full screen",
+        fullscreenRequested: "Switched to fullsize",
         pdfReadyNote: "PDF generated successfully.",
         openPdf: "Open PDF",
         savePdf: "Save PDF",
@@ -1895,7 +1954,9 @@
         navHistory: "Historie",
         navLkwList: "LKW",
         navDriversList: "Fahrer",
-        navFuelCards: "Tankkarte",
+        navFuelCards: "Tankkarten",
+        reportsInfoTitle: "Доступные отчеты",
+        reportsInfoHint: "Краткое описание отчетов в меню",
         yourTelegramId: "Твой Telegram ID",
         etlTitle: "ETL Обновления",
         etlHint: "Последние успешные импорты",
@@ -1968,7 +2029,7 @@
         driver: "Водитель",
         generate: "Сформировать",
         send: "Отправить",
-        openFullscreen: "Открыть на весь экран",
+        openFullscreen: "Открыть Fullsize",
         
         // Tabs
         tabMileage: "Пробег",
@@ -1983,7 +2044,7 @@
         backendNotReady: "Backend пока не подключен",
         invalidYear: "Некорректный год",
         invalidYearMonth: "Некорректный год/месяц",
-        fullscreenRequested: "Открываю на весь экран",
+        fullscreenRequested: "Открываю Fullsize",
         pdfReadyNote: "PDF успешно сформирован.",
         openPdf: "Открыть PDF",
         savePdf: "Скачать PDF",
@@ -2533,6 +2594,37 @@
       }
     }
 
+    function openReportsInfo() {
+      haptic("impact");
+      const reports = [
+        ["Bericht", L("descContainer")],
+        ["Data/Plan", L("hintDataPlan")],
+        ["LKW", L("descLkw")],
+        ["Fahrer", L("descFahrer")],
+        ["Yellow Fox", L("descYf")],
+        ["Einnahmen", L("descEinnahmen")],
+        ["Diesel", L("descDiesel")],
+        ["Bonus", L("descBonus")],
+      ];
+
+      setSheetHeader(L("reportsInfoTitle"), L("reportsInfoHint"), "");
+      setSheetCloseAction("back", closeSheet);
+      setSegments([], "", () => {});
+      setForm(`
+        <div class="report-info-list">
+          ${reports.map(([title, desc]) => `
+            <div class="report-info-item">
+              <strong>${escapeHtml(title)}</strong>
+              <span>${escapeHtml(desc)}</span>
+            </div>
+          `).join("")}
+        </div>
+      `);
+      setNote("");
+      hideSheetFooter();
+      openSheet();
+    }
+
     async function sendReportGenerate(reportType, payload) {
       haptic("impact");
       
@@ -2884,7 +2976,7 @@
     function openSheet() {
       haptic("impact");
       document.body.classList.add("sheet-open");
-      ensureSheetFullscreen();
+      ensureSheetFullsize();
       $("sheet").classList.add("show");
     }
 
@@ -2895,14 +2987,9 @@
       clearPdfUrl();
     }
 
-    function ensureSheetFullscreen() {
+    function ensureSheetFullsize() {
       try {
         Telegram?.WebApp?.expand?.();
-      } catch {}
-      try {
-        if (typeof Telegram?.WebApp?.requestFullscreen === "function") {
-          Telegram.WebApp.requestFullscreen();
-        }
       } catch {}
     }
 
@@ -3714,8 +3801,10 @@
     function wireTopActions() {
       const settingsBtn = $("btnSettings");
       const bellBtn = $("btnBell");
+      const reportsInfoBtn = $("btnReportsInfo");
       if (settingsBtn) settingsBtn.onclick = showTelegramId;
       if (bellBtn) bellBtn.onclick = showEtlUpdates;
+      if (reportsInfoBtn) reportsInfoBtn.onclick = openReportsInfo;
     }
 
     async function main() {

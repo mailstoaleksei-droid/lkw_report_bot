@@ -124,11 +124,17 @@
 - [x] History list from `reports_log`
 - [x] Open report from history
 - [x] Delete selected / delete all history entries
-- [x] Report selection flow opens full-screen:
-  - tile submenus open as full-screen sheets
-  - report criteria screens remain full-screen on next steps
+- [x] Report selection flow opens in Telegram Fullsize style:
+  - tile submenus open as fullsize sheets inside the Mini App viewport
+  - report criteria screens remain fullsize on next steps
 - [x] Report tiles remain clickable even when access badge shows a warning state
 - [x] Report tile handlers are wired before access/API checks so slow `/api/meta` does not block opening menus
+- [x] Mini App report UI adjusted for Telegram Fullsize launch mode:
+  - browser Fullscreen request removed; Telegram `expand()` remains
+  - main and submenu background changed to light grey glass theme
+  - sheet badge (`PDF`) removed; back/close action is placed in the former badge position
+  - bottom dock shortcuts styled as four light grey liquid-glass tiles
+  - top report info button added with short descriptions of available reports
 - [x] Top action buttons:
   - Gear -> show Telegram user ID
   - Bell -> show last ETL update times
