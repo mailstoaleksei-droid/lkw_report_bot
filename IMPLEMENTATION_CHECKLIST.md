@@ -139,6 +139,7 @@
   - report info navigation preserves back context: info list -> report -> info list, main menu -> report -> main menu
   - back/close action uses a compact modern graphite minimalist button style
   - submenu labels and notes use dark grey text
+  - report parameter labels and select/input values use light-blue highlighted text
 - [x] Top action buttons:
   - Gear -> show Telegram user ID
   - Bell -> show last ETL update times
