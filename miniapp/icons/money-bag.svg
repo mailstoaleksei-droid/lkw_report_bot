@@ -1,0 +1,17 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 48 48" fill="none">
+  <defs>
+    <linearGradient id="g1" x1="9" y1="6" x2="39" y2="43" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#35F0A0"/>
+      <stop offset="1" stop-color="#1B2B8F"/>
+    </linearGradient>
+    <linearGradient id="g2" x1="15" y1="10" x2="33" y2="34" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#EAF9FF"/>
+      <stop offset="1" stop-color="#57C7FF"/>
+    </linearGradient>
+  </defs>
+  <path d="M17 8h14l-3.8 7h-6.4L17 8z" fill="url(#g2)" opacity=".88"/>
+  <path d="M19 15h10c7 5.4 11 13.1 11 20.1 0 5.2-4.2 7.9-16 7.9S8 40.3 8 35.1C8 28.1 12 20.4 19 15z" fill="url(#g1)" opacity=".9"/>
+  <path d="M18 16.5h12" stroke="#20304A" stroke-width="2.4" stroke-linecap="round" opacity=".5"/>
+  <text x="24" y="34" text-anchor="middle" font-family="Arial, sans-serif" font-size="17" font-weight="700" fill="#EAF9FF" opacity=".95">€</text>
+  <ellipse cx="18" cy="25" rx="4" ry="6" fill="#fff" opacity=".12"/>
+</svg>
