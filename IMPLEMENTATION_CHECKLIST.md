@@ -144,6 +144,7 @@
   - generated PDF result view shows only `Open PDF` and `Save PDF` buttons with blue highlighted field-style controls
   - `Available Reports` and report submenu hints use updated Russian business descriptions for all main, dock, and history entries
   - Mini App language follows Telegram/browser locale with `de`, `ru`, and `en` dictionaries; hardcoded report UI strings were moved into localization
+  - English localization no longer mixes Russian report descriptions when the selected language is `en`
 - [x] Top action buttons:
   - Gear -> show Telegram user ID
   - Bell -> show last ETL update times
