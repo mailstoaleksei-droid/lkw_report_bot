@@ -134,7 +134,10 @@
   - main and submenu background changed to light grey glass theme
   - sheet badge (`PDF`) removed; back/close action is placed in the former badge position
   - bottom dock shortcuts styled as four light grey liquid-glass tiles
-  - top report info button added with short descriptions of available reports
+  - top report info button added with clickable descriptions of available reports
+  - report info navigation preserves back context: info list -> report -> info list, main menu -> report -> main menu
+  - back/close action enlarged and colored graphite black
+  - submenu labels and notes use dark grey text
 - [x] Top action buttons:
   - Gear -> show Telegram user ID
   - Bell -> show last ETL update times

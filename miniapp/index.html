@@ -1507,7 +1507,15 @@
       margin-left: 0;
       background: linear-gradient(155deg, rgba(255,255,255,.72), rgba(205,215,228,.34));
       border-color: rgba(255,255,255,.74);
-      color: #233655;
+      color: #1d222b;
+      font-size: 20px;
+      font-weight: 900;
+      box-shadow: inset 0 1px 0 rgba(255,255,255,.62), 0 8px 18px rgba(75,84,98,.14);
+    }
+    .sheet-close img{
+      width:16px;
+      height:16px;
+      filter: brightness(0) saturate(100%) invert(10%) sepia(8%) saturate(1084%) hue-rotate(179deg) brightness(94%) contrast(91%);
     }
     .sheet-title{
       color: #223655;
@@ -1521,6 +1529,7 @@
       gap:12px;
     }
     .report-info-item{
+      width:100%;
       border:1px solid rgba(255,255,255,.68);
       border-radius:16px;
       background: linear-gradient(155deg, rgba(255,255,255,.50), rgba(209,218,230,.24));
@@ -1529,6 +1538,13 @@
       -webkit-backdrop-filter: blur(14px) saturate(116%);
       padding:14px 16px;
       color:#223655;
+      text-align:left;
+      cursor:pointer;
+      font-family:inherit;
+    }
+    .report-info-item:active{
+      transform: scale(.98);
+      background: linear-gradient(155deg, rgba(255,255,255,.60), rgba(201,211,224,.30));
     }
     .report-info-item strong{
       display:block;
@@ -1540,6 +1556,12 @@
       font-size:13px;
       line-height:1.38;
       color:rgba(34,54,85,.76);
+    }
+    .field label{
+      color: #3f4652;
+    }
+    .note{
+      color: #505967;
     }
 
     .history-list{
@@ -2597,14 +2619,14 @@
     function openReportsInfo() {
       haptic("impact");
       const reports = [
-        ["Bericht", L("descContainer")],
-        ["Data/Plan", L("hintDataPlan")],
-        ["LKW", L("descLkw")],
-        ["Fahrer", L("descFahrer")],
-        ["Yellow Fox", L("descYf")],
-        ["Einnahmen", L("descEinnahmen")],
-        ["Diesel", L("descDiesel")],
-        ["Bonus", L("descBonus")],
+        ["container", "Bericht", L("descContainer")],
+        ["data-plan", "Data/Plan", L("hintDataPlan")],
+        ["lkw", "LKW", L("descLkw")],
+        ["fahrer", "Fahrer", L("descFahrer")],
+        ["yf", "Yellow Fox", L("descYf")],
+        ["einnahmen", "Einnahmen", L("descEinnahmen")],
+        ["diesel", "Diesel", L("descDiesel")],
+        ["bonus", "Bonus", L("descBonus")],
       ];
 
       setSheetHeader(L("reportsInfoTitle"), L("reportsInfoHint"), "");
@@ -2612,16 +2634,22 @@
       setSegments([], "", () => {});
       setForm(`
         <div class="report-info-list">
-          ${reports.map(([title, desc]) => `
-            <div class="report-info-item">
+          ${reports.map(([key, title, desc]) => `
+            <button type="button" class="report-info-item" data-report-info="${escapeHtml(key)}">
               <strong>${escapeHtml(title)}</strong>
               <span>${escapeHtml(desc)}</span>
-            </div>
+            </button>
           `).join("")}
         </div>
       `);
       setNote("");
       hideSheetFooter();
+      document.querySelectorAll("[data-report-info]").forEach((btn) => {
+        btn.onclick = () => {
+          const key = btn.getAttribute("data-report-info");
+          openReportByKey(key, openReportsInfo);
+        };
+      });
       openSheet();
     }
 
@@ -3071,9 +3099,9 @@
     }
 
     // === REPORT HANDLERS ===
-    function openContainer() {
+    function openContainer(backHandler = closeSheet) {
       setSheetHeader("Bericht", L("hintContainer"), "Bericht");
-      setSheetCloseAction("back", closeSheet);
+      setSheetCloseAction("back", backHandler);
       setSegments([], "", () => {});
 
       setForm(`
@@ -3113,14 +3141,14 @@
       openSheet();
     }
 
-    function openDataPlan() {
+    function openDataPlan(backHandler = closeSheet) {
       const now = new Date();
       let selectedYear = Math.max(2025, Math.min(2030, getISOYear(now)));
       let selectedWeek = getISOWeek(now);
 
       const renderMenu = () => {
         setSheetHeader("Data/Plan", L("hintDataPlan"), "PDF");
-        setSheetCloseAction("back", closeSheet);
+        setSheetCloseAction("back", backHandler);
         setSegments([], "", () => {});
         setForm(`
           <div class="field">
@@ -3199,10 +3227,10 @@
       openSheet();
     }
 
-    function openLkw() {
+    function openLkw(backHandler = closeSheet) {
       const renderMenu = () => {
         setSheetHeader("LKW", L("hintLkw"), "PDF");
-        setSheetCloseAction("back", closeSheet);
+        setSheetCloseAction("back", backHandler);
         setSegments([], "", () => {});
         setForm(`
           <div class="field">
@@ -3277,7 +3305,7 @@
       openSheet();
     }
 
-    function openFahrer() {
+    function openFahrer(backHandler = closeSheet) {
       let active = "data";
       const tabs = [
         { key:"data", label: L("tabDriverData") },
@@ -3286,7 +3314,7 @@
 
       const render = () => {
         setSheetHeader("Fahrer", L("hintFahrer"), "Params");
-        setSheetCloseAction("back", closeSheet);
+        setSheetCloseAction("back", backHandler);
         setSegments(tabs, active, (k) => { active = k; render(); });
 
         setForm(`
@@ -3313,11 +3341,11 @@
       openSheet();
     }
 
-    function openYf() {
+    function openYf(backHandler = closeSheet) {
       const renderYfMenu = () => {
         setSheetHeader("Yellow Fox", L("hintYfMenu"), "PDF");
         setSegments([], "", () => {});
-        setSheetCloseAction("back", closeSheet);
+        setSheetCloseAction("back", backHandler);
         setForm(`
           <div class="field">
             <label>Choose report</label>
@@ -3480,10 +3508,10 @@
       openSheet();
     }
 
-    function openEinnahmen() {
+    function openEinnahmen(backHandler = closeSheet) {
       const renderMenu = () => {
         setSheetHeader("Einnahmen", L("hintEinnahmen"), "PDF");
-        setSheetCloseAction("back", closeSheet);
+        setSheetCloseAction("back", backHandler);
         setSegments([], "", () => {});
         setForm(`
           <div class="field">
@@ -3551,10 +3579,10 @@
       openSheet();
     }
 
-    function openDiesel() {
+    function openDiesel(backHandler = closeSheet) {
       const renderMenu = () => {
         setSheetHeader("Diesel", L("hintDiesel"), "PDF");
-        setSheetCloseAction("back", closeSheet);
+        setSheetCloseAction("back", backHandler);
         setSegments([], "", () => {});
         setForm(`
           <div class="field">
@@ -3630,10 +3658,10 @@
       openSheet();
     }
 
-    function openBonus() {
+    function openBonus(backHandler = closeSheet) {
       const renderMenu = () => {
         setSheetHeader("Bonus", L("hintBonus"), "PDF");
-        setSheetCloseAction("back", closeSheet);
+        setSheetCloseAction("back", backHandler);
         setSegments([], "", () => {});
         setForm(`
           <div class="field">
@@ -3746,26 +3774,29 @@
     }
 
     // === INIT ===
-    function wireMenu() {
+    function openReportByKey(key, backHandler = closeSheet) {
       const comingSoon = () => {
         haptic("impact");
         showToast(L("toastComingSoon"));
       };
       const map = {
-        container: openContainer,
-        "data-plan": openDataPlan,
-        lkw: openLkw,
+        container: () => openContainer(backHandler),
+        "data-plan": () => openDataPlan(backHandler),
+        lkw: () => openLkw(backHandler),
         fahrer: comingSoon,
-        yf: openYf,
-        einnahmen: openEinnahmen,
-        diesel: openDiesel,
-        bonus: openBonus
+        yf: () => openYf(backHandler),
+        einnahmen: () => openEinnahmen(backHandler),
+        diesel: () => openDiesel(backHandler),
+        bonus: () => openBonus(backHandler),
       };
+      map[key]?.();
+    }
 
+    function wireMenu() {
       document.querySelectorAll(".tile").forEach(tile => {
         tile.onclick = () => {
           const key = tile.getAttribute("data-report");
-          map[key]?.();
+          openReportByKey(key, closeSheet);
         };
       });
     }
