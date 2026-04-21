@@ -1618,6 +1618,30 @@
       background: #e8f5ff;
       color: #1976d2;
     }
+    .pdf-result-actions{
+      display:grid;
+      gap:12px;
+    }
+    .pdf-result-actions .btn{
+      background:
+        linear-gradient(150deg, rgba(227,247,255,.52), rgba(178,220,255,.30)) padding-box,
+        linear-gradient(140deg, rgba(126,197,255,.78), rgba(75,154,238,.64)) border-box;
+      border:1px solid transparent;
+      color:#1976d2;
+      text-shadow: 0 0 12px rgba(67,164,255,.38);
+      box-shadow:
+        0 10px 24px rgba(62,141,220,.16),
+        0 0 0 1px rgba(210,239,255,.34) inset,
+        0 0 22px rgba(100,184,255,.16);
+    }
+    .pdf-result-actions .btn:active{
+      transform: scale(.98);
+      color:#0d5fb8;
+      box-shadow:
+        0 0 0 3px rgba(90,181,255,.24),
+        0 12px 28px rgba(62,141,220,.22),
+        0 0 28px rgba(96,190,255,.26);
+    }
     .note{
       color: #505967;
     }
@@ -2451,9 +2475,11 @@
     }
 
     function renderPdfActions() {
-      setNote(`
-        <div>${L("pdfReadyNote")}</div>
-        <div class="note-actions">
+      setSegments([], "", () => {});
+      setNote("");
+      hideSheetFooter();
+      setForm(`
+        <div class="pdf-result-actions">
           <button class="btn btn-secondary" id="btnOpenPdf">${L("openPdf")}</button>
           <button class="btn btn-secondary" id="btnSavePdf">${L("savePdf")}</button>
         </div>

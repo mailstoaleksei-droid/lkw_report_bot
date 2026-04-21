@@ -141,6 +141,7 @@
   - submenu labels and notes use dark grey text
   - report parameter labels use light-blue highlighting; select values/placeholders use blue text
   - main report tiles use dedicated icons: Bericht inline play triangle, Data/Plan inline calendar, Yellow Fox inline fox face, Einnahmen rising chart, Bonus inline money bag
+  - generated PDF result view shows only `Open PDF` and `Save PDF` buttons with blue highlighted field-style controls
 - [x] Top action buttons:
   - Gear -> show Telegram user ID
   - Bell -> show last ETL update times
