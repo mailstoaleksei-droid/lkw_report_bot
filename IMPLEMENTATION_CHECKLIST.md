@@ -137,7 +137,7 @@
   - top report info button added with clickable descriptions of available reports
   - dock reports (`LKW`, `Fahrer`, `Tankkarten`) added to the clickable `Available Reports` list
   - report info navigation preserves back context: info list -> report -> info list, main menu -> report -> main menu
-  - back/close action enlarged and colored graphite black
+  - back/close action enlarged and rendered as a graphite-black button
   - submenu labels and notes use dark grey text
 - [x] Top action buttons:
   - Gear -> show Telegram user ID

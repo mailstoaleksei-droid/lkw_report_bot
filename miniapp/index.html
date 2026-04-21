@@ -1505,17 +1505,28 @@
     }
     .sheet-close{
       margin-left: 0;
-      background: linear-gradient(155deg, rgba(255,255,255,.72), rgba(205,215,228,.34));
-      border-color: rgba(255,255,255,.74);
-      color: #1d222b;
+      background: linear-gradient(155deg, #30343b, #171b21);
+      border-color: rgba(14,18,24,.92);
+      color: #f3f4f6;
       font-size: 20px;
       font-weight: 900;
-      box-shadow: inset 0 1px 0 rgba(255,255,255,.62), 0 8px 18px rgba(75,84,98,.14);
+      box-shadow: inset 0 1px 0 rgba(255,255,255,.16), 0 8px 18px rgba(30,36,46,.28);
+    }
+    .sheet-close.back{
+      background: linear-gradient(155deg, #30343b, #171b21);
+      border-color: rgba(14,18,24,.92);
+      color: #f3f4f6;
+      font-size: 22px;
+      font-weight: 900;
+      line-height: 1;
     }
     .sheet-close img{
       width:16px;
       height:16px;
-      filter: brightness(0) saturate(100%) invert(10%) sepia(8%) saturate(1084%) hue-rotate(179deg) brightness(94%) contrast(91%);
+      filter: brightness(0) invert(1);
+    }
+    .sheet-close:active{
+      background: linear-gradient(155deg, #242832, #11151b);
     }
     .sheet-title{
       color: #223655;
