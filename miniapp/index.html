@@ -1908,6 +1908,9 @@
         descEinnahmen: "Total revenue overview",
         descDiesel: "Two-page source sheet diesel snapshot",
         descBonus: "Bonus calculations",
+        descDockLkw: "Current LKW list PDF",
+        descDockDrivers: "Current Fahrer list PDF",
+        descDockFuelCards: "Current Tankkarten list PDF",
         
         // Sheet headers
         hintContainer: "Select year and week for Bericht report",
@@ -2017,6 +2020,9 @@
         descEinnahmen: "Общая выручка",
         descDiesel: "Двухстраничный снимок Diesel из листа",
         descBonus: "Расчет бонусов",
+        descDockLkw: "Актуальный PDF списка LKW",
+        descDockDrivers: "Актуальный PDF списка Fahrer",
+        descDockFuelCards: "Актуальный PDF списка Tankkarten",
         
         // Sheet headers
         hintContainer: "Выберите год и неделю для отчета Bericht",
@@ -2627,6 +2633,9 @@
         ["einnahmen", "Einnahmen", L("descEinnahmen")],
         ["diesel", "Diesel", L("descDiesel")],
         ["bonus", "Bonus", L("descBonus")],
+        ["dock:lkw-list", "LKW", L("descDockLkw")],
+        ["dock:drivers-list", "Fahrer", L("descDockDrivers")],
+        ["dock:fuel-cards", "Tankkarten", L("descDockFuelCards")],
       ];
 
       setSheetHeader(L("reportsInfoTitle"), L("reportsInfoHint"), "");
@@ -2647,7 +2656,11 @@
       document.querySelectorAll("[data-report-info]").forEach((btn) => {
         btn.onclick = () => {
           const key = btn.getAttribute("data-report-info");
-          openReportByKey(key, openReportsInfo);
+          if (key?.startsWith("dock:")) {
+            openDockPdfFromKey(key.slice(5), openReportsInfo);
+          } else {
+            openReportByKey(key, openReportsInfo);
+          }
         };
       });
       openSheet();
@@ -2724,7 +2737,7 @@
       return false;
     }
 
-    async function openDockPdf(kind, titleKey) {
+    async function openDockPdf(kind, titleKey, backHandler = closeSheet) {
       haptic("impact");
       showToast(L("loadingPdf"), 1200);
 
@@ -2754,6 +2767,7 @@
         latestPdfSaveUrl = saveUrl;
 
         setSheetHeader(L(titleKey), L("toastPdfReady"), "PDF");
+        setSheetCloseAction("back", backHandler);
         setSegments([], "", () => {});
         setForm("");
         renderPdfActions();
@@ -2763,6 +2777,17 @@
         haptic("error");
         showToast(err?.message || "Network error");
       }
+    }
+
+    function openDockPdfFromKey(kind, backHandler = closeSheet) {
+      const titleKeys = {
+        "lkw-list": "lkwDockTitle",
+        "drivers-list": "driversDockTitle",
+        "fuel-cards": "fuelDockTitle",
+      };
+      const titleKey = titleKeys[kind];
+      if (!titleKey) return;
+      openDockPdf(kind, titleKey, backHandler);
     }
 
     async function deleteHistoryEntries(initData, { deleteAll = false, ids = [] } = {}) {
