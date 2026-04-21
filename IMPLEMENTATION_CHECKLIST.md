@@ -14,7 +14,7 @@
 - [x] Telegram `initData` HMAC validation in Worker
 - [x] Access control moved to DB table `allowed_users`
 - [x] Env whitelist fallback removed in Worker auth flow
-- [x] Access granted and verified for active users (including `5704951140`, `6863783942`, `8684182333`)
+- [x] Access granted and verified for active users (including `5704951140`, `6863783942`, `8684182333`, `997894789`, `8594957192`)
 - [x] Per-user API rate limit enabled
 - [x] Mini App access UX distinguishes real `Access denied` from transient Telegram session/auth errors
 
