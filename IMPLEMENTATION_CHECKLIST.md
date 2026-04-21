@@ -143,6 +143,7 @@
   - main report tiles use dedicated icons: Bericht inline play triangle, Data/Plan inline calendar, Yellow Fox inline fox face, Einnahmen rising chart, Bonus inline money bag
   - generated PDF result view shows only `Open PDF` and `Save PDF` buttons with blue highlighted field-style controls
   - `Available Reports` and report submenu hints use updated Russian business descriptions for all main, dock, and history entries
+  - Mini App language follows Telegram/browser locale with `de`, `ru`, and `en` dictionaries; hardcoded report UI strings were moved into localization
 - [x] Top action buttons:
   - Gear -> show Telegram user ID
   - Bell -> show last ETL update times

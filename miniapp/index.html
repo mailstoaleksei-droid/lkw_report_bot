@@ -2122,10 +2122,148 @@
         backendNotReady: "Backend is not connected yet",
         invalidYear: "Invalid year",
         invalidYearMonth: "Invalid year/month",
+        invalidYearWeek: "Invalid year/week",
+        genericError: "Error",
+        networkError: "Network error",
+        pdfNotAvailable: "PDF is not available",
+        failedLoadLkwList: "Failed to load LKW list",
+        failedLoadDriverList: "Failed to load driver list",
+        failedLoadYfLkwList: "Failed to load Yellow Fox LKW list",
+        failedLoadHistory: "Failed to load history",
+        failedLoadEtlUpdates: "Failed to load ETL updates",
+        sending: "Sending...",
+        chooseReport: "Choose report",
+        defaultUser: "User",
         fullscreenRequested: "Switched to fullsize",
         pdfReadyNote: "PDF generated successfully.",
         openPdf: "Open PDF",
         savePdf: "Save PDF",
+      },
+      de: {
+        welcome: "Willkommen",
+        checking: "Zugriffsrechte werden geprüft...",
+        accessOk: "Zugriff erlaubt • Alle Berichte verfügbar",
+        accessNo: (admin) => `Zugriff verweigert • Kontakt: ${admin}`,
+        accessApiPending: "API ist noch nicht verbunden • UI-Vorschaumodus",
+        accessAuthIssue: "Telegram-Sitzungsproblem • Mini App neu öffnen",
+        ok: "OK",
+        no: "NEIN",
+        pending: "INFO",
+        sectionTitle: "Verfügbare Berichte",
+        navHistory: "Historie",
+        navLkwList: "LKW",
+        navDriversList: "Fahrer",
+        navFuelCards: "Tankkarten",
+        reportsInfoTitle: "Verfügbare Berichte",
+        reportsInfoHint: "Kurze Übersicht des Berichtsmenüs",
+        yourTelegramId: "Deine Telegram ID",
+        etlTitle: "ETL Updates",
+        etlHint: "Letzte erfolgreiche Importe",
+        etlDataFile: "LKW_Fahrer_Data.xlsm",
+        etlPlanFile: "LKW_Fahrer_Plan.xlsb",
+        noEtlUpdate: "Noch kein erfolgreiches Update",
+        etlRefreshNow: "Jetzt aktualisieren",
+        etlRefreshStarted: "ETL wurde im Hintergrund gestartet",
+        etlRefreshRunning: "ETL läuft bereits",
+        etlRefreshFailed: "ETL konnte nicht gestartet werden",
+        etlRefreshUnsupported: "ETL-Aktualisierung ist für dieses Deployment nicht konfiguriert",
+        close: "Schließen",
+        back: "Zurück",
+        historyTitle: "Generierte Dateien",
+        historyHint: "Historie der heruntergeladenen Berichte",
+        historySelectHint: "Dateien zum Löschen auswählen",
+        historyEmpty: "Noch keine generierten Dateien.",
+        loadingHistory: "Historie wird geladen...",
+        historyDeleteSelected: "Ausgewählte löschen",
+        historyDeleteAll: "Alle löschen",
+        historyDeleteConfirmSelected: "Ausgewählte Berichte löschen?",
+        historyDeleteConfirmAll: "Alle Berichte löschen?",
+        historyDeleteNoSelection: "Mindestens einen Bericht auswählen",
+        historyDeleted: (count) => `Gelöscht: ${count}`,
+        historyDeleteFailed: "Löschen fehlgeschlagen",
+        loadingPdf: "PDF wird vorbereitet...",
+        lkwDockTitle: "LKW",
+        driversDockTitle: "Fahrer",
+        fuelDockTitle: "Tankkarten",
+
+        // Descriptions
+        descContainer: "Bericht zum LKW-Arbeitsplan nach Wochen",
+        descDataPlan: "Berichte zum Arbeitsplan von Fahrern und LKW",
+        descLkw: "aktuelle Daten zum LKW-Fuhrpark",
+        descFahrer: "aktuelle Fahrerliste",
+        descYf: "Berichte mit Arbeitsdaten von Fahrern und LKW",
+        descEinnahmen: "Berichte zu Ergebnissen der Firma und Partnerfirmen",
+        descDiesel: "Dieselberichte",
+        descBonus: "Berichte zu Fahrerboni",
+        descDockLkw: "aktuelle LKW-Liste",
+        descDockDrivers: "aktuelle Fahrerliste",
+        descDockFuelCards: "aktuelle Tankkartenliste",
+        descHistory: "Historie der heruntergeladenen Berichte",
+
+        // Sheet headers
+        hintContainer: "Bericht zum LKW-Arbeitsplan nach Wochen",
+        hintLkw: "aktuelle Daten zum LKW-Fuhrpark",
+        hintFahrer: "aktuelle Fahrerliste",
+        hintYf: "Berichte mit Arbeitsdaten von Fahrern und LKW",
+        hintYfMenu: "Berichte mit Arbeitsdaten von Fahrern und LKW",
+        hintYfDriverMonth: "Monat und Fahrer für monatliche Yellow-Fox-Fahrerkennzahlen auswählen",
+        hintYfLkwWeek: "Jahr, Woche und LKW für Yellow-Fox-LKW-Kennzahlen auswählen",
+        hintYfLkwMonth: "LKW, Monat und Jahr für die monatliche LKW-Zusammenfassung auswählen",
+        hintEinnahmen: "Berichte zu Ergebnissen der Firma und Partnerfirmen",
+        hintEinnahmenFirms: "Umsatz der Firmen nach Monaten aus Bericht_Dispo BS:CF mit Tabelle und Diagramm",
+        hintDiesel: "Dieselberichte",
+        hintDieselCard: "Dieselberichte",
+        hintBonus: "Berichte zu Fahrerboni",
+        hintDataPlan: "Berichte zum Arbeitsplan von Fahrern und LKW",
+        hintDataPlanPlan: "Plan: ausgewählte Woche + 3 Wochen",
+        hintDataPlanData: "Data: nur ausgewählte Woche (7 Tage)",
+        processPlan: "Plan",
+        processData: "Data",
+
+        // Common
+        choose: "Auswählen...",
+        vehicle: "Fahrzeug",
+        period: "Zeitraum",
+        year: "Jahr",
+        week: "Woche",
+        month: "Monat",
+        wholeYear: "Ganzes Jahr",
+        fahrerFilter: "Fahrer-ID oder Nachname (optional)",
+        allTime: "Gesamter Zeitraum",
+        driver: "Fahrer",
+        generate: "Generieren",
+        send: "Senden",
+        openFullscreen: "Fullsize öffnen",
+
+        // Tabs
+        tabMileage: "Kilometer",
+        tabRepair: "Reparaturen",
+        tabDriverData: "Fahrerdaten",
+        tabUrlaub: "Urlaub",
+
+        // Toast
+        toastSuccess: "Anfrage abgeschlossen",
+        toastPdfReady: "PDF ist fertig. Open PDF antippen",
+        toastComingSoon: "Funktion bald verfügbar",
+        backendNotReady: "Backend ist noch nicht verbunden",
+        invalidYear: "Ungültiges Jahr",
+        invalidYearMonth: "Ungültiges Jahr/Monat",
+        invalidYearWeek: "Ungültiges Jahr/Woche",
+        genericError: "Fehler",
+        networkError: "Netzwerkfehler",
+        pdfNotAvailable: "PDF ist nicht verfügbar",
+        failedLoadLkwList: "LKW-Liste konnte nicht geladen werden",
+        failedLoadDriverList: "Fahrerliste konnte nicht geladen werden",
+        failedLoadYfLkwList: "Yellow-Fox-LKW-Liste konnte nicht geladen werden",
+        failedLoadHistory: "Historie konnte nicht geladen werden",
+        failedLoadEtlUpdates: "ETL Updates konnten nicht geladen werden",
+        sending: "Wird gesendet...",
+        chooseReport: "Bericht auswählen",
+        defaultUser: "Benutzer",
+        fullscreenRequested: "Fullsize geöffnet",
+        pdfReadyNote: "PDF wurde erfolgreich generiert.",
+        openPdf: "PDF öffnen",
+        savePdf: "PDF speichern",
       },
       ru: {
         welcome: "Добро пожаловать",
@@ -2236,6 +2374,18 @@
         backendNotReady: "Backend пока не подключен",
         invalidYear: "Некорректный год",
         invalidYearMonth: "Некорректный год/месяц",
+        invalidYearWeek: "Некорректный год/неделя",
+        genericError: "Ошибка",
+        networkError: "Ошибка сети",
+        pdfNotAvailable: "PDF недоступен",
+        failedLoadLkwList: "Не удалось загрузить список LKW",
+        failedLoadDriverList: "Не удалось загрузить список водителей",
+        failedLoadYfLkwList: "Не удалось загрузить список LKW Yellow Fox",
+        failedLoadHistory: "Не удалось загрузить историю",
+        failedLoadEtlUpdates: "Не удалось загрузить ETL обновления",
+        sending: "Отправка...",
+        chooseReport: "Выберите отчет",
+        defaultUser: "Пользователь",
         fullscreenRequested: "Открываю Fullsize",
         pdfReadyNote: "PDF успешно сформирован.",
         openPdf: "Открыть PDF",
@@ -2254,16 +2404,25 @@
     const initials = (name) => name.split(" ").map(w => w[0]).join("").toUpperCase().slice(0,2);
     
     function detectLanguage() {
+      const normalize = (value) => String(value || "").toLowerCase().split("-")[0];
+      const supported = new Set(["de", "ru", "en"]);
+      const candidates = [];
       try {
-        const tgLang = Telegram?.WebApp?.initDataUnsafe?.user?.language_code || "";
-        return tgLang.startsWith("ru") ? "ru" : "en";
-      } catch {
-        return "en";
+        candidates.push(Telegram?.WebApp?.initDataUnsafe?.user?.language_code);
+      } catch {}
+      try {
+        candidates.push(...(navigator.languages || []));
+        candidates.push(navigator.language);
+      } catch {}
+      for (const candidate of candidates) {
+        const lang = normalize(candidate);
+        if (supported.has(lang)) return lang;
       }
+      return "en";
     }
     
     function L(key, ...args) {
-      const value = LANG[currentLang][key];
+      const value = LANG[currentLang]?.[key] ?? LANG.en[key] ?? key;
       return typeof value === "function" ? value(...args) : value;
     }
 
@@ -2645,7 +2804,7 @@
           .concat(items.map((item) => `<option value="${escapeHtml(item.lkw_id)}">${escapeHtml(item.label || item.lkw_id)}</option>`));
         select.innerHTML = opts.join("");
       } catch (err) {
-        select.innerHTML = `<option value="">${escapeHtml(err?.message || "Failed to load LKW list")}</option>`;
+        select.innerHTML = `<option value="">${escapeHtml(err?.message || L("failedLoadLkwList"))}</option>`;
       }
     }
 
@@ -2663,7 +2822,7 @@
           }));
         select.innerHTML = opts.join("");
       } catch (err) {
-        select.innerHTML = `<option value="">${escapeHtml(err?.message || "Failed to load LKW list")}</option>`;
+        select.innerHTML = `<option value="">${escapeHtml(err?.message || L("failedLoadLkwList"))}</option>`;
       }
     }
 
@@ -2677,7 +2836,7 @@
           .concat(items.map((item) => `<option value="${escapeHtml(item)}">${escapeHtml(item)}</option>`));
         select.innerHTML = opts.join("");
       } catch (err) {
-        select.innerHTML = `<option value="">${escapeHtml(err?.message || "Failed to load driver list")}</option>`;
+        select.innerHTML = `<option value="">${escapeHtml(err?.message || L("failedLoadDriverList"))}</option>`;
       }
     }
 
@@ -2691,7 +2850,7 @@
           .concat(items.map((item) => `<option value="${escapeHtml(item)}">${escapeHtml(item)}</option>`));
         select.innerHTML = opts.join("");
       } catch (err) {
-        select.innerHTML = `<option value="">${escapeHtml(err?.message || "Failed to load Yellow Fox LKW list")}</option>`;
+        select.innerHTML = `<option value="">${escapeHtml(err?.message || L("failedLoadYfLkwList"))}</option>`;
       }
     }
 
@@ -2777,14 +2936,14 @@
             }
           };
         } catch (err) {
-          setForm(`<div class="history-empty">${err?.message || "Failed to load ETL updates"}</div>`);
+          setForm(`<div class="history-empty">${err?.message || L("failedLoadEtlUpdates")}</div>`);
         }
       };
 
       try {
         await renderEtlBody();
       } catch (err) {
-        setForm(`<div class="history-empty">${err?.message || "Failed to load ETL updates"}</div>`);
+        setForm(`<div class="history-empty">${err?.message || L("failedLoadEtlUpdates")}</div>`);
       }
     }
 
@@ -2839,7 +2998,7 @@
       const btn = $("btnPrimary");
       const originalText = btn.textContent;
       btn.disabled = true;
-      btn.innerHTML = '<span class="loading"><span class="spinner"></span>Sending...</span>';
+      btn.innerHTML = `<span class="loading"><span class="spinner"></span>${L("sending")}</span>`;
 
       try {
         clearPdfUrl();
@@ -2881,11 +3040,11 @@
 
         const backendNotReady = ct.includes("text/html");
         haptic("error");
-        showToast(data.error || (backendNotReady ? L("backendNotReady") : "Error"));
+        showToast(data.error || (backendNotReady ? L("backendNotReady") : L("genericError")));
         return false;
       } catch (err) {
         haptic("error");
-        showToast(err?.message || "Network error");
+        showToast(err?.message || L("networkError"));
         return false;
       } finally {
         btn.disabled = false;
@@ -2921,7 +3080,7 @@
         const ct = (resp.headers.get("content-type") || "").toLowerCase();
         if (!(resp.ok && ct.includes("application/pdf"))) {
           const data = await resp.json().catch(() => ({}));
-          throw new Error(data.error || "PDF is not available");
+          throw new Error(data.error || L("pdfNotAvailable"));
         }
 
         const blob = await resp.blob();
@@ -2947,7 +3106,7 @@
         showToast(L("toastPdfReady"));
       } catch (err) {
         haptic("error");
-        showToast(err?.message || "Network error");
+        showToast(err?.message || L("networkError"));
       }
     }
 
@@ -3006,7 +3165,7 @@
           });
           const data = await resp.json().catch(() => null);
           if (!resp.ok || !data?.ok) {
-            throw new Error(data?.error || "Failed to load history");
+            throw new Error(data?.error || L("failedLoadHistory"));
           }
           return Array.isArray(data.items) ? data.items : [];
         };
@@ -3117,7 +3276,7 @@
         const items = await loadHistory();
         render(items);
       } catch (err) {
-        setForm(`<div class="history-empty">${err?.message || "Failed to load history"}</div>`);
+        setForm(`<div class="history-empty">${err?.message || L("failedLoadHistory")}</div>`);
       }
     }
 
@@ -3289,10 +3448,10 @@
     }
 
     function buildMonthOptions() {
-      const months = [
-        "January","February","March","April","May","June",
-        "July","August","September","October","November","December"
-      ];
+      const locale = currentLang === "ru" ? "ru-RU" : currentLang === "de" ? "de-DE" : "en-US";
+      const months = Array.from({ length: 12 }, (_, i) =>
+        new Intl.DateTimeFormat(locale, { month: "long" }).format(new Date(Date.UTC(2026, i, 1)))
+      );
       return months.map((m, i) => `<option value="${i+1}">${m}</option>`).join("");
     }
 
@@ -3330,7 +3489,7 @@
         const week = Number($("reportWeek").value);
         if (!Number.isFinite(year) || !Number.isFinite(week) || year < 2025 || year > 2030 || week < 1 || week > 53) {
           haptic("error");
-          showToast("Invalid year/week");
+          showToast(L("invalidYearWeek"));
           return;
         }
         await sendReportGenerate("bericht", { year, week });
@@ -3350,14 +3509,14 @@
         setSegments([], "", () => {});
         setForm(`
           <div class="field">
-            <label>Choose report</label>
+            <label>${L("chooseReport")}</label>
             <div class="note">${L("hintDataPlanPlan")}</div>
             <div class="note-actions">
               <button type="button" class="btn btn-primary" id="dataPlanChoosePlan">${L("processPlan")}</button>
             </div>
           </div>
           <div class="field">
-            <label>Choose report</label>
+            <label>${L("chooseReport")}</label>
             <div class="note">${L("hintDataPlanData")}</div>
             <div class="note-actions">
               <button type="button" class="btn btn-primary" id="dataPlanChooseData">${L("processData")}</button>
@@ -3413,7 +3572,7 @@
           const week = Number($("planReportWeek")?.value ?? selectedWeek);
           if (!Number.isFinite(year) || !Number.isFinite(week) || year < 2025 || year > 2030 || week < 1 || week > 53) {
             haptic("error");
-            showToast("Invalid year/week");
+            showToast(L("invalidYearWeek"));
             return;
           }
           const reportType = isPlan ? "data_plan" : "data_data";
@@ -3432,14 +3591,14 @@
         setSegments([], "", () => {});
         setForm(`
           <div class="field">
-            <label>Choose report</label>
+            <label>${L("chooseReport")}</label>
             <div class="note">${L("hintLkw")}</div>
             <div class="note-actions">
               <button type="button" class="btn btn-primary" id="lkwChooseSingle">1 LKW</button>
             </div>
           </div>
           <div class="field">
-            <label>Choose report</label>
+            <label>${L("chooseReport")}</label>
             <div class="note">${L("hintLkw")}</div>
             <div class="note-actions">
               <button type="button" class="btn btn-primary" id="lkwChooseAll">Alle LKW</button>
@@ -3546,21 +3705,21 @@
         setSheetCloseAction("back", backHandler);
         setForm(`
           <div class="field">
-            <label>Choose report</label>
+            <label>${L("chooseReport")}</label>
             <div class="note">${L("hintYfDriverMonth")}</div>
             <div class="note-actions">
               <button type="button" class="btn btn-primary" id="yfChooseDriverMonth">Fahrer / Monat</button>
             </div>
           </div>
           <div class="field">
-            <label>Choose report</label>
+            <label>${L("chooseReport")}</label>
             <div class="note">${L("hintYfLkwWeek")}</div>
             <div class="note-actions">
               <button type="button" class="btn btn-primary" id="yfChooseLkwWeek">LKW / Woche</button>
             </div>
           </div>
           <div class="field">
-            <label>Choose report</label>
+            <label>${L("chooseReport")}</label>
             <div class="note">${L("hintYfLkwMonth")}</div>
             <div class="note-actions">
               <button type="button" class="btn btn-primary" id="yfChooseLkwMonth">LKW / Monat</button>
@@ -3713,14 +3872,14 @@
         setSegments([], "", () => {});
         setForm(`
           <div class="field">
-            <label>Choose report</label>
+            <label>${L("chooseReport")}</label>
             <div class="note">${L("hintEinnahmen")}</div>
             <div class="note-actions">
               <button type="button" class="btn btn-primary" id="einnahmenChooseTotal">Gesamt</button>
             </div>
           </div>
           <div class="field">
-            <label>Choose report</label>
+            <label>${L("chooseReport")}</label>
             <div class="note">${L("hintEinnahmenFirms")}</div>
             <div class="note-actions">
               <button type="button" class="btn btn-primary" id="einnahmenChooseFirms">Firm / Monat</button>
@@ -3784,14 +3943,14 @@
         setSegments([], "", () => {});
         setForm(`
           <div class="field">
-            <label>Choose report</label>
+            <label>${L("chooseReport")}</label>
             <div class="note">${L("hintDiesel")}</div>
             <div class="note-actions">
               <button type="button" class="btn btn-primary" id="dieselChooseSnapshot">Diesel PDF</button>
             </div>
           </div>
           <div class="field">
-            <label>Choose report</label>
+            <label>${L("chooseReport")}</label>
             <div class="note">${L("hintDieselCard")}</div>
             <div class="note-actions">
               <button type="button" class="btn btn-primary" id="dieselChooseCard">LKW Karte</button>
@@ -3863,14 +4022,14 @@
         setSegments([], "", () => {});
         setForm(`
           <div class="field">
-            <label>Choose report</label>
+            <label>${L("chooseReport")}</label>
             <div class="note">${L("hintBonus")}</div>
             <div class="note-actions">
               <button type="button" class="btn btn-primary" id="bonusChooseWhole">${L("wholeYear")}</button>
             </div>
           </div>
           <div class="field">
-            <label>Choose report</label>
+            <label>${L("chooseReport")}</label>
             <div class="note">${L("hintBonus")}</div>
             <div class="note-actions">
               <button type="button" class="btn btn-primary" id="bonusChooseMonth">${L("month")}</button>
@@ -4056,7 +4215,7 @@
 
       const ctx = getTgContext();
       const user = ctx.user || {};
-      const name = user.first_name || user.username || "User";
+      const name = user.first_name || user.username || L("defaultUser");
 
       await setAvatarFromTelegram(user, name, ctx.initData);
       $("welcomeTitle").textContent = `${L("welcome")}`;
