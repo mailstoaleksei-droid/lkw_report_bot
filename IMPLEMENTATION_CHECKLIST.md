@@ -37,11 +37,13 @@
   - ETL verified on live workbook data
 - [x] ETL freshness monitor active (`ETL_STALE_AFTER_HOURS=4`)
 - [x] ETL schedule updated:
-  - Day: hourly (07:00-18:00)
+  - Weekdays: hourly (07:00-18:00)
   - Night periodic ETL disabled to reduce load
   - Source-change watcher disabled by the day schedule installer for strict hourly mode
-  - Freshness monitor limited to 07:00-18:00
+  - Freshness monitor limited to weekdays 07:00-18:00
   - Scheduled task installer applies resilient settings: allow battery starts, start missed runs when available, wake to run
+  - Freshness monitor checks both ETL sources against the hourly weekday SLA and notifies admin `745125435` by Telegram on failure
+  - Unit test covers weekday SLA checks, stale-source detection, morning grace, weekend suppression, and Telegram admin fallback
 - [x] ETL stale lock recovery added:
   - dead PID lock is auto-removed on next run
   - invalid/corrupted lock file is auto-removed

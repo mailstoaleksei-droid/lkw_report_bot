@@ -14,14 +14,14 @@ if not exist "%TASK_CMD%" (
 )
 
 echo Creating ETL freshness monitor task: %TASK_NAME%
-echo Schedule: every 30 minutes, 07:00-18:00
+echo Schedule: weekdays every 30 minutes, 07:00-18:00
 echo Task command: %TASK_CMD_SHORT%
 
-schtasks /Create /F /TN "%TASK_NAME%" /SC DAILY /ST 07:00 /RI 30 /DU 11:00 ^
+schtasks /Create /F /TN "%TASK_NAME%" /SC WEEKLY /D MON,TUE,WED,THU,FRI /ST 07:00 /RI 30 /DU 11:59 ^
  /RL HIGHEST /TR "cmd.exe /c \"\"%TASK_CMD_SHORT%\"\"" >nul 2>&1
 
 if errorlevel 1 (
-    schtasks /Create /F /TN "%TASK_NAME%" /SC DAILY /ST 07:00 /RI 30 /DU 11:00 ^
+    schtasks /Create /F /TN "%TASK_NAME%" /SC WEEKLY /D MON,TUE,WED,THU,FRI /ST 07:00 /RI 30 /DU 11:59 ^
      /RL LIMITED /TR "cmd.exe /c \"\"%TASK_CMD_SHORT%\"\"" >nul 2>&1
 )
 

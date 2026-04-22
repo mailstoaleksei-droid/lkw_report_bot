@@ -17,15 +17,15 @@ if not exist "%TASK_CMD%" (
 )
 
 echo Installing ETL schedules:
-echo   1^) Day: 07:00-18:00 every hour
+echo   1^) Weekdays: 07:00-18:00 every hour
 echo   2^) Night periodic ETL: disabled
 echo Task command: %TASK_CMD_SHORT%
 
 echo Creating day task: %TASK_DAY%
-schtasks /Create /F /TN "%TASK_DAY%" /SC DAILY /ST 07:00 /RI 60 /DU 11:59 ^
+schtasks /Create /F /TN "%TASK_DAY%" /SC WEEKLY /D MON,TUE,WED,THU,FRI /ST 07:00 /RI 60 /DU 11:59 ^
  /RL HIGHEST /TR "cmd.exe /c \"\"%TASK_CMD_SHORT%\"\"" >nul 2>&1
 if errorlevel 1 (
-    schtasks /Create /F /TN "%TASK_DAY%" /SC DAILY /ST 07:00 /RI 60 /DU 11:59 ^
+    schtasks /Create /F /TN "%TASK_DAY%" /SC WEEKLY /D MON,TUE,WED,THU,FRI /ST 07:00 /RI 60 /DU 11:59 ^
      /RL LIMITED /TR "cmd.exe /c \"\"%TASK_CMD_SHORT%\"\"" >nul 2>&1
 )
 if errorlevel 1 (
