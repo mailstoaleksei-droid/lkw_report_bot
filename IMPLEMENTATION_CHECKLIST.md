@@ -39,8 +39,9 @@
 - [x] ETL schedule updated:
   - Day: hourly (07:00-18:00)
   - Night periodic ETL disabled to reduce load
-  - Source-change watcher limited to 07:00-18:00
+  - Source-change watcher disabled by the day schedule installer for strict hourly mode
   - Freshness monitor limited to 07:00-18:00
+  - Scheduled task installer applies resilient settings: allow battery starts, start missed runs when available, wake to run
 - [x] ETL stale lock recovery added:
   - dead PID lock is auto-removed on next run
   - invalid/corrupted lock file is auto-removed

@@ -9,6 +9,7 @@ if not defined TASK_CMD_SHORT set "TASK_CMD_SHORT=%TASK_CMD%"
 
 set "TASK_DAY=LKW_Report_Bot_ETL_DayHourly"
 set "TASK_NIGHT=LKW_Report_Bot_ETL_Night3h"
+set "TASK_WATCH=LKW_Report_Bot_ETL_OnSourceChange"
 
 if not exist "%TASK_CMD%" (
     echo FAILED: Task command not found: %TASK_CMD%
@@ -38,6 +39,20 @@ if errorlevel 1 (
     echo INFO: Night ETL task not found or could not be changed.
 ) else (
     echo OK: Night ETL task disabled.
+)
+
+echo Disabling source-change ETL task for strict hourly schedule: %TASK_WATCH%
+schtasks /Change /TN "%TASK_WATCH%" /DISABLE >nul 2>&1
+if errorlevel 1 (
+    echo INFO: Source-change ETL task not found or could not be changed.
+) else (
+    echo OK: Source-change ETL task disabled.
+)
+
+echo Applying resilient task settings: allow battery starts, start when available, wake to run
+powershell -NoProfile -ExecutionPolicy Bypass -File "%~dp0set_etl_task_settings.ps1" -TaskName "%TASK_DAY%"
+if errorlevel 1 (
+    echo WARN: Could not apply resilient task settings. Run this script as administrator if needed.
 )
 
 echo OK: ETL day task created.

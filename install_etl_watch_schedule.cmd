@@ -31,6 +31,10 @@ if errorlevel 1 (
 )
 
 echo OK: ETL watch task created.
+powershell -NoProfile -ExecutionPolicy Bypass -File "%~dp0set_etl_task_settings.ps1" -TaskName "%TASK_NAME%"
+if errorlevel 1 (
+    echo WARN: Could not apply resilient task settings. Run this script as administrator if needed.
+)
 schtasks /Query /TN "%TASK_NAME%" /FO LIST /V
 
 echo Running watcher once now...
