@@ -2064,7 +2064,7 @@
         descContainer: "weekly LKW work schedule report",
         descDataPlan: "driver and LKW work schedule reports",
         descLkw: "current LKW fleet data",
-        descFahrer: "current driver list",
+        descFahrer: "driver reports and weekly vacation/sick summary",
         descYf: "reports with driver and LKW work data",
         descEinnahmen: "reports on company and partner company results",
         descDiesel: "diesel reports",
@@ -2077,7 +2077,10 @@
         // Sheet headers
         hintContainer: "weekly LKW work schedule report",
         hintLkw: "current LKW fleet data",
-        hintFahrer: "current driver list",
+        hintFahrer: "driver reports and weekly vacation/sick summary",
+        hintFahrerAll: "All drivers data from sheet Fahrer with vacation and sick weeks summary",
+        fahrerAllTitle: "All Fahrer Data",
+        fahrerAllButton: "All Fahrer Data",
         hintYf: "reports with driver and LKW work data",
         hintYfMenu: "reports with driver and LKW work data",
         hintYfDriverMonth: "Select month and driver to generate monthly Yellow Fox driver metrics",
@@ -2189,7 +2192,7 @@
         descContainer: "Bericht zum LKW-Arbeitsplan nach Wochen",
         descDataPlan: "Berichte zum Arbeitsplan von Fahrern und LKW",
         descLkw: "aktuelle Daten zum LKW-Fuhrpark",
-        descFahrer: "aktuelle Fahrerliste",
+        descFahrer: "Fahrerberichte sowie Wochenuebersicht zu Urlaub und Krankheit",
         descYf: "Berichte mit Arbeitsdaten von Fahrern und LKW",
         descEinnahmen: "Berichte zu Ergebnissen der Firma und Partnerfirmen",
         descDiesel: "Dieselberichte",
@@ -2202,7 +2205,10 @@
         // Sheet headers
         hintContainer: "Bericht zum LKW-Arbeitsplan nach Wochen",
         hintLkw: "aktuelle Daten zum LKW-Fuhrpark",
-        hintFahrer: "aktuelle Fahrerliste",
+        hintFahrer: "Fahrerberichte sowie Wochenuebersicht zu Urlaub und Krankheit",
+        hintFahrerAll: "Alle Fahrerdaten aus Blatt Fahrer mit Uebersicht zu Urlaub und Krankheit nach Wochen",
+        fahrerAllTitle: "Daten aller Fahrer",
+        fahrerAllButton: "Daten aller Fahrer",
         hintYf: "Berichte mit Arbeitsdaten von Fahrern und LKW",
         hintYfMenu: "Berichte mit Arbeitsdaten von Fahrern und LKW",
         hintYfDriverMonth: "Monat und Fahrer für monatliche Yellow-Fox-Fahrerkennzahlen auswählen",
@@ -2314,7 +2320,7 @@
         descContainer: "отчет по графику работы LKW по неделям",
         descDataPlan: "отчеты по графику работы водителей и LKW",
         descLkw: "актуальные данные по парку LKW",
-        descFahrer: "актуальный список водителей",
+        descFahrer: "отчеты по водителям и недельная сводка по отпускам и больничным",
         descYf: "отчеты с данными по работе водителей и LKW",
         descEinnahmen: "отчеты о результатах компании и фирм партнеров",
         descDiesel: "отчеты по дизелю",
@@ -2327,7 +2333,10 @@
         // Sheet headers
         hintContainer: "отчет по графику работы LKW по неделям",
         hintLkw: "актуальные данные по парку LKW",
-        hintFahrer: "актуальный список водителей",
+        hintFahrer: "отчеты по водителям и недельная сводка по отпускам и больничным",
+        hintFahrerAll: "Все данные водителей с листа Fahrer и сводка по отпускам и больничным по неделям",
+        fahrerAllTitle: "Данные всех Fahrer",
+        fahrerAllButton: "Данные всех Fahrer",
         hintYf: "отчеты с данными по работе водителей и LKW",
         hintYfMenu: "отчеты с данными по работе водителей и LKW",
         hintYfDriverMonth: "Выберите месяц и водителя для PDF с месячными показателями Yellow Fox",
@@ -2599,6 +2608,9 @@
           initData || "",
           disposition,
         );
+      }
+      if (type === "fahrer_all") {
+        return buildGenerateDirectUrl("fahrer_all", {}, initData || "", disposition);
       }
 
       const dockKind = item?.dock_kind || {
@@ -3656,38 +3668,43 @@
     }
 
     function openFahrer(backHandler = closeSheet) {
-      let active = "data";
-      const tabs = [
-        { key:"data", label: L("tabDriverData") },
-        { key:"urlaub", label: L("tabUrlaub") },
-      ];
-
-      const render = () => {
-        setSheetHeader(`Fahrer - ${active === "data" ? L("tabDriverData") : L("tabUrlaub")}`, L("hintFahrer"), "Params");
+      const renderMenu = () => {
+        setSheetHeader("Fahrer", L("hintFahrer"), "PDF");
         setSheetCloseAction("back", backHandler);
-        setSegments(tabs, active, (k) => { active = k; render(); });
-
+        setSegments([], "", () => {});
         setForm(`
           <div class="field">
-            <label>${L("driver")}</label>
-            <select id="driverSel">${optionsFrom(DEMO_DRIVERS, L("choose"))}</select>
+            <div class="note">${L("hintFahrerAll")}</div>
+            <div class="note-actions">
+              <button type="button" class="btn btn-primary" id="fahrerChooseAll">${L("fahrerAllButton")}</button>
+            </div>
           </div>
         `);
         setNote("");
+        hideSheetFooter();
+        $("fahrerChooseAll").onclick = () => renderAllDrivers();
+      };
 
-        $("btnPrimary").textContent = L("send");
-        $("btnPrimary").onclick = () => {
-          const d = $("driverSel").value;
-          if (!d) return haptic("error");
-          sendToBot({
-            action:"report",
-            report: active === "data" ? "fahrer_data" : "fahrer_urlaub",
-            driver: d
-          });
+      const renderAllDrivers = () => {
+        setSheetHeader(`Fahrer - ${L("fahrerAllTitle")}`, L("hintFahrerAll"), "PDF");
+        setSheetCloseAction("back", renderMenu);
+        setSegments([], "", () => {});
+        setForm(`
+          <div class="field">
+            <div class="note">${L("hintFahrerAll")}</div>
+            <div class="note-actions">
+              <button type="button" class="btn btn-primary" id="fahrerAllRun">${L("generate")}</button>
+            </div>
+          </div>
+        `);
+        setNote("");
+        hideSheetFooter();
+        $("fahrerAllRun").onclick = async () => {
+          await sendReportGenerate("fahrer_all", {});
         };
       };
 
-      render();
+      renderMenu();
       openSheet();
     }
 
@@ -4124,7 +4141,7 @@
         container: () => openContainer(backHandler),
         "data-plan": () => openDataPlan(backHandler),
         lkw: () => openLkw(backHandler),
-        fahrer: comingSoon,
+        fahrer: () => openFahrer(backHandler),
         yf: () => openYf(backHandler),
         einnahmen: () => openEinnahmen(backHandler),
         diesel: () => openDiesel(backHandler),

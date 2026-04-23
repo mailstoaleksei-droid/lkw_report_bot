@@ -281,6 +281,22 @@ class DriverRow:
 
 
 @dataclass
+class FahrerWeekStatusRow:
+    report_year: int
+    iso_week: int
+    week_start: date
+    week_end: date
+    fahrer_id: str
+    fahrer_name: str
+    company_name: str | None
+    status_entlassen: str | None
+    datum_entlassen: date | None
+    week_code: str
+    is_active_in_week: bool
+    raw_payload: dict[str, object]
+
+
+@dataclass
 class EinnahmenMonthRow:
     month_index: int
     month_name: str
@@ -439,6 +455,22 @@ def extract_drivers(wb) -> list[DriverRow]:
     col_phone = _pick_col(index, "Telefonnummer", "Phone")
     col_status = _pick_col(index, "Status", "Active/Fired")
 
+    year_headers = _effective_header_values(ws, max(1, header_row_idx - 1))
+    vacation_cols_by_year: dict[int, int] = {}
+    sick_cols_by_year: dict[int, int] = {}
+    for i, label in enumerate(header):
+        report_year = _parse_strict_positive_int(year_headers[i]) if i < len(year_headers) else None
+        if not report_year or report_year < 2020 or report_year > 2100:
+            continue
+        label_norm = _norm(label)
+        if label_norm == _norm("Urlaub gesamt"):
+            vacation_cols_by_year[report_year] = i
+        elif label_norm == _norm("Krankheitstage"):
+            sick_cols_by_year[report_year] = i
+    totals_year = max([*vacation_cols_by_year.keys(), *sick_cols_by_year.keys()], default=None)
+    col_vacation_total = vacation_cols_by_year.get(totals_year) if totals_year else None
+    col_sick_days = sick_cols_by_year.get(totals_year) if totals_year else None
+
     rows: list[DriverRow] = []
     for row in _iter_sheet_rows(ws, header_row_idx):
         if col_id is None or col_name is None:
@@ -459,6 +491,17 @@ def extract_drivers(wb) -> list[DriverRow]:
             _clean_text(row[i]) if i < len(row) else None
             for i in range(len(header))
         }
+        if totals_year:
+            payload[f"Urlaub gesamt {totals_year}"] = (
+                _clean_text(row[col_vacation_total])
+                if col_vacation_total is not None and col_vacation_total < len(row)
+                else None
+            )
+            payload[f"Krankheitstage {totals_year}"] = (
+                _clean_text(row[col_sick_days])
+                if col_sick_days is not None and col_sick_days < len(row)
+                else None
+            )
 
         rows.append(
             DriverRow(
@@ -471,6 +514,83 @@ def extract_drivers(wb) -> list[DriverRow]:
             )
         )
     return rows
+
+
+def _normalize_fahrer_week_code(value: object) -> str:
+    raw = str(value or "").strip().upper()
+    if raw == "К":
+        return "K"
+    if raw in {"U", "K"}:
+        return raw
+    return ""
+
+
+def extract_fahrer_weekly_statuses(wb) -> list[FahrerWeekStatusRow]:
+    ws = wb["Fahrer"]
+    header_row_idx = _find_header_row(ws, REQUIRED_DRIVER_KEYS)
+    header = _get_row_values(ws, header_row_idx)
+    index = _build_col_index(header)
+
+    year_headers = _effective_header_values(ws, header_row_idx)
+    sub_headers = _get_row_values(ws, header_row_idx + 1)
+
+    col_id = _pick_col(index, "Fahrer-ID", "ID")
+    col_name = _pick_col(index, "Fahrername", "Name")
+    col_company = _pick_col(index, "Firma", "Company")
+    col_status = _pick_col(index, "Status", "Active/Fired")
+    col_dismiss = _pick_col(index, "Datum entlassen", "Date")
+
+    week_columns: list[tuple[int, int, int]] = []
+    for col_idx in range(1, int(ws.max_column or 0) + 1):
+        report_year = _parse_strict_positive_int(year_headers[col_idx - 1]) if col_idx - 1 < len(year_headers) else None
+        iso_week = _parse_strict_positive_int(sub_headers[col_idx - 1]) if col_idx - 1 < len(sub_headers) else None
+        if not report_year or report_year < 2020 or report_year > 2100 or not iso_week or iso_week < 1 or iso_week > 53:
+            continue
+        week_columns.append((col_idx - 1, report_year, iso_week))
+
+    if col_id is None or col_name is None or not week_columns:
+        return []
+
+    rows: list[FahrerWeekStatusRow] = []
+    for row_idx, row in enumerate(_iter_sheet_rows(ws, header_row_idx), start=header_row_idx + 1):
+        if col_id >= len(row) or col_name >= len(row):
+            continue
+        fahrer_id = _clean_text(row[col_id])
+        fahrer_name = _clean_text(row[col_name])
+        if not fahrer_id or not fahrer_name or not fahrer_id.upper().startswith("F"):
+            continue
+
+        company_name = _clean_text(row[col_company]) if col_company is not None and col_company < len(row) else None
+        status_entlassen = _clean_text(row[col_status]) if col_status is not None and col_status < len(row) else None
+        datum_entlassen = _parse_date(row[col_dismiss]) if col_dismiss is not None and col_dismiss < len(row) else None
+
+        for zero_based_col, report_year, iso_week in week_columns:
+            week_start = date.fromisocalendar(report_year, iso_week, 1)
+            week_end = date.fromisocalendar(report_year, iso_week, 7)
+            week_code = _normalize_fahrer_week_code(row[zero_based_col] if zero_based_col < len(row) else None)
+            is_active_in_week = datum_entlassen is None or datum_entlassen > week_start
+            rows.append(
+                FahrerWeekStatusRow(
+                    report_year=report_year,
+                    iso_week=iso_week,
+                    week_start=week_start,
+                    week_end=week_end,
+                    fahrer_id=fahrer_id,
+                    fahrer_name=fahrer_name,
+                    company_name=company_name,
+                    status_entlassen=status_entlassen,
+                    datum_entlassen=datum_entlassen,
+                    week_code=week_code,
+                    is_active_in_week=is_active_in_week,
+                    raw_payload={
+                        "sheet": "Fahrer",
+                        "row": row_idx,
+                        "column": zero_based_col + 1,
+                    },
+                )
+            )
+
+    return sorted(rows, key=lambda r: (r.report_year, r.iso_week, r.fahrer_id.upper()))
 
 
 def extract_einnahmen_months(wb) -> list[EinnahmenMonthRow]:
@@ -710,6 +830,30 @@ def _find_first_diesel_column(top_headers: list[str], sub_headers: list[str], to
 def _parse_int_like(value: object) -> int | None:
     parsed = _parse_decimal(value)
     out = int(parsed.to_integral_value(rounding=ROUND_HALF_UP))
+    return out if out > 0 else None
+
+
+def _parse_strict_positive_int(value: object) -> int | None:
+    if value is None:
+        return None
+    if isinstance(value, bool):
+        return None
+    if isinstance(value, int):
+        return value if value > 0 else None
+    if isinstance(value, Decimal):
+        if value != value.to_integral_value(rounding=ROUND_HALF_UP):
+            return None
+        out = int(value)
+        return out if out > 0 else None
+    if isinstance(value, float):
+        if not value.is_integer():
+            return None
+        out = int(value)
+        return out if out > 0 else None
+    raw = str(value).strip()
+    if not raw or not re.fullmatch(r"\d{1,4}", raw):
+        return None
+    out = int(raw)
     return out if out > 0 else None
 
 
@@ -1180,6 +1324,35 @@ def _ensure_yf_lkw_table(cur) -> None:
     )
 
 
+def _ensure_fahrer_weekly_status_table(cur) -> None:
+    cur.execute(
+        """
+        CREATE TABLE IF NOT EXISTS report_fahrer_weekly_status (
+            report_year SMALLINT NOT NULL CHECK (report_year BETWEEN 2020 AND 2100),
+            iso_week SMALLINT NOT NULL CHECK (iso_week BETWEEN 1 AND 53),
+            week_start DATE NOT NULL,
+            week_end DATE NOT NULL,
+            fahrer_id TEXT NOT NULL,
+            fahrer_name TEXT NOT NULL,
+            company_name TEXT,
+            status_entlassen TEXT,
+            datum_entlassen DATE,
+            week_code TEXT NOT NULL DEFAULT '',
+            is_active_in_week BOOLEAN NOT NULL DEFAULT TRUE,
+            raw_payload JSONB NOT NULL DEFAULT '{}'::jsonb,
+            updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+            PRIMARY KEY (report_year, iso_week, fahrer_id)
+        )
+        """
+    )
+    cur.execute(
+        """
+        CREATE INDEX IF NOT EXISTS idx_report_fahrer_weekly_status_lookup
+            ON report_fahrer_weekly_status (report_year, iso_week, week_code, is_active_in_week)
+        """
+    )
+
+
 def run_etl(database_url: str, xlsm_path: Path) -> dict[str, int]:
     psycopg = _lazy_import_psycopg()
     created_copy = False
@@ -1204,6 +1377,7 @@ def run_etl(database_url: str, xlsm_path: Path) -> dict[str, int]:
             wb = openpyxl.load_workbook(readable_path, read_only=True, data_only=True, keep_vba=False)
             trucks = extract_trucks(wb)
             drivers = extract_drivers(wb)
+            fahrer_weekly_rows = extract_fahrer_weekly_statuses(wb)
             einnahmen_rows = extract_einnahmen_months(wb)
             einnahmen_firm_rows = extract_einnahmen_firm_rows(wb)
             bonus_rows = extract_bonus_dynamik_months(wb)
@@ -1231,6 +1405,7 @@ def run_etl(database_url: str, xlsm_path: Path) -> dict[str, int]:
                 _ensure_diesel_table(cur)
                 _ensure_yf_fahrer_table(cur)
                 _ensure_yf_lkw_table(cur)
+                _ensure_fahrer_weekly_status_table(cur)
 
                 rows_inserted = 0
                 rows_updated = 0
@@ -1301,6 +1476,45 @@ def run_etl(database_url: str, xlsm_path: Path) -> dict[str, int]:
                     inserted = bool(cur.fetchone()[0])
                     rows_inserted += 1 if inserted else 0
                     rows_updated += 0 if inserted else 1
+
+                cur.execute("DELETE FROM report_fahrer_weekly_status")
+                rows_deleted += int(cur.rowcount or 0)
+                for rec in fahrer_weekly_rows:
+                    cur.execute(
+                        """
+                        INSERT INTO report_fahrer_weekly_status (
+                            report_year,
+                            iso_week,
+                            week_start,
+                            week_end,
+                            fahrer_id,
+                            fahrer_name,
+                            company_name,
+                            status_entlassen,
+                            datum_entlassen,
+                            week_code,
+                            is_active_in_week,
+                            raw_payload,
+                            updated_at
+                        )
+                        VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s::jsonb, NOW())
+                        """,
+                        (
+                            rec.report_year,
+                            rec.iso_week,
+                            rec.week_start,
+                            rec.week_end,
+                            rec.fahrer_id,
+                            rec.fahrer_name,
+                            rec.company_name,
+                            rec.status_entlassen,
+                            rec.datum_entlassen,
+                            rec.week_code,
+                            rec.is_active_in_week,
+                            json.dumps(rec.raw_payload, ensure_ascii=False, default=str),
+                        ),
+                    )
+                    rows_inserted += 1
 
                 cur.execute("DELETE FROM report_einnahmen_monthly")
                 rows_deleted += int(cur.rowcount or 0)
@@ -1556,7 +1770,7 @@ def run_etl(database_url: str, xlsm_path: Path) -> dict[str, int]:
                     WHERE id = %s
                     """,
                     (
-                        len(trucks) + len(drivers) + len(einnahmen_rows) + len(einnahmen_firm_rows) + len(bonus_rows) + len(diesel_rows) + len(yf_fahrer_rows) + len(yf_lkw_rows),
+                        len(trucks) + len(drivers) + len(fahrer_weekly_rows) + len(einnahmen_rows) + len(einnahmen_firm_rows) + len(bonus_rows) + len(diesel_rows) + len(yf_fahrer_rows) + len(yf_lkw_rows),
                         rows_inserted,
                         rows_updated,
                         rows_deleted,
@@ -1565,6 +1779,7 @@ def run_etl(database_url: str, xlsm_path: Path) -> dict[str, int]:
                                 "companies": len(company_names),
                                 "trucks": len(trucks),
                                 "drivers": len(drivers),
+                                "fahrer_weekly_rows": len(fahrer_weekly_rows),
                                 "einnahmen_months": len(einnahmen_rows),
                                 "einnahmen_firms": len(einnahmen_firm_rows),
                                 "bonus_rows": len(bonus_rows),
@@ -1584,6 +1799,7 @@ def run_etl(database_url: str, xlsm_path: Path) -> dict[str, int]:
                 "companies": len(company_names),
                 "trucks": len(trucks),
                 "drivers": len(drivers),
+                "fahrer_weekly_rows": len(fahrer_weekly_rows),
                 "einnahmen_months": len(einnahmen_rows),
                 "einnahmen_firms": len(einnahmen_firm_rows),
                 "bonus_rows": len(bonus_rows),
@@ -1631,6 +1847,7 @@ def main() -> int:
     print(
         f"ETL success: companies={result['companies']} "
         f"trucks={result['trucks']} drivers={result['drivers']} "
+        f"fahrer_weekly_rows={result['fahrer_weekly_rows']} "
         f"einnahmen_months={result['einnahmen_months']} "
         f"einnahmen_firms={result['einnahmen_firms']} "
         f"bonus_rows={result['bonus_rows']} "

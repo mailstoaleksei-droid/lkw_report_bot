@@ -35,6 +35,11 @@
   - tables: `report_yf_fahrer_monthly`, `report_yf_lkw_daily`
   - parser + Worker integration active
   - ETL verified on live workbook data
+- [x] ETL import for Fahrer weekly vacation/sick status added:
+  - table: `report_fahrer_weekly_status`
+  - source: sheet `Fahrer`, weekly columns `AH:CG`
+  - codes: `U` = Urlaub, `K` / `К` = Krankheit
+  - inactive drivers are excluded from weekly summary from their dismissal week
 - [x] ETL freshness monitor active (`ETL_STALE_AFTER_HOURS=4`)
 - [x] ETL schedule updated:
   - Weekdays: hourly (07:00-18:00)
@@ -91,6 +96,11 @@
     - sold truck -> grey
     - `Container` -> light brown
     - `Planen` -> light violet
+- [x] `Fahrer`
+  - report 1: `Daten aller Fahrer` / `Данные всех Fahrer`
+  - source: sheet `Fahrer` via SQL tables `drivers` and `report_fahrer_weekly_status`
+  - PDF includes centered master table from columns `A-I`, vacation/sick totals from `Z-AA`, weekly vacation/sick spans, and weekly summary
+  - dismissed drivers are excluded from weekly summary from the dismissal week
 - [x] `Yellow Fox`
   - report 1: driver/month from `YF_Fahrer`
     - params: `month`, `Fahrer`

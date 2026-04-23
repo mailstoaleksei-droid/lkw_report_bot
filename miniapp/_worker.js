@@ -342,6 +342,22 @@ const REPORTS = [
     params: [],
   },
   {
+    id: "fahrer_all",
+    enabled: true,
+    icon: "drivers",
+    name: {
+      en: "Fahrer (All Drivers Data)",
+      ru: "Fahrer (данные всех водителей)",
+      de: "Fahrer (Daten aller Fahrer)",
+    },
+    description: {
+      en: "All drivers master data with weekly vacation and sick summary from sheet Fahrer",
+      ru: "Все водители: мастер-данные и недельная сводка по отпуску и больничному с листа Fahrer",
+      de: "Alle Fahrer: Stammdaten sowie Wochenuebersicht zu Urlaub und Krankheit aus Blatt Fahrer",
+    },
+    params: [],
+  },
+  {
     id: "tankkarten",
     enabled: false,
     icon: "fuel",
@@ -872,6 +888,70 @@ LEFT JOIN companies c ON c.id = d.company_id
 ORDER BY d.external_id;
 `;
 
+const FAHRER_ALL_SQL = `
+WITH report_year_ref AS (
+  SELECT COALESCE(MAX(report_year), EXTRACT(ISOYEAR FROM CURRENT_DATE)::int) AS report_year
+  FROM report_fahrer_weekly_status
+)
+SELECT
+  r.report_year,
+  d.external_id AS fahrer_id,
+  d.full_name AS fahrername,
+  COALESCE(NULLIF(c.name, ''), NULLIF(d.raw_payload->>'Firma', ''), NULLIF(d.raw_payload->>'Company', '')) AS firma,
+  COALESCE(NULLIF(d.phone, ''), NULLIF(d.raw_payload->>'Telefonnummer', ''), NULLIF(d.raw_payload->>'Phone', '')) AS telefonnummer,
+  COALESCE(NULLIF(d.raw_payload->>'LKW-Typ', ''), NULLIF(d.raw_payload->>'Type', '')) AS lkw_typ,
+  COALESCE(NULLIF(d.raw_payload->>'Arbeitsplan', ''), NULLIF(d.raw_payload->>'Schedule', '')) AS arbeitsplan,
+  COALESCE(NULLIF(d.raw_payload->>'Status', ''), NULLIF(d.raw_payload->>'Active/Fired', '')) AS status_entlassen,
+  COALESCE(NULLIF(d.raw_payload->>'Datum entlassen', ''), NULLIF(d.raw_payload->>'Date', '')) AS datum_entlassen,
+  COALESCE(NULLIF(d.raw_payload->>('Urlaub gesamt ' || r.report_year::text), ''), NULLIF(d.raw_payload->>'Urlaub gesamt', ''), NULLIF(d.raw_payload->>'Total vacation', ''), '0') AS urlaub_gesamt,
+  COALESCE(NULLIF(d.raw_payload->>('Krankheitstage ' || r.report_year::text), ''), NULLIF(d.raw_payload->>'Krankheitstage', ''), NULLIF(d.raw_payload->>'Sick Days', ''), '0') AS krankheitstage
+FROM drivers d
+CROSS JOIN report_year_ref r
+LEFT JOIN companies c ON c.id = d.company_id
+ORDER BY d.external_id;
+`;
+
+const FAHRER_WEEKLY_STATUS_SQL = `
+WITH report_year_ref AS (
+  SELECT COALESCE(MAX(report_year), EXTRACT(ISOYEAR FROM CURRENT_DATE)::int) AS report_year
+  FROM report_fahrer_weekly_status
+)
+SELECT
+  s.report_year,
+  s.iso_week,
+  to_char(s.week_start, 'DD/MM/YYYY') AS week_start,
+  to_char(s.week_end, 'DD/MM/YYYY') AS week_end,
+  s.fahrer_id,
+  s.fahrer_name,
+  COALESCE(s.company_name, '') AS company_name,
+  COALESCE(s.status_entlassen, '') AS status_entlassen,
+  to_char(s.datum_entlassen, 'DD/MM/YYYY') AS datum_entlassen,
+  COALESCE(s.week_code, '') AS week_code,
+  s.is_active_in_week
+FROM report_fahrer_weekly_status s
+JOIN report_year_ref r ON r.report_year = s.report_year
+ORDER BY s.fahrer_id, s.iso_week;
+`;
+
+const FAHRER_WEEKLY_SUMMARY_SQL = `
+WITH report_year_ref AS (
+  SELECT COALESCE(MAX(report_year), EXTRACT(ISOYEAR FROM CURRENT_DATE)::int) AS report_year
+  FROM report_fahrer_weekly_status
+)
+SELECT
+  s.report_year,
+  s.iso_week,
+  to_char(s.week_start, 'DD/MM/YYYY') AS week_start,
+  to_char(s.week_end, 'DD/MM/YYYY') AS week_end,
+  COUNT(*) FILTER (WHERE s.is_active_in_week)::int AS total_drivers,
+  COUNT(*) FILTER (WHERE s.is_active_in_week AND upper(COALESCE(s.week_code, '')) = 'U')::int AS vacation_drivers,
+  COUNT(*) FILTER (WHERE s.is_active_in_week AND upper(replace(COALESCE(s.week_code, ''), 'К', 'K')) = 'K')::int AS sick_drivers
+FROM report_fahrer_weekly_status s
+JOIN report_year_ref r ON r.report_year = s.report_year
+GROUP BY s.report_year, s.iso_week, s.week_start, s.week_end
+ORDER BY s.iso_week;
+`;
+
 function toBool(value, defaultValue = false) {
   if (typeof value !== "string") return defaultValue;
   const v = value.trim().toLowerCase();
@@ -1227,6 +1307,14 @@ function makeBonusFilename(year, month, at = new Date(), period = "month") {
     return `bonus_${y}_${pad2(m)}.pdf`;
   }
   return `bonus_${formatUtcDateStamp(at)}.pdf`;
+}
+
+function makeFahrerAllFilename(reportYear, at = new Date()) {
+  const y = Number.parseInt(String(reportYear), 10);
+  if (Number.isFinite(y) && y > 0) {
+    return `fahrer_all_${y}.pdf`;
+  }
+  return `fahrer_all_${formatUtcDateStamp(at)}.pdf`;
 }
 
 function makeDockFilename(kind, at = new Date()) {
@@ -5629,6 +5717,313 @@ async function buildLkwMasterPdfWithPdfLib({ userId, rows, title }) {
   return pdfDoc.save();
 }
 
+function normalizeFahrerWeekCode(value) {
+  const raw = safeText(value, "").trim().toUpperCase();
+  if (raw === "U") return "U";
+  if (raw === "K" || raw === "К") return "K";
+  return "";
+}
+
+function buildFahrerWeekSpans(rows, targetCode) {
+  const grouped = new Map();
+  for (const row of rows || []) {
+    const code = normalizeFahrerWeekCode(row?.week_code);
+    if (code !== targetCode || !toBoolish(row?.is_active_in_week)) continue;
+    const key = `${safeText(row?.fahrer_id, "")}__${safeText(row?.fahrer_name, "")}`;
+    if (!grouped.has(key)) grouped.set(key, []);
+    grouped.get(key).push({
+      report_year: toIntSafe(row?.report_year, 0),
+      iso_week: toIntSafe(row?.iso_week, 0),
+      week_start: safeText(row?.week_start, ""),
+      week_end: safeText(row?.week_end, ""),
+      fahrer_id: safeText(row?.fahrer_id, ""),
+      fahrer_name: safeText(row?.fahrer_name, ""),
+      company_name: safeText(row?.company_name, ""),
+    });
+  }
+
+  const spans = [];
+  for (const items of grouped.values()) {
+    items.sort((a, b) => (a.report_year - b.report_year) || (a.iso_week - b.iso_week));
+    let start = null;
+    let prev = null;
+    for (const item of items) {
+      const contiguous = prev
+        && item.report_year === prev.report_year
+        && item.iso_week === prev.iso_week + 1;
+      if (!start || !contiguous) {
+        if (start && prev) {
+          spans.push({
+            fahrer_id: start.fahrer_id,
+            fahrer_name: start.fahrer_name,
+            company_name: start.company_name,
+            weeks_label: start.iso_week === prev.iso_week ? `W${pad2(start.iso_week)}` : `W${pad2(start.iso_week)}-${pad2(prev.iso_week)}`,
+            from_label: start.week_start,
+            to_label: prev.week_end,
+          });
+        }
+        start = item;
+      }
+      prev = item;
+    }
+    if (start && prev) {
+      spans.push({
+        fahrer_id: start.fahrer_id,
+        fahrer_name: start.fahrer_name,
+        company_name: start.company_name,
+        weeks_label: start.iso_week === prev.iso_week ? `W${pad2(start.iso_week)}` : `W${pad2(start.iso_week)}-${pad2(prev.iso_week)}`,
+        from_label: start.week_start,
+        to_label: prev.week_end,
+      });
+    }
+  }
+
+  spans.sort((a, b) => {
+    const idDiff = safeText(a.fahrer_id, "").localeCompare(safeText(b.fahrer_id, ""));
+    if (idDiff) return idDiff;
+    return safeText(a.from_label, "").localeCompare(safeText(b.from_label, ""));
+  });
+  return spans;
+}
+
+async function buildFahrerAllPdfWithPdfLib({ userId, reportYear, masterRows, weeklyRows, weeklySummaryRows }) {
+  const pdfDoc = await PDFDocument.create();
+  const font = await pdfDoc.embedFont(StandardFonts.Helvetica);
+  const boldFont = await pdfDoc.embedFont(StandardFonts.HelveticaBold);
+
+  const pageSize = [842, 595];
+  const margin = 22;
+  const textColor = rgb(0.08, 0.14, 0.24);
+  const mutedColor = rgb(0.24, 0.3, 0.4);
+  const borderColor = rgb(0.74, 0.8, 0.9);
+  const headerBg = rgb(0.93, 0.96, 1);
+  const oddBg = rgb(0.985, 0.99, 1);
+  const inactiveBg = rgb(0.9, 0.9, 0.9);
+
+  const effectiveYear = toIntSafe(reportYear, new Date().getUTCFullYear());
+  const vacationSpans = buildFahrerWeekSpans(weeklyRows, "U");
+  const sickSpans = buildFahrerWeekSpans(weeklyRows, "K");
+
+  let page = pdfDoc.addPage(pageSize);
+  let y = page.getHeight() - margin;
+
+  const drawPageHeader = () => {
+    page.drawText(`Fahrer - Daten aller Fahrer (${effectiveYear})`, {
+      x: margin,
+      y,
+      size: 13,
+      font: boldFont,
+      color: textColor,
+    });
+    y -= 16;
+    page.drawText(`Sheet Fahrer | Generated: ${new Date().toISOString()} UTC | User: ${userId}`, {
+      x: margin,
+      y,
+      size: 8,
+      font,
+      color: mutedColor,
+    });
+    y -= 14;
+  };
+
+  const drawSectionTitle = (title) => {
+    page.drawText(title, {
+      x: margin,
+      y,
+      size: 10,
+      font: boldFont,
+      color: textColor,
+    });
+    y -= 14;
+  };
+
+  const drawCenteredTable = (title, columns, rows, opts = {}) => {
+    const rowHeight = opts.rowHeight || 14;
+    const textSize = opts.textSize || 8;
+    const tableX = margin;
+    const tableWidth = columns.reduce((sum, col) => sum + col.width, 0);
+    const rowFill = typeof opts.rowFill === "function" ? opts.rowFill : null;
+
+    const drawHeaderRow = () => {
+      page.drawRectangle({
+        x: tableX,
+        y: y - rowHeight + 2,
+        width: tableWidth,
+        height: rowHeight,
+        color: headerBg,
+        borderColor,
+        borderWidth: 1,
+      });
+      let x = tableX;
+      for (const col of columns) {
+        const label = fitTextToWidth(boldFont, col.label, textSize, col.width - 8);
+        const labelWidth = measureTextWidth(boldFont, label, textSize);
+        page.drawText(label, {
+          x: x + Math.max(4, (col.width - labelWidth) / 2),
+          y: y - 9,
+          size: textSize,
+          font: boldFont,
+          color: textColor,
+        });
+        x += col.width;
+        if (x < tableX + tableWidth - 0.5) {
+          page.drawLine({
+            start: { x, y: y - rowHeight + 2 },
+            end: { x, y: y + 2 },
+            thickness: 0.8,
+            color: borderColor,
+          });
+        }
+      }
+      y -= rowHeight;
+    };
+
+    const nextPage = () => {
+      page = pdfDoc.addPage(pageSize);
+      y = page.getHeight() - margin;
+      drawPageHeader();
+      drawSectionTitle(title);
+      drawHeaderRow();
+    };
+
+    const ensureSpace = (needed) => {
+      if (y - needed >= margin) return;
+      nextPage();
+    };
+
+    ensureSpace(26);
+    drawSectionTitle(title);
+    drawHeaderRow();
+
+    if (!Array.isArray(rows) || rows.length === 0) {
+      ensureSpace(20);
+      page.drawText("No rows found.", {
+        x: margin,
+        y: y - 10,
+        size: 9,
+        font,
+        color: textColor,
+      });
+      y -= 18;
+      return;
+    }
+
+    rows.forEach((row, idx) => {
+      ensureSpace(rowHeight + 2);
+      const fill = rowFill ? rowFill(row, idx) : (idx % 2 === 1 ? oddBg : null);
+      if (fill) {
+        page.drawRectangle({
+          x: tableX,
+          y: y - rowHeight + 2,
+          width: tableWidth,
+          height: rowHeight,
+          color: fill,
+        });
+      }
+      let x = tableX;
+      for (const col of columns) {
+        const value = fitTextToWidth(font, safeText(row?.[col.key], ""), textSize, col.width - 8);
+        const valueWidth = measureTextWidth(font, value, textSize);
+        page.drawText(value, {
+          x: x + Math.max(4, (col.width - valueWidth) / 2),
+          y: y - 9,
+          size: textSize,
+          font,
+          color: textColor,
+        });
+        x += col.width;
+        if (x < tableX + tableWidth - 0.5) {
+          page.drawLine({
+            start: { x, y: y - rowHeight + 2 },
+            end: { x, y: y + 2 },
+            thickness: 0.5,
+            color: borderColor,
+          });
+        }
+      }
+      page.drawLine({
+        start: { x: tableX, y: y - rowHeight + 2 },
+        end: { x: tableX + tableWidth, y: y - rowHeight + 2 },
+        thickness: 0.5,
+        color: borderColor,
+      });
+      y -= rowHeight;
+    });
+
+    y -= 8;
+  };
+
+  drawPageHeader();
+
+  drawCenteredTable(
+    "Stammdaten",
+    [
+      { key: "fahrer_id", label: "Fahrer-ID", width: 58 },
+      { key: "fahrername", label: "Fahrername", width: 128 },
+      { key: "firma", label: "Firma", width: 98 },
+      { key: "telefonnummer", label: "Telefonnummer", width: 96 },
+      { key: "lkw_typ", label: "LKW-Typ", width: 64 },
+      { key: "arbeitsplan", label: "Arbeitsplan", width: 68 },
+      { key: "status_entlassen", label: "Status entlassen", width: 80 },
+      { key: "datum_entlassen", label: "Datum entlassen", width: 84 },
+      { key: "urlaub_gesamt", label: `Urlaub gesamt ${effectiveYear}`, width: 64 },
+      { key: "krankheitstage", label: `Krankheitstage ${effectiveYear}`, width: 66 },
+    ],
+    masterRows,
+    {
+      rowFill: (row, idx) => safeText(row?.status_entlassen, "").trim() ? inactiveBg : (idx % 2 === 1 ? oddBg : null),
+    },
+  );
+
+  drawCenteredTable(
+    "Urlaub nach Wochen",
+    [
+      { key: "fahrer_id", label: "Fahrer-ID", width: 66 },
+      { key: "fahrer_name", label: "Fahrername", width: 180 },
+      { key: "weeks_label", label: "Urlaubswochen", width: 90 },
+      { key: "from_label", label: "Von", width: 90 },
+      { key: "to_label", label: "Bis", width: 90 },
+    ],
+    vacationSpans,
+  );
+
+  drawCenteredTable(
+    "Krankheit nach Wochen",
+    [
+      { key: "fahrer_id", label: "Fahrer-ID", width: 66 },
+      { key: "fahrer_name", label: "Fahrername", width: 180 },
+      { key: "weeks_label", label: "Krankheitswochen", width: 90 },
+      { key: "from_label", label: "Von", width: 90 },
+      { key: "to_label", label: "Bis", width: 90 },
+    ],
+    sickSpans,
+  );
+
+  const summaryRows = (weeklySummaryRows || []).map((row) => ({
+    iso_week: `W${pad2(toIntSafe(row?.iso_week, 0))}`,
+    week_start: safeText(row?.week_start, ""),
+    week_end: safeText(row?.week_end, ""),
+    total_drivers: String(toIntSafe(row?.total_drivers, 0)),
+    vacation_drivers: String(toIntSafe(row?.vacation_drivers, 0)),
+    sick_drivers: String(toIntSafe(row?.sick_drivers, 0)),
+  }));
+
+  drawCenteredTable(
+    "Woechentliche Uebersicht",
+    [
+      { key: "iso_week", label: "Woche", width: 70 },
+      { key: "week_start", label: "Von", width: 96 },
+      { key: "week_end", label: "Bis", width: 96 },
+      { key: "total_drivers", label: "Fahrer gesamt", width: 92 },
+      { key: "vacation_drivers", label: "Im Urlaub", width: 82 },
+      { key: "sick_drivers", label: "Krank", width: 72 },
+    ],
+    summaryRows,
+  );
+
+  return pdfDoc.save();
+}
+
 async function fetchImageByUrl(url) {
   if (!url) return null;
   try {
@@ -5839,6 +6234,8 @@ async function handleHistory(request, env) {
       filename = makeYfDriverMonthFilename(params?.month, params?.driver_query);
     } else if (reportType === "yf_lkw_week") {
       filename = makeYfLkwWeekFilename(params?.year, params?.week, params?.lkw_id);
+    } else if (reportType === "fahrer_all") {
+      filename = makeFahrerAllFilename(params?.report_year);
     } else if (reportType === "bonus") {
       filename = makeBonusFilename(params?.year, params?.month);
     } else if (REPORT_TYPE_TO_DOCK_KIND[reportType]) {
@@ -6238,6 +6635,10 @@ function validateGeneratePayload(body) {
     return { ok: true, reportType };
   }
 
+  if (reportType === "fahrer_all") {
+    return { ok: true, reportType };
+  }
+
   return { ok: true, reportType };
 }
 
@@ -6270,6 +6671,7 @@ async function handleGenerateWithBody(body, env, enforceRateLimit = true) {
     && valid.reportType !== "bonus"
     && valid.reportType !== "lkw_single"
     && valid.reportType !== "lkw_all"
+    && valid.reportType !== "fahrer_all"
   ) {
     return json(
       {
@@ -6997,6 +7399,85 @@ async function handleGenerateWithBody(body, env, enforceRateLimit = true) {
         pageHeight: 595,
       });
     }
+  } else if (valid.reportType === "fahrer_all") {
+    let masterRows;
+    let weeklyRows;
+    let weeklySummaryRows;
+    let fahrerReportYear = new Date().getUTCFullYear();
+    try {
+      const [masterResult, weeklyResult, summaryResult] = await Promise.all([
+        queryNeon(dbConnectionString, FAHRER_ALL_SQL, []),
+        queryNeon(dbConnectionString, FAHRER_WEEKLY_STATUS_SQL, []),
+        queryNeon(dbConnectionString, FAHRER_WEEKLY_SUMMARY_SQL, []),
+      ]);
+      masterRows = masterResult.rows || [];
+      weeklyRows = weeklyResult.rows || [];
+      weeklySummaryRows = summaryResult.rows || [];
+      fahrerReportYear = toIntSafe(masterRows?.[0]?.report_year, toIntSafe(weeklyRows?.[0]?.report_year, fahrerReportYear));
+    } catch (err) {
+      return json(
+        {
+          ok: false,
+          error: "Failed to execute SQL query",
+          code: "SQL_ERROR",
+          details: String(err?.message || err || "unknown error"),
+        },
+        500,
+        { "Cache-Control": "no-store" },
+      );
+    }
+
+    filename = makeFahrerAllFilename(fahrerReportYear);
+    outputKey = `fahrer_all:${fahrerReportYear}`;
+    try {
+      pdfBytes = await buildFahrerAllPdfWithPdfLib({
+        userId: auth.userId,
+        reportYear: fahrerReportYear,
+        masterRows,
+        weeklyRows,
+        weeklySummaryRows,
+      });
+    } catch (err) {
+      pdfEngine = "legacy-fallback";
+      const lines = [];
+      lines.push("Fahrer-ID | Fahrername | Firma | Telefonnummer | LKW-Typ | Arbeitsplan | Status entlassen | Datum entlassen | Urlaub gesamt | Krankheitstage");
+      lines.push("-".repeat(180));
+      for (const row of masterRows) {
+        lines.push([
+          safeText(row?.fahrer_id, ""),
+          safeText(row?.fahrername, ""),
+          safeText(row?.firma, ""),
+          safeText(row?.telefonnummer, ""),
+          safeText(row?.lkw_typ, ""),
+          safeText(row?.arbeitsplan, ""),
+          safeText(row?.status_entlassen, ""),
+          safeText(row?.datum_entlassen, ""),
+          safeText(row?.urlaub_gesamt, ""),
+          safeText(row?.krankheitstage, ""),
+        ].join(" | "));
+      }
+      lines.push("");
+      lines.push("Woche | Von | Bis | Fahrer gesamt | Urlaub | Krank");
+      lines.push("-".repeat(90));
+      for (const row of weeklySummaryRows) {
+        lines.push([
+          `W${pad2(toIntSafe(row?.iso_week, 0))}`,
+          safeText(row?.week_start, ""),
+          safeText(row?.week_end, ""),
+          String(toIntSafe(row?.total_drivers, 0)),
+          String(toIntSafe(row?.vacation_drivers, 0)),
+          String(toIntSafe(row?.sick_drivers, 0)),
+        ].join(" | "));
+      }
+      pdfBytes = buildSimplePdf({
+        title: `Fahrer - Daten aller Fahrer (${fahrerReportYear})`,
+        subtitle: `Generated at ${new Date().toISOString()} UTC, user ${auth.userId}`,
+        lines,
+        pageWidth: 1040,
+        pageHeight: 595,
+      });
+    }
+    valid.reportYear = fahrerReportYear;
   } else {
     let rows;
     const driverQuery = safeText(valid.driverQuery, "").trim();
@@ -7111,6 +7592,9 @@ async function handleGenerateWithBody(body, env, enforceRateLimit = true) {
     if (safeText(valid.driverQuery, "").trim()) {
       reportParams.driver_query = safeText(valid.driverQuery, "").trim();
     }
+  }
+  if (valid.reportType === "fahrer_all" && "reportYear" in valid) {
+    reportParams.report_year = valid.reportYear;
   }
   if ("lkwId" in valid) {
     reportParams.lkw_id = valid.lkwId;
