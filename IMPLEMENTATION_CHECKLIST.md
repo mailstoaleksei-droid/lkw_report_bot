@@ -45,10 +45,12 @@
   - Weekdays: hourly (07:00-18:00)
   - Night periodic ETL disabled to reduce load
   - Source-change watcher disabled by the day schedule installer for strict hourly mode
-  - Freshness monitor limited to weekdays 07:00-18:00
+  - Hourly ETL is installed as fixed weekday tasks (`07:00` through `18:00`) instead of a repeat trigger to avoid skipped `/RI` runs
+  - Freshness monitor installed as fixed weekday post-run checks instead of a repeat trigger
   - Scheduled task installer applies resilient settings: allow battery starts, start missed runs when available, wake to run
   - Freshness monitor checks both ETL sources against the hourly weekday SLA and notifies admin `745125435` by Telegram on failure
-  - Unit test covers weekday SLA checks, stale-source detection, morning grace, weekend suppression, and Telegram admin fallback
+  - Freshness monitor auto-starts the scheduled ETL task when Windows misses the hourly weekday trigger
+  - Unit test covers weekday SLA checks, stale-source detection, morning grace, weekend suppression, Telegram admin fallback, and ETL auto-remediation throttling
 - [x] ETL stale lock recovery added:
   - dead PID lock is auto-removed on next run
   - invalid/corrupted lock file is auto-removed
@@ -101,6 +103,9 @@
   - source: sheet `Fahrer` via SQL tables `drivers` and `report_fahrer_weekly_status`
   - PDF includes centered master table from columns `A-I`, vacation/sick totals from `Z-AA`, weekly vacation/sick spans, and weekly summary
   - dismissed drivers are excluded from weekly summary from the dismissal week
+  - report 2: `Fahrerkarte` / `Карточка водителя`
+  - select one driver by `Fahrer-ID` or `Fahrername` from a searchable list
+  - PDF includes centered driver card fields from sheet `Fahrer` columns `A-W`, vacation/sick totals and weekly spans, monthly Yellow Fox mileage by LKW, and monthly bonus values
 - [x] `Yellow Fox`
   - report 1: driver/month from `YF_Fahrer`
     - params: `month`, `Fahrer`

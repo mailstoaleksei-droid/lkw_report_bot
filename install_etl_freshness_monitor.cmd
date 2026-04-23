@@ -3,6 +3,7 @@ setlocal
 cd /d "%~dp0"
 
 set "TASK_NAME=LKW_Report_Bot_ETL_Freshness"
+set "TASK_PREFIX=LKW_Report_Bot_ETL_Freshness_"
 set "TASK_CMD=%~dp0run_etl_freshness_task.cmd"
 for %%I in ("%~dp0.") do set "BASE_DIR_SHORT=%%~fsI"
 if defined BASE_DIR_SHORT set "TASK_CMD_SHORT=%BASE_DIR_SHORT%\run_etl_freshness_task.cmd"
@@ -14,21 +15,19 @@ if not exist "%TASK_CMD%" (
 )
 
 echo Creating ETL freshness monitor task: %TASK_NAME%
-echo Schedule: weekdays every 30 minutes, 07:00-18:00
+echo Schedule: weekdays fixed checks after hourly ETL runs
 echo Task command: %TASK_CMD_SHORT%
 
-schtasks /Create /F /TN "%TASK_NAME%" /SC WEEKLY /D MON,TUE,WED,THU,FRI /ST 07:00 /RI 30 /DU 11:59 ^
- /RL HIGHEST /TR "cmd.exe /c \"\"%TASK_CMD_SHORT%\"\"" >nul 2>&1
+call :create_fixed_monitor "%TASK_NAME%" "08:45"
+if errorlevel 1 exit /b 1
 
-if errorlevel 1 (
-    schtasks /Create /F /TN "%TASK_NAME%" /SC WEEKLY /D MON,TUE,WED,THU,FRI /ST 07:00 /RI 30 /DU 11:59 ^
-     /RL LIMITED /TR "cmd.exe /c \"\"%TASK_CMD_SHORT%\"\"" >nul 2>&1
+for %%H in (09 10 11 12 13 14 15 16 17) do (
+    call :create_fixed_monitor "%TASK_PREFIX%%%H" "%%H:45"
+    if errorlevel 1 exit /b 1
 )
 
-if errorlevel 1 (
-    echo FAILED: Could not create ETL freshness monitor task.
-    exit /b 1
-)
+call :create_fixed_monitor "%TASK_PREFIX%18" "18:30"
+if errorlevel 1 exit /b 1
 
 echo OK: ETL freshness monitor task created.
 powershell -NoProfile -ExecutionPolicy Bypass -File "%~dp0set_etl_task_settings.ps1" -TaskName "%TASK_NAME%"
@@ -44,3 +43,20 @@ echo Monitor one-shot exit code: %RC%
 
 endlocal
 exit /b %RC%
+
+:create_fixed_monitor
+set "MONITOR_NAME=%~1"
+set "MONITOR_START=%~2"
+echo   %MONITOR_NAME% at %MONITOR_START%
+schtasks /Create /F /TN "%MONITOR_NAME%" /SC WEEKLY /D MON,TUE,WED,THU,FRI /ST %MONITOR_START% ^
+ /RL HIGHEST /TR "cmd.exe /c \"\"%TASK_CMD_SHORT%\"\"" >nul 2>&1
+if errorlevel 1 (
+    schtasks /Create /F /TN "%MONITOR_NAME%" /SC WEEKLY /D MON,TUE,WED,THU,FRI /ST %MONITOR_START% ^
+     /RL LIMITED /TR "cmd.exe /c \"\"%TASK_CMD_SHORT%\"\"" >nul 2>&1
+)
+if errorlevel 1 (
+    echo FAILED: Could not create ETL freshness monitor task %MONITOR_NAME%.
+    exit /b 1
+)
+powershell -NoProfile -ExecutionPolicy Bypass -File "%~dp0set_etl_task_settings.ps1" -TaskName "%MONITOR_NAME%" >nul 2>&1
+exit /b 0

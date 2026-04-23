@@ -358,6 +358,28 @@ const REPORTS = [
     params: [],
   },
   {
+    id: "fahrer_card",
+    enabled: true,
+    icon: "drivers",
+    name: {
+      en: "Fahrer (Driver Card)",
+      ru: "Fahrer (карточка водителя)",
+      de: "Fahrer (Fahrerkarte)",
+    },
+    description: {
+      en: "Presentation-style PDF card for one driver with master data, vacation/sick weeks, mileage by LKW and monthly bonus",
+      ru: "PDF-карточка одного водителя: мастер-данные, отпуск/больничный по неделям, пробег по LKW и бонусы по месяцам",
+      de: "Praesentationskarte fuer einen Fahrer mit Stammdaten, Urlaub/Krankheit, KM je LKW und Monatsbonus",
+    },
+    params: [
+      {
+        id: "driver_query",
+        type: "text",
+        label: { en: "Fahrer ID / Name", ru: "ID / имя Fahrer", de: "Fahrer-ID / Name" },
+      },
+    ],
+  },
+  {
     id: "tankkarten",
     enabled: false,
     icon: "fuel",
@@ -952,6 +974,118 @@ GROUP BY s.report_year, s.iso_week, s.week_start, s.week_end
 ORDER BY s.iso_week;
 `;
 
+const FAHRER_CARD_MASTER_SQL = `
+WITH report_year_ref AS (
+  SELECT COALESCE(MAX(report_year), EXTRACT(ISOYEAR FROM CURRENT_DATE)::int) AS report_year
+  FROM report_fahrer_weekly_status
+)
+SELECT
+  r.report_year,
+  d.external_id AS fahrer_id,
+  d.full_name AS fahrername,
+  COALESCE(NULLIF(c.name, ''), NULLIF(d.raw_payload->>'Firma', ''), NULLIF(d.raw_payload->>'Company', '')) AS firma,
+  COALESCE(NULLIF(d.phone, ''), NULLIF(d.raw_payload->>'Telefonnummer', ''), NULLIF(d.raw_payload->>'Phone', '')) AS telefonnummer,
+  COALESCE(NULLIF(d.raw_payload->>'Führerschein', ''), NULLIF(d.raw_payload->>'License', '')) AS fuehrerschein,
+  COALESCE(NULLIF(d.raw_payload->>'LKW-Typ', ''), NULLIF(d.raw_payload->>'Type', '')) AS lkw_typ,
+  COALESCE(NULLIF(d.raw_payload->>'Arbeitsplan', ''), NULLIF(d.raw_payload->>'Schedule', '')) AS arbeitsplan,
+  COALESCE(NULLIF(d.raw_payload->>'Status', ''), NULLIF(d.raw_payload->>'Active/Fired', ''), CASE WHEN d.is_active THEN 'Aktiv' ELSE 'Entlassen' END) AS status_entlassen,
+  COALESCE(NULLIF(d.raw_payload->>'Datum entlassen', ''), NULLIF(d.raw_payload->>'Date', '')) AS datum_entlassen,
+  COALESCE(NULLIF(d.raw_payload->>'Pass gültig bis', ''), NULLIF(d.raw_payload->>'Pass gueltig bis', '')) AS pass_gueltig_bis,
+  COALESCE(NULLIF(d.raw_payload->>'95 Code\nrosa Papier bis', ''), NULLIF(d.raw_payload->>'95 Code rosa Papier bis', '')) AS code_95_bis,
+  COALESCE(NULLIF(d.raw_payload->>'Art der Wohnungen bis', ''), NULLIF(d.raw_payload->>'Type of residence', '')) AS wohnungen_bis,
+  COALESCE(NULLIF(d.raw_payload->>'Eintrittsdatum', ''), NULLIF(d.raw_payload->>'Entry Date', '')) AS eintrittsdatum,
+  COALESCE(NULLIF(d.raw_payload->>'Gesundheitsbuch\nbis', ''), NULLIF(d.raw_payload->>'Gesundheitsbuch bis', ''), NULLIF(d.raw_payload->>'Health book', '')) AS gesundheitsbuch_bis,
+  COALESCE(NULLIF(d.raw_payload->>'ESDK\nVersicherung bis', ''), NULLIF(d.raw_payload->>'ESDK Versicherung bis', ''), NULLIF(d.raw_payload->>'ESDK / insurance up to', '')) AS esdk_bis,
+  COALESCE(NULLIF(d.raw_payload->>'A1 Formular gültig bis', ''), NULLIF(d.raw_payload->>'A1 Form valid until', '')) AS a1_bis,
+  COALESCE(NULLIF(d.raw_payload->>'DE  Anhang gültig bis', ''), NULLIF(d.raw_payload->>'DE Anhang gültig bis', ''), NULLIF(d.raw_payload->>'DE application valid', '')) AS de_anhang_bis,
+  COALESCE(NULLIF(d.raw_payload->>'28 Tage Besstellung Gültig bis', ''), NULLIF(d.raw_payload->>'28 Day order valid', '')) AS bestellung_28_tage_bis,
+  COALESCE(NULLIF(d.raw_payload->>'IMIS', ''), '') AS imis,
+  COALESCE(NULLIF(d.raw_payload->>'Geburtsdatum', ''), NULLIF(d.raw_payload->>'Birth Date', '')) AS geburtsdatum,
+  COALESCE(NULLIF(d.raw_payload->>'ADR-Schein', ''), NULLIF(d.raw_payload->>'ADR', '')) AS adr_schein,
+  COALESCE(NULLIF(d.raw_payload->>'ADR gültig bis', ''), NULLIF(d.raw_payload->>'ADR valid', '')) AS adr_bis,
+  COALESCE(NULLIF(d.raw_payload->>'FS gültig bis', ''), NULLIF(d.raw_payload->>'License valid', '')) AS fs_bis,
+  COALESCE(NULLIF(d.raw_payload->>('Urlaub gesamt ' || r.report_year::text), ''), NULLIF(d.raw_payload->>'Urlaub gesamt', ''), NULLIF(d.raw_payload->>'Total vacation', ''), '0') AS urlaub_gesamt,
+  COALESCE(NULLIF(d.raw_payload->>('Krankheitstage ' || r.report_year::text), ''), NULLIF(d.raw_payload->>'Krankheitstage', ''), NULLIF(d.raw_payload->>'Sick Days', ''), '0') AS krankheitstage
+FROM drivers d
+CROSS JOIN report_year_ref r
+LEFT JOIN companies c ON c.id = d.company_id
+WHERE
+  lower(d.external_id) = lower($1::text)
+  OR lower(d.full_name) = lower($1::text)
+  OR lower(d.external_id) LIKE lower($2::text)
+  OR lower(d.full_name) LIKE lower($2::text)
+ORDER BY
+  CASE
+    WHEN lower(d.external_id) = lower($1::text) THEN 0
+    WHEN lower(d.full_name) = lower($1::text) THEN 1
+    ELSE 2
+  END,
+  d.external_id
+LIMIT 1;
+`;
+
+const FAHRER_CARD_WEEKLY_SQL = `
+WITH report_year_ref AS (
+  SELECT COALESCE(MAX(report_year), EXTRACT(ISOYEAR FROM CURRENT_DATE)::int) AS report_year
+  FROM report_fahrer_weekly_status
+)
+SELECT
+  s.report_year,
+  s.iso_week,
+  to_char(s.week_start, 'DD/MM/YYYY') AS week_start,
+  to_char(s.week_end, 'DD/MM/YYYY') AS week_end,
+  s.fahrer_id,
+  s.fahrer_name,
+  COALESCE(s.week_code, '') AS week_code,
+  s.is_active_in_week
+FROM report_fahrer_weekly_status s
+JOIN report_year_ref r ON r.report_year = s.report_year
+WHERE lower(s.fahrer_id) = lower($1::text)
+ORDER BY s.iso_week;
+`;
+
+const FAHRER_CARD_MONTHLY_ACTIVITY_SQL = `
+WITH activity AS (
+  SELECT
+    y.report_year,
+    y.month_index,
+    MAX(y.month_name) AS month_name,
+    string_agg(DISTINCT NULLIF(trim(y.lkw_nummer), ''), ' / ' ORDER BY NULLIF(trim(y.lkw_nummer), '')) AS lkw_list,
+    SUM(COALESCE(y.strecke_km, 0))::numeric AS km
+  FROM report_yf_lkw_daily y
+  WHERE regexp_replace(lower(trim(COALESCE(y.drivers_final, ''))), '\\s+', ' ', 'g')
+    LIKE '%' || regexp_replace(lower(trim($2::text)), '\\s+', ' ', 'g') || '%'
+  GROUP BY y.report_year, y.month_index
+), bonus AS (
+  SELECT
+    report_year,
+    report_month AS month_index,
+    SUM(COALESCE(km, 0))::numeric AS bonus_km,
+    SUM(COALESCE(bonus, 0))::numeric AS bonus,
+    SUM(COALESCE(penalty, 0))::numeric AS penalty,
+    SUM(COALESCE(final, 0))::numeric AS final
+  FROM report_bonus_dynamik_monthly
+  WHERE lower(fahrer_id) = lower($1::text)
+     OR regexp_replace(lower(trim(fahrer_name)), '\\s+', ' ', 'g') = regexp_replace(lower(trim($2::text)), '\\s+', ' ', 'g')
+  GROUP BY report_year, report_month
+)
+SELECT
+  COALESCE(a.report_year, b.report_year) AS report_year,
+  COALESCE(a.month_index, b.month_index) AS month_index,
+  COALESCE(a.month_name, to_char(make_date(COALESCE(a.report_year, b.report_year)::int, COALESCE(a.month_index, b.month_index)::int, 1), 'FMMonth')) AS month_name,
+  COALESCE(a.lkw_list, '') AS lkw_list,
+  COALESCE(a.km, 0)::numeric AS km,
+  COALESCE(b.bonus_km, 0)::numeric AS bonus_km,
+  COALESCE(b.bonus, 0)::numeric AS bonus,
+  COALESCE(b.penalty, 0)::numeric AS penalty,
+  COALESCE(b.final, 0)::numeric AS final
+FROM activity a
+FULL OUTER JOIN bonus b
+  ON b.report_year = a.report_year
+ AND b.month_index = a.month_index
+ORDER BY report_year, month_index;
+`;
+
 function toBool(value, defaultValue = false) {
   if (typeof value !== "string") return defaultValue;
   const v = value.trim().toLowerCase();
@@ -1315,6 +1449,12 @@ function makeFahrerAllFilename(reportYear, at = new Date()) {
     return `fahrer_all_${y}.pdf`;
   }
   return `fahrer_all_${formatUtcDateStamp(at)}.pdf`;
+}
+
+function makeFahrerCardFilename(driverQuery, at = new Date()) {
+  const driver = sanitizeFilenamePart(driverQuery);
+  if (driver) return `fahrer_card_${driver}.pdf`;
+  return `fahrer_card_${formatUtcDateStamp(at)}.pdf`;
 }
 
 function makeDockFilename(kind, at = new Date()) {
@@ -6024,6 +6164,232 @@ async function buildFahrerAllPdfWithPdfLib({ userId, reportYear, masterRows, wee
   return pdfDoc.save();
 }
 
+async function buildFahrerCardPdfWithPdfLib({ userId, reportYear, driver, weeklyRows, monthlyRows }) {
+  const pdfDoc = await PDFDocument.create();
+  const font = await pdfDoc.embedFont(StandardFonts.Helvetica);
+  const boldFont = await pdfDoc.embedFont(StandardFonts.HelveticaBold);
+
+  const pageSize = [842, 595];
+  const margin = 28;
+  const textColor = rgb(0.08, 0.13, 0.22);
+  const mutedColor = rgb(0.34, 0.4, 0.5);
+  const accentColor = rgb(0.14, 0.38, 0.68);
+  const headerBg = rgb(0.88, 0.93, 0.98);
+  const cardBg = rgb(0.97, 0.985, 1);
+  const tableHeadBg = rgb(0.12, 0.32, 0.52);
+  const tableHeadText = rgb(1, 1, 1);
+  const borderColor = rgb(0.72, 0.79, 0.88);
+  const oddBg = rgb(0.965, 0.98, 1);
+
+  const effectiveYear = toIntSafe(reportYear, new Date().getUTCFullYear());
+  const vacationSpans = buildFahrerWeekSpans(weeklyRows, "U");
+  const sickSpans = buildFahrerWeekSpans(weeklyRows, "K");
+  const totalKm = (monthlyRows || []).reduce((sum, row) => sum + toNumberSafe(row?.km, 0), 0);
+  const totalBonus = (monthlyRows || []).reduce((sum, row) => sum + toNumberSafe(row?.final, 0), 0);
+  const activeMonths = new Set((monthlyRows || [])
+    .filter((row) => Math.abs(toNumberSafe(row?.km, 0)) > 0.1 || Math.abs(toNumberSafe(row?.final, 0)) > 0.1)
+    .map((row) => `${row?.report_year}-${row?.month_index}`)).size;
+
+  let page = pdfDoc.addPage(pageSize);
+  let y = page.getHeight() - margin;
+
+  const drawText = (text, x, yy, size, usedFont = font, color = textColor, maxWidth = null) => {
+    const value = maxWidth ? fitTextToWidth(usedFont, safeText(text, ""), size, maxWidth) : safeText(text, "");
+    page.drawText(value, { x, y: yy, size, font: usedFont, color });
+  };
+
+  const centerText = (text, x, yy, width, size, usedFont = font, color = textColor) => {
+    const value = fitTextToWidth(usedFont, safeText(text, ""), size, Math.max(10, width - 8));
+    const w = measureTextWidth(usedFont, value, size);
+    page.drawText(value, { x: x + Math.max(4, (width - w) / 2), y: yy, size, font: usedFont, color });
+  };
+
+  const drawHeader = () => {
+    page.drawRectangle({
+      x: margin,
+      y: y - 78,
+      width: page.getWidth() - margin * 2,
+      height: 78,
+      color: headerBg,
+      borderColor,
+      borderWidth: 1,
+    });
+    drawText("Fahrerkarte", margin + 18, y - 26, 20, boldFont, accentColor);
+    drawText(`${safeText(driver?.fahrer_id, "")} - ${safeText(driver?.fahrername, "")}`, margin + 18, y - 50, 15, boldFont, textColor, 360);
+    drawText(`Firma: ${safeText(driver?.firma, "-")}`, margin + 430, y - 26, 10, boldFont, textColor, 250);
+    drawText(`Arbeitsplan: ${safeText(driver?.arbeitsplan, "-")}`, margin + 430, y - 43, 10, font, mutedColor, 250);
+    drawText(`Generated: ${new Date().toISOString()} UTC | User: ${userId}`, margin + 430, y - 60, 8, font, mutedColor, 320);
+    y -= 96;
+  };
+
+  const ensureSpace = (needed) => {
+    if (y - needed >= margin) return;
+    page = pdfDoc.addPage(pageSize);
+    y = page.getHeight() - margin;
+  };
+
+  const drawMetricCards = () => {
+    const cards = [
+      { label: `Urlaub ${effectiveYear}`, value: safeText(driver?.urlaub_gesamt, "0") },
+      { label: `Krankheit ${effectiveYear}`, value: safeText(driver?.krankheitstage, "0") },
+      { label: "KM gesamt", value: `${formatMoneyInt(totalKm)} km` },
+      { label: "Bonus final", value: formatMoneyInt(totalBonus) },
+      { label: "Aktive Monate", value: String(activeMonths) },
+    ];
+    const gap = 10;
+    const width = (page.getWidth() - margin * 2 - gap * (cards.length - 1)) / cards.length;
+    cards.forEach((card, idx) => {
+      const x = margin + idx * (width + gap);
+      page.drawRectangle({ x, y: y - 54, width, height: 54, color: cardBg, borderColor, borderWidth: 1 });
+      centerText(card.value, x, y - 25, width, 13, boldFont, accentColor);
+      centerText(card.label, x, y - 43, width, 7.5, font, mutedColor);
+    });
+    y -= 72;
+  };
+
+  const drawSectionTitle = (title) => {
+    ensureSpace(22);
+    drawText(title, margin, y, 11, boldFont, textColor);
+    y -= 14;
+  };
+
+  const drawKeyValueGrid = (title, items, columns = 4) => {
+    drawSectionTitle(title);
+    const colGap = 8;
+    const rowH = 30;
+    const colW = (page.getWidth() - margin * 2 - colGap * (columns - 1)) / columns;
+    for (let idx = 0; idx < items.length; idx += 1) {
+      if (idx % columns === 0) ensureSpace(rowH + 6);
+      const col = idx % columns;
+      const x = margin + col * (colW + colGap);
+      const item = items[idx];
+      page.drawRectangle({ x, y: y - rowH + 2, width: colW, height: rowH, color: cardBg, borderColor, borderWidth: 0.7 });
+      centerText(item.label, x, y - 10, colW, 7, boldFont, mutedColor);
+      centerText(item.value || "-", x, y - 24, colW, 8, font, textColor);
+      if (col === columns - 1 || idx === items.length - 1) y -= rowH + 6;
+    }
+    y -= 2;
+  };
+
+  const drawTable = (title, columns, rows, opts = {}) => {
+    const rowH = opts.rowHeight || 16;
+    const textSize = opts.textSize || 8;
+    const tableW = columns.reduce((sum, col) => sum + col.width, 0);
+    const tableX = margin;
+    const drawHeaderRow = () => {
+      page.drawRectangle({ x: tableX, y: y - rowH + 2, width: tableW, height: rowH, color: tableHeadBg });
+      let x = tableX;
+      for (const col of columns) {
+        centerText(col.label, x, y - 10, col.width, textSize, boldFont, tableHeadText);
+        x += col.width;
+      }
+      y -= rowH;
+    };
+    drawSectionTitle(title);
+    drawHeaderRow();
+    if (!rows || rows.length === 0) {
+      ensureSpace(rowH + 4);
+      page.drawRectangle({ x: tableX, y: y - rowH + 2, width: tableW, height: rowH, color: oddBg, borderColor, borderWidth: 0.5 });
+      centerText("Keine Daten", tableX, y - 10, tableW, textSize, font, mutedColor);
+      y -= rowH + 8;
+      return;
+    }
+    rows.forEach((row, idx) => {
+      const beforeY = y;
+      ensureSpace(rowH + 4);
+      if ((idx > 0 && y > page.getHeight() - margin - 20) || y > beforeY) drawHeaderRow();
+      page.drawRectangle({
+        x: tableX,
+        y: y - rowH + 2,
+        width: tableW,
+        height: rowH,
+        color: idx % 2 ? oddBg : rgb(1, 1, 1),
+        borderColor,
+        borderWidth: 0.45,
+      });
+      let x = tableX;
+      for (const col of columns) {
+        centerText(row[col.key], x, y - 10, col.width, textSize, font, textColor);
+        x += col.width;
+      }
+      y -= rowH;
+    });
+    y -= 10;
+  };
+
+  drawHeader();
+  drawMetricCards();
+
+  drawKeyValueGrid("Stammdaten A-W", [
+    { label: "Fahrer-ID", value: driver?.fahrer_id },
+    { label: "Fahrername", value: driver?.fahrername },
+    { label: "Firma", value: driver?.firma },
+    { label: "Telefonnummer", value: driver?.telefonnummer },
+    { label: "Fuehrerschein", value: driver?.fuehrerschein },
+    { label: "LKW-Typ", value: driver?.lkw_typ },
+    { label: "Arbeitsplan", value: driver?.arbeitsplan },
+    { label: "Status entlassen", value: driver?.status_entlassen },
+    { label: "Datum entlassen", value: driver?.datum_entlassen },
+    { label: "Pass gueltig bis", value: driver?.pass_gueltig_bis },
+    { label: "95 Code bis", value: driver?.code_95_bis },
+    { label: "Wohnungen bis", value: driver?.wohnungen_bis },
+    { label: "Eintrittsdatum", value: driver?.eintrittsdatum },
+    { label: "Gesundheitsbuch bis", value: driver?.gesundheitsbuch_bis },
+    { label: "ESDK bis", value: driver?.esdk_bis },
+    { label: "A1 Formular bis", value: driver?.a1_bis },
+    { label: "DE Anhang bis", value: driver?.de_anhang_bis },
+    { label: "28 Tage Bestellung bis", value: driver?.bestellung_28_tage_bis },
+    { label: "IMIS", value: driver?.imis },
+    { label: "Geburtsdatum", value: driver?.geburtsdatum },
+    { label: "ADR-Schein", value: driver?.adr_schein },
+    { label: "ADR gueltig bis", value: driver?.adr_bis },
+    { label: "FS gueltig bis", value: driver?.fs_bis },
+  ], 4);
+
+  const spanRows = [
+    ...vacationSpans.map((row) => ({ type: "Urlaub", weeks: row.weeks_label, from: row.from_label, to: row.to_label })),
+    ...sickSpans.map((row) => ({ type: "Krank", weeks: row.weeks_label, from: row.from_label, to: row.to_label })),
+  ];
+  drawTable(
+    "Urlaub und Krankheit nach Wochen",
+    [
+      { key: "type", label: "Typ", width: 120 },
+      { key: "weeks", label: "Wochen", width: 140 },
+      { key: "from", label: "Von", width: 120 },
+      { key: "to", label: "Bis", width: 120 },
+    ],
+    spanRows,
+  );
+
+  const monthlyTableRows = (monthlyRows || []).map((row) => ({
+    period: `${safeText(row?.report_year, "")}/${pad2(toIntSafe(row?.month_index, 0))}`,
+    month: safeText(row?.month_name, ""),
+    lkw: safeText(row?.lkw_list, "-"),
+    km: `${formatMoneyInt(row?.km)} km`,
+    bonus_km: `${formatMoneyInt(row?.bonus_km)} km`,
+    bonus: formatMoneyInt(row?.bonus),
+    penalty: formatMoneyInt(row?.penalty),
+    final: formatMoneyInt(row?.final),
+  }));
+  drawTable(
+    "Monatliche Leistung: KM, LKW und Bonus",
+    [
+      { key: "period", label: "Periode", width: 70 },
+      { key: "month", label: "Monat", width: 86 },
+      { key: "lkw", label: "LKW", width: 190 },
+      { key: "km", label: "YF KM", width: 82 },
+      { key: "bonus_km", label: "Bonus KM", width: 82 },
+      { key: "bonus", label: "Bonus", width: 70 },
+      { key: "penalty", label: "Penalty", width: 70 },
+      { key: "final", label: "Final", width: 70 },
+    ],
+    monthlyTableRows,
+    { textSize: 7.5, rowHeight: 17 },
+  );
+
+  return pdfDoc.save();
+}
+
 async function fetchImageByUrl(url) {
   if (!url) return null;
   try {
@@ -6639,6 +7005,14 @@ function validateGeneratePayload(body) {
     return { ok: true, reportType };
   }
 
+  if (reportType === "fahrer_card") {
+    const driverQuery = String(body.driver_query || "").trim().slice(0, 140);
+    if (!driverQuery) {
+      return { ok: false, status: 400, error: "Missing driver_query" };
+    }
+    return { ok: true, reportType, driverQuery };
+  }
+
   return { ok: true, reportType };
 }
 
@@ -6672,6 +7046,7 @@ async function handleGenerateWithBody(body, env, enforceRateLimit = true) {
     && valid.reportType !== "lkw_single"
     && valid.reportType !== "lkw_all"
     && valid.reportType !== "fahrer_all"
+    && valid.reportType !== "fahrer_card"
   ) {
     return json(
       {
@@ -7478,6 +7853,104 @@ async function handleGenerateWithBody(body, env, enforceRateLimit = true) {
       });
     }
     valid.reportYear = fahrerReportYear;
+  } else if (valid.reportType === "fahrer_card") {
+    let driverRows;
+    let weeklyRows;
+    let monthlyRows;
+    let fahrerReportYear = new Date().getUTCFullYear();
+    const driverQuery = safeText(valid.driverQuery, "").trim();
+    const likeQuery = driverQuery ? `%${driverQuery}%` : "";
+    try {
+      const masterResult = await queryNeon(
+        dbConnectionString,
+        FAHRER_CARD_MASTER_SQL,
+        [driverQuery, likeQuery],
+      );
+      driverRows = masterResult.rows || [];
+      if (!driverRows.length) {
+        return json(
+          {
+            ok: false,
+            error: "Driver not found",
+            code: "DRIVER_NOT_FOUND",
+          },
+          404,
+          { "Cache-Control": "no-store" },
+        );
+      }
+      const driver = driverRows[0];
+      fahrerReportYear = toIntSafe(driver?.report_year, fahrerReportYear);
+      const [weeklyResult, monthlyResult] = await Promise.all([
+        queryNeon(dbConnectionString, FAHRER_CARD_WEEKLY_SQL, [driver.fahrer_id]),
+        queryNeon(dbConnectionString, FAHRER_CARD_MONTHLY_ACTIVITY_SQL, [driver.fahrer_id, driver.fahrername]),
+      ]);
+      weeklyRows = weeklyResult.rows || [];
+      monthlyRows = monthlyResult.rows || [];
+    } catch (err) {
+      return json(
+        {
+          ok: false,
+          error: "Failed to execute SQL query",
+          code: "SQL_ERROR",
+          details: String(err?.message || err || "unknown error"),
+        },
+        500,
+        { "Cache-Control": "no-store" },
+      );
+    }
+
+    const driver = driverRows[0];
+    filename = makeFahrerCardFilename(driver?.fahrer_id || driverQuery);
+    outputKey = `fahrer_card:${safeText(driver?.fahrer_id, driverQuery)}`;
+    try {
+      pdfBytes = await buildFahrerCardPdfWithPdfLib({
+        userId: auth.userId,
+        reportYear: fahrerReportYear,
+        driver,
+        weeklyRows,
+        monthlyRows,
+      });
+    } catch (err) {
+      pdfEngine = "legacy-fallback";
+      const lines = [];
+      lines.push("Fahrer-ID | Fahrername | Firma | Telefonnummer | LKW-Typ | Arbeitsplan | Urlaub gesamt | Krankheitstage");
+      lines.push("-".repeat(160));
+      lines.push([
+        safeText(driver?.fahrer_id, ""),
+        safeText(driver?.fahrername, ""),
+        safeText(driver?.firma, ""),
+        safeText(driver?.telefonnummer, ""),
+        safeText(driver?.lkw_typ, ""),
+        safeText(driver?.arbeitsplan, ""),
+        safeText(driver?.urlaub_gesamt, "0"),
+        safeText(driver?.krankheitstage, "0"),
+      ].join(" | "));
+      lines.push("");
+      lines.push("Periode | Monat | LKW | YF KM | Bonus KM | Bonus | Penalty | Final");
+      lines.push("-".repeat(150));
+      for (const row of monthlyRows) {
+        lines.push([
+          `${safeText(row?.report_year, "")}/${pad2(toIntSafe(row?.month_index, 0))}`,
+          safeText(row?.month_name, ""),
+          safeText(row?.lkw_list, "-"),
+          formatMoneyInt(row?.km),
+          formatMoneyInt(row?.bonus_km),
+          formatMoneyInt(row?.bonus),
+          formatMoneyInt(row?.penalty),
+          formatMoneyInt(row?.final),
+        ].join(" | "));
+      }
+      pdfBytes = buildSimplePdf({
+        title: `Fahrerkarte - ${safeText(driver?.fahrer_id, driverQuery)} ${safeText(driver?.fahrername, "")}`,
+        subtitle: `Generated at ${new Date().toISOString()} UTC, user ${auth.userId}`,
+        lines,
+        pageWidth: 1040,
+        pageHeight: 595,
+      });
+    }
+    valid.reportYear = fahrerReportYear;
+    valid.driverId = safeText(driver?.fahrer_id, driverQuery);
+    valid.driverName = safeText(driver?.fahrername, "");
   } else {
     let rows;
     const driverQuery = safeText(valid.driverQuery, "").trim();
@@ -7595,6 +8068,12 @@ async function handleGenerateWithBody(body, env, enforceRateLimit = true) {
   }
   if (valid.reportType === "fahrer_all" && "reportYear" in valid) {
     reportParams.report_year = valid.reportYear;
+  }
+  if (valid.reportType === "fahrer_card") {
+    reportParams.driver_query = safeText(valid.driverQuery, "").trim();
+    reportParams.driver_id = safeText(valid.driverId, "");
+    reportParams.driver_name = safeText(valid.driverName, "");
+    if ("reportYear" in valid) reportParams.report_year = valid.reportYear;
   }
   if ("lkwId" in valid) {
     reportParams.lkw_id = valid.lkwId;
@@ -7817,6 +8296,29 @@ async function buildMetaWithAccess(request, env) {
           lkw_nummer: safeText(row.lkw_nummer, ""),
           label: [safeText(row.lkw_id, ""), safeText(row.lkw_nummer, "")].filter(Boolean).join(" - "),
         })).filter((row) => row.lkw_id);
+      } catch {
+        // Optional lookup only.
+      }
+      try {
+        const driversResult = await queryNeon(
+          dbConnectionString,
+          `
+            SELECT
+              external_id AS fahrer_id,
+              full_name AS fahrername
+            FROM drivers
+            WHERE COALESCE(external_id, '') <> ''
+              AND COALESCE(full_name, '') <> ''
+            ORDER BY external_id
+          `,
+          [],
+        );
+        meta.lookups = meta.lookups || {};
+        meta.lookups.fahrer_drivers = (driversResult.rows || []).map((row) => ({
+          fahrer_id: safeText(row.fahrer_id, ""),
+          fahrername: safeText(row.fahrername, ""),
+          label: [safeText(row.fahrer_id, ""), safeText(row.fahrername, "")].filter(Boolean).join(" - "),
+        })).filter((row) => row.fahrer_id);
       } catch {
         // Optional lookup only.
       }

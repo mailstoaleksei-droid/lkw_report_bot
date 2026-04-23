@@ -8,6 +8,7 @@ if defined BASE_DIR_SHORT set "TASK_CMD_SHORT=%BASE_DIR_SHORT%\run_etl_pipeline_
 if not defined TASK_CMD_SHORT set "TASK_CMD_SHORT=%TASK_CMD%"
 
 set "TASK_DAY=LKW_Report_Bot_ETL_DayHourly"
+set "TASK_HOUR_PREFIX=LKW_Report_Bot_ETL_Hourly_"
 set "TASK_NIGHT=LKW_Report_Bot_ETL_Night3h"
 set "TASK_WATCH=LKW_Report_Bot_ETL_OnSourceChange"
 
@@ -17,20 +18,17 @@ if not exist "%TASK_CMD%" (
 )
 
 echo Installing ETL schedules:
-echo   1^) Weekdays: 07:00-18:00 every hour
+echo   1^) Weekdays: fixed hourly tasks 07:00-18:00
 echo   2^) Night periodic ETL: disabled
 echo Task command: %TASK_CMD_SHORT%
 
-echo Creating day task: %TASK_DAY%
-schtasks /Create /F /TN "%TASK_DAY%" /SC WEEKLY /D MON,TUE,WED,THU,FRI /ST 07:00 /RI 60 /DU 11:59 ^
- /RL HIGHEST /TR "cmd.exe /c \"\"%TASK_CMD_SHORT%\"\"" >nul 2>&1
-if errorlevel 1 (
-    schtasks /Create /F /TN "%TASK_DAY%" /SC WEEKLY /D MON,TUE,WED,THU,FRI /ST 07:00 /RI 60 /DU 11:59 ^
-     /RL LIMITED /TR "cmd.exe /c \"\"%TASK_CMD_SHORT%\"\"" >nul 2>&1
-)
-if errorlevel 1 (
-    echo FAILED: Could not create day ETL task.
-    exit /b 1
+echo Creating fixed day ETL tasks:
+call :create_fixed_task "%TASK_DAY%" "07:00"
+if errorlevel 1 exit /b 1
+
+for %%H in (08 09 10 11 12 13 14 15 16 17 18) do (
+    call :create_fixed_task "%TASK_HOUR_PREFIX%%%H" "%%H:00"
+    if errorlevel 1 exit /b 1
 )
 
 echo Disabling night task if it exists: %TASK_NIGHT%
@@ -66,3 +64,20 @@ echo ETL one-shot exit code: %RC%
 
 endlocal
 exit /b %RC%
+
+:create_fixed_task
+set "TASK_NAME=%~1"
+set "TASK_START=%~2"
+echo   %TASK_NAME% at %TASK_START%
+schtasks /Create /F /TN "%TASK_NAME%" /SC WEEKLY /D MON,TUE,WED,THU,FRI /ST %TASK_START% ^
+ /RL HIGHEST /TR "cmd.exe /c \"\"%TASK_CMD_SHORT%\"\"" >nul 2>&1
+if errorlevel 1 (
+    schtasks /Create /F /TN "%TASK_NAME%" /SC WEEKLY /D MON,TUE,WED,THU,FRI /ST %TASK_START% ^
+     /RL LIMITED /TR "cmd.exe /c \"\"%TASK_CMD_SHORT%\"\"" >nul 2>&1
+)
+if errorlevel 1 (
+    echo FAILED: Could not create ETL task %TASK_NAME%.
+    exit /b 1
+)
+powershell -NoProfile -ExecutionPolicy Bypass -File "%~dp0set_etl_task_settings.ps1" -TaskName "%TASK_NAME%" >nul 2>&1
+exit /b 0

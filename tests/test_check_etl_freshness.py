@@ -1,4 +1,5 @@
 from datetime import datetime, timedelta, timezone
+from types import SimpleNamespace
 from urllib import parse
 
 import check_etl_freshness as freshness
@@ -98,3 +99,51 @@ def test_send_telegram_defaults_to_admin_chat_id(monkeypatch):
     assert payload["chat_id"] == ["745125435"]
     assert payload["text"] == ["test message"]
     assert sent["timeout"] == 20
+
+
+def test_stale_remediation_starts_scheduled_etl_task(monkeypatch):
+    calls = []
+
+    def fake_run(cmd, capture_output, text, timeout, check):
+        calls.append({
+            "cmd": cmd,
+            "capture_output": capture_output,
+            "text": text,
+            "timeout": timeout,
+            "check": check,
+        })
+        return SimpleNamespace(returncode=0, stdout="SUCCESS", stderr="")
+
+    state = {}
+    monkeypatch.setenv("ETL_AUTO_REMEDIATE", "1")
+    monkeypatch.setenv("ETL_REMEDIATION_TASK_NAME", "Test_ETL_Task")
+    monkeypatch.setattr(freshness.time, "time", lambda: 1234567890)
+    monkeypatch.setattr(freshness.subprocess, "run", fake_run)
+
+    started = freshness._maybe_start_etl_remediation(state, "stale-source")
+
+    assert started is True
+    assert calls == [{
+        "cmd": ["cmd.exe", "/c", "schtasks", "/Run", "/TN", "Test_ETL_Task"],
+        "capture_output": True,
+        "text": True,
+        "timeout": 30,
+        "check": False,
+    }]
+    assert state["last_remediation_at"] == 1234567890
+    assert state["last_remediation_key"] == "stale-source"
+    assert state["last_remediation_result"] == "0"
+
+
+def test_stale_remediation_is_throttled_by_stale_key(monkeypatch):
+    calls = []
+    state = {"last_remediation_at": 1234567800, "last_remediation_key": "same-stale-source"}
+    monkeypatch.setenv("ETL_AUTO_REMEDIATE", "1")
+    monkeypatch.setenv("ETL_REMEDIATION_COOLDOWN_MIN", "60")
+    monkeypatch.setattr(freshness.time, "time", lambda: 1234567890)
+    monkeypatch.setattr(freshness.subprocess, "run", lambda *args, **kwargs: calls.append(args))
+
+    started = freshness._maybe_start_etl_remediation(state, "same-stale-source")
+
+    assert started is False
+    assert calls == []

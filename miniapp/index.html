@@ -2079,8 +2079,11 @@
         hintLkw: "current LKW fleet data",
         hintFahrer: "driver reports and weekly vacation/sick summary",
         hintFahrerAll: "All drivers data from sheet Fahrer with vacation and sick weeks summary",
+        hintFahrerCard: "Driver card PDF with master data, vacation/sick weeks, monthly mileage by LKW and bonus",
         fahrerAllTitle: "All Fahrer Data",
         fahrerAllButton: "All Fahrer Data",
+        fahrerCardTitle: "Driver Card",
+        fahrerCardButton: "Driver Card",
         hintYf: "reports with driver and LKW work data",
         hintYfMenu: "reports with driver and LKW work data",
         hintYfDriverMonth: "Select month and driver to generate monthly Yellow Fox driver metrics",
@@ -2207,8 +2210,11 @@
         hintLkw: "aktuelle Daten zum LKW-Fuhrpark",
         hintFahrer: "Fahrerberichte sowie Wochenuebersicht zu Urlaub und Krankheit",
         hintFahrerAll: "Alle Fahrerdaten aus Blatt Fahrer mit Uebersicht zu Urlaub und Krankheit nach Wochen",
+        hintFahrerCard: "Fahrerkarte als PDF mit Stammdaten, Urlaub/Krankheit nach Wochen, Monats-KM je LKW und Bonus",
         fahrerAllTitle: "Daten aller Fahrer",
         fahrerAllButton: "Daten aller Fahrer",
+        fahrerCardTitle: "Fahrerkarte",
+        fahrerCardButton: "Fahrerkarte",
         hintYf: "Berichte mit Arbeitsdaten von Fahrern und LKW",
         hintYfMenu: "Berichte mit Arbeitsdaten von Fahrern und LKW",
         hintYfDriverMonth: "Monat und Fahrer für monatliche Yellow-Fox-Fahrerkennzahlen auswählen",
@@ -2335,8 +2341,11 @@
         hintLkw: "актуальные данные по парку LKW",
         hintFahrer: "отчеты по водителям и недельная сводка по отпускам и больничным",
         hintFahrerAll: "Все данные водителей с листа Fahrer и сводка по отпускам и больничным по неделям",
+        hintFahrerCard: "PDF-карточка водителя: мастер-данные, отпуск/больничный по неделям, месячный пробег по LKW и бонус",
         fahrerAllTitle: "Данные всех Fahrer",
         fahrerAllButton: "Данные всех Fahrer",
+        fahrerCardTitle: "Карточка водителя",
+        fahrerCardButton: "Карточка водителя",
         hintYf: "отчеты с данными по работе водителей и LKW",
         hintYfMenu: "отчеты с данными по работе водителей и LKW",
         hintYfDriverMonth: "Выберите месяц и водителя для PDF с месячными показателями Yellow Fox",
@@ -2612,6 +2621,15 @@
       if (type === "fahrer_all") {
         return buildGenerateDirectUrl("fahrer_all", {}, initData || "", disposition);
       }
+      if (type === "fahrer_card") {
+        const params = item?.params || {};
+        return buildGenerateDirectUrl(
+          "fahrer_card",
+          { driver_query: String(params.driver_id || params.driver_query || params.driver_name || "") },
+          initData || "",
+          disposition,
+        );
+      }
 
       const dockKind = item?.dock_kind || {
         lkw_list: "lkw-list",
@@ -2846,6 +2864,22 @@
         select.innerHTML = opts.join("");
       } catch (err) {
         select.innerHTML = `<option value="">${escapeHtml(err?.message || L("failedLoadDriverList"))}</option>`;
+      }
+    }
+
+    async function populateFahrerDriverDatalist(listId) {
+      const list = $(listId);
+      if (!list) return;
+      try {
+        const meta = await fetchMetaServer();
+        const items = Array.isArray(meta?.lookups?.fahrer_drivers) ? meta.lookups.fahrer_drivers : [];
+        list.innerHTML = items.map((item) => {
+          const value = String(item.fahrer_id || "");
+          const label = item.label || [item.fahrer_id, item.fahrername].filter(Boolean).join(" - ");
+          return `<option value="${escapeHtml(value)}" label="${escapeHtml(label)}"></option>`;
+        }).join("");
+      } catch {
+        list.innerHTML = "";
       }
     }
 
@@ -3679,10 +3713,17 @@
               <button type="button" class="btn btn-primary" id="fahrerChooseAll">${L("fahrerAllButton")}</button>
             </div>
           </div>
+          <div class="field">
+            <div class="note">${L("hintFahrerCard")}</div>
+            <div class="note-actions">
+              <button type="button" class="btn btn-primary" id="fahrerChooseCard">${L("fahrerCardButton")}</button>
+            </div>
+          </div>
         `);
         setNote("");
         hideSheetFooter();
         $("fahrerChooseAll").onclick = () => renderAllDrivers();
+        $("fahrerChooseCard").onclick = () => renderDriverCard();
       };
 
       const renderAllDrivers = () => {
@@ -3701,6 +3742,34 @@
         hideSheetFooter();
         $("fahrerAllRun").onclick = async () => {
           await sendReportGenerate("fahrer_all", {});
+        };
+      };
+
+      const renderDriverCard = async () => {
+        setSheetHeader(`Fahrer - ${L("fahrerCardTitle")}`, L("hintFahrerCard"), "PDF");
+        setSheetCloseAction("back", renderMenu);
+        setSegments([], "", () => {});
+        setForm(`
+          <div class="field">
+            <label>${L("driver")}</label>
+            <input id="fahrerCardDriverQuery" list="fahrerCardDriverOptions" type="text" placeholder="${L("choose")}" autocomplete="off" />
+            <datalist id="fahrerCardDriverOptions"></datalist>
+            <div class="note">${L("hintFahrerCard")}</div>
+            <div class="note-actions">
+              <button type="button" class="btn btn-primary" id="fahrerCardRun">${L("generate")}</button>
+            </div>
+          </div>
+        `);
+        setNote("");
+        hideSheetFooter();
+        await populateFahrerDriverDatalist("fahrerCardDriverOptions");
+        $("fahrerCardRun").onclick = async () => {
+          const driverQuery = String($("fahrerCardDriverQuery")?.value || "").trim();
+          if (!driverQuery) {
+            showToast(L("failedLoadDriverList"));
+            return;
+          }
+          await sendReportGenerate("fahrer_card", { driver_query: driverQuery });
         };
       };
 

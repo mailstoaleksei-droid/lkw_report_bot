@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import json
 import os
+import subprocess
 import time
 from datetime import datetime, time as dtime, timezone
 from pathlib import Path
@@ -55,6 +56,13 @@ def _env_int(name: str, default: int, minimum: int = 1) -> int:
         return max(minimum, default)
 
 
+def _env_bool(name: str, default: bool = False) -> bool:
+    raw = (os.getenv(name) or "").strip().lower()
+    if not raw:
+        return default
+    return raw not in {"0", "false", "no", "off"}
+
+
 def _state_file_path() -> Path:
     p = os.getenv("ETL_STALE_STATE_FILE", "").strip()
     if p:
@@ -93,6 +101,49 @@ def _send_telegram(text: str) -> None:
     )
     with request.urlopen(req, timeout=20) as resp:
         resp.read()
+
+
+def _remediation_task_name() -> str:
+    return (os.getenv("ETL_REMEDIATION_TASK_NAME") or "LKW_Report_Bot_ETL_DayHourly").strip()
+
+
+def _remediation_cooldown_seconds() -> int:
+    return _env_int("ETL_REMEDIATION_COOLDOWN_MIN", 60, minimum=1) * 60
+
+
+def _maybe_start_etl_remediation(state: dict, stale_key: str) -> bool:
+    """Start the scheduled ETL task when freshness is stale, throttled by state."""
+    if not _env_bool("ETL_AUTO_REMEDIATE", True):
+        _log("etl_remediation: disabled")
+        return False
+
+    now_ts = int(time.time())
+    last_started_at = int(state.get("last_remediation_at") or 0)
+    last_key = state.get("last_remediation_key")
+    if last_key == stale_key and (now_ts - last_started_at) < _remediation_cooldown_seconds():
+        _log("etl_remediation: skipped=cooldown")
+        return False
+
+    task_name = _remediation_task_name()
+    cmd = ["cmd.exe", "/c", "schtasks", "/Run", "/TN", task_name]
+    state["last_remediation_at"] = now_ts
+    state["last_remediation_key"] = stale_key
+    state["last_remediation_task"] = task_name
+    try:
+        result = subprocess.run(cmd, capture_output=True, text=True, timeout=30, check=False)
+    except Exception as exc:
+        state["last_remediation_result"] = f"exception: {exc}"
+        _log(f"etl_remediation: started=false task={task_name} error={exc}")
+        return False
+
+    state["last_remediation_result"] = str(result.returncode)
+    if result.returncode == 0:
+        _log(f"etl_remediation: started=true task={task_name}")
+        return True
+
+    stderr = (result.stderr or result.stdout or "").strip().replace("\r", " ").replace("\n", " ")
+    _log(f"etl_remediation: started=false task={task_name} returncode={result.returncode} output={stderr}")
+    return False
 
 
 def _schedule_timezone() -> ZoneInfo:
@@ -262,11 +313,16 @@ def main() -> int:
         f"source={source_name} stale_sources={','.join(item['source_name'] for item in stale_sources)}"
     )
 
+    remediation_started = False
+    if stale:
+        remediation_started = _maybe_start_etl_remediation(state, stale_key)
+
     if stale and not already_alerted:
         _send_telegram(_alert_message(stale_sources, now_local))
         state["alert_sent"] = True
         state["stale_key"] = stale_key
         state["last_alert_at"] = int(time.time())
+        state["last_alert_remediation_started"] = remediation_started
         _save_state(state_path, state)
         _log("alert_sent=true")
         return 0
