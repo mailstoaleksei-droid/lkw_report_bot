@@ -2511,6 +2511,12 @@
       if (payload && payload.driver_query !== undefined && String(payload.driver_query).trim()) {
         u.searchParams.set("driver_query", String(payload.driver_query).trim());
       }
+      if (payload && payload.lkw_type !== undefined && String(payload.lkw_type).trim()) {
+        u.searchParams.set("lkw_type", String(payload.lkw_type).trim());
+      }
+      if (payload && payload.firma_name !== undefined && String(payload.firma_name).trim()) {
+        u.searchParams.set("firma_name", String(payload.firma_name).trim());
+      }
       if (disposition) u.searchParams.set("disposition", disposition);
       return u.toString();
     }
@@ -2626,6 +2632,24 @@
         return buildGenerateDirectUrl(
           "fahrer_card",
           { driver_query: String(params.driver_id || params.driver_query || params.driver_name || "") },
+          initData || "",
+          disposition,
+        );
+      }
+      if (type === "fahrer_type") {
+        const params = item?.params || {};
+        return buildGenerateDirectUrl(
+          "fahrer_type",
+          { lkw_type: String(params.lkw_type || "") },
+          initData || "",
+          disposition,
+        );
+      }
+      if (type === "fahrer_firma") {
+        const params = item?.params || {};
+        return buildGenerateDirectUrl(
+          "fahrer_firma",
+          { firma_name: String(params.firma_name || "") },
           initData || "",
           disposition,
         );
@@ -2880,6 +2904,20 @@
         }).join("");
       } catch {
         list.innerHTML = "";
+      }
+    }
+
+    async function populateFahrerFirmSelect(selectId) {
+      const select = $(selectId);
+      if (!select) return;
+      try {
+        const meta = await fetchMetaServer();
+        const items = Array.isArray(meta?.lookups?.fahrer_firms) ? meta.lookups.fahrer_firms : [];
+        const opts = [`<option value="">${L("choose")}</option>`]
+          .concat(items.map((item) => `<option value="${escapeHtml(item)}">${escapeHtml(item)}</option>`));
+        select.innerHTML = opts.join("");
+      } catch (err) {
+        select.innerHTML = `<option value="">${escapeHtml(err?.message || L("choose"))}</option>`;
       }
     }
 
@@ -3706,7 +3744,7 @@
         setSheetHeader("Fahrer", L("hintFahrer"), "PDF");
         setSheetCloseAction("back", backHandler);
         setSegments([], "", () => {});
-        setForm(`
+      setForm(`
           <div class="field">
             <div class="note">${L("hintFahrerAll")}</div>
             <div class="note-actions">
@@ -3719,11 +3757,25 @@
               <button type="button" class="btn btn-primary" id="fahrerChooseCard">${L("fahrerCardButton")}</button>
             </div>
           </div>
+          <div class="field">
+            <div class="note">List of active drivers by Container or Planen from sheet Fahrer</div>
+            <div class="note-actions">
+              <button type="button" class="btn btn-primary" id="fahrerChooseType">Container / Planen</button>
+            </div>
+          </div>
+          <div class="field">
+            <div class="note">List of active drivers for one selected Firma from sheet Fahrer</div>
+            <div class="note-actions">
+              <button type="button" class="btn btn-primary" id="fahrerChooseFirma">Firma</button>
+            </div>
+          </div>
         `);
         setNote("");
         hideSheetFooter();
         $("fahrerChooseAll").onclick = () => renderAllDrivers();
         $("fahrerChooseCard").onclick = () => renderDriverCard();
+        $("fahrerChooseType").onclick = () => renderDriverType();
+        $("fahrerChooseFirma").onclick = () => renderFirmaList();
       };
 
       const renderAllDrivers = () => {
@@ -3770,6 +3822,63 @@
             return;
           }
           await sendReportGenerate("fahrer_card", { driver_query: driverQuery });
+        };
+      };
+
+      const renderDriverType = () => {
+        setSheetHeader("Fahrer - Container / Planen", "List of active drivers by Container or Planen from sheet Fahrer", "PDF");
+        setSheetCloseAction("back", renderMenu);
+        setSegments([], "", () => {});
+        setForm(`
+          <div class="field">
+            <label>Container / Planen</label>
+            <select id="fahrerTypeValue">
+              <option value="">${L("choose")}</option>
+              <option value="Container">Container</option>
+              <option value="Planen">Planen</option>
+            </select>
+            <div class="note">Generate a list of active drivers who work on Container or Planen.</div>
+            <div class="note-actions">
+              <button type="button" class="btn btn-primary" id="fahrerTypeRun">${L("generate")}</button>
+            </div>
+          </div>
+        `);
+        setNote("");
+        hideSheetFooter();
+        $("fahrerTypeRun").onclick = async () => {
+          const lkwType = String($("fahrerTypeValue")?.value || "").trim();
+          if (!lkwType) {
+            showToast(L("choose"));
+            return;
+          }
+          await sendReportGenerate("fahrer_type", { lkw_type: lkwType });
+        };
+      };
+
+      const renderFirmaList = async () => {
+        setSheetHeader("Fahrer - Firma", "Select a Firma and generate the list of active drivers with total count.", "PDF");
+        setSheetCloseAction("back", renderMenu);
+        setSegments([], "", () => {});
+        setForm(`
+          <div class="field">
+            <label>Firma</label>
+            <select id="fahrerFirmaValue"><option value="">${L("loadingHistory")}</option></select>
+            <div class="note">Generate a list of active drivers for the selected Firma. The report includes total drivers.</div>
+            <div class="note-actions">
+              <button type="button" class="btn btn-primary" id="fahrerFirmaRun">${L("generate")}</button>
+            </div>
+          </div>
+        `);
+        setNote("");
+        hideSheetFooter();
+        await populateFahrerFirmSelect("fahrerFirmaValue");
+        $("fahrerFirmaRun").onclick = async () => {
+          const firmaName = String($("fahrerFirmaValue")?.value || "").trim();
+          if (!firmaName) {
+            showToast(L("choose"));
+            return;
+          }
+          await sendReportGenerate("fahrer_firma", { firma_name: firmaName });
         };
       };
 

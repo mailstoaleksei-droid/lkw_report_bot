@@ -380,6 +380,50 @@ const REPORTS = [
     ],
   },
   {
+    id: "fahrer_type",
+    enabled: true,
+    icon: "drivers",
+    name: {
+      en: "Fahrer (Container / Planen)",
+      ru: "Fahrer (Container / Planen)",
+      de: "Fahrer (Container / Planen)",
+    },
+    description: {
+      en: "List of active drivers by Container or Planen from sheet Fahrer",
+      ru: "Список активных водителей по Container или Planen из листа Fahrer",
+      de: "Liste aktiver Fahrer nach Container oder Planen aus Blatt Fahrer",
+    },
+    params: [
+      {
+        id: "lkw_type",
+        type: "text",
+        label: { en: "Container / Planen", ru: "Container / Planen", de: "Container / Planen" },
+      },
+    ],
+  },
+  {
+    id: "fahrer_firma",
+    enabled: true,
+    icon: "drivers",
+    name: {
+      en: "Fahrer (Firma)",
+      ru: "Fahrer (Firma)",
+      de: "Fahrer (Firma)",
+    },
+    description: {
+      en: "List of active drivers for one selected company from sheet Fahrer",
+      ru: "Список активных водителей по выбранной фирме из листа Fahrer",
+      de: "Liste aktiver Fahrer fuer eine ausgewaehlte Firma aus Blatt Fahrer",
+    },
+    params: [
+      {
+        id: "firma_name",
+        type: "text",
+        label: { en: "Firma", ru: "Firma", de: "Firma" },
+      },
+    ],
+  },
+  {
     id: "tankkarten",
     enabled: false,
     icon: "fuel",
@@ -907,6 +951,34 @@ SELECT
   COALESCE(NULLIF(d.raw_payload->>'Datum entlassen', ''), NULLIF(d.raw_payload->>'Dismiss Date', '')) AS datum_entlassen
 FROM drivers d
 LEFT JOIN companies c ON c.id = d.company_id
+ORDER BY d.external_id;
+`;
+
+const FAHRER_TYPE_LIST_SQL = `
+SELECT
+  d.external_id AS fahrer_id,
+  d.full_name AS fahrername,
+  COALESCE(NULLIF(c.name, ''), NULLIF(d.raw_payload->>'Firma', ''), NULLIF(d.raw_payload->>'Company', '')) AS firma,
+  COALESCE(NULLIF(d.phone, ''), NULLIF(d.raw_payload->>'Telefonnummer', ''), NULLIF(d.raw_payload->>'Phone', '')) AS telefonnummer,
+  COALESCE(NULLIF(d.raw_payload->>'LKW-Typ', ''), NULLIF(d.raw_payload->>'Type', '')) AS lkw_typ
+FROM drivers d
+LEFT JOIN companies c ON c.id = d.company_id
+WHERE COALESCE(d.is_active, true)
+  AND lower(trim(COALESCE(NULLIF(d.raw_payload->>'LKW-Typ', ''), NULLIF(d.raw_payload->>'Type', ''), ''))) = lower(trim($1::text))
+ORDER BY d.external_id;
+`;
+
+const FAHRER_FIRMA_LIST_SQL = `
+SELECT
+  d.external_id AS fahrer_id,
+  d.full_name AS fahrername,
+  COALESCE(NULLIF(c.name, ''), NULLIF(d.raw_payload->>'Firma', ''), NULLIF(d.raw_payload->>'Company', '')) AS firma,
+  COALESCE(NULLIF(d.phone, ''), NULLIF(d.raw_payload->>'Telefonnummer', ''), NULLIF(d.raw_payload->>'Phone', '')) AS telefonnummer,
+  COALESCE(NULLIF(d.raw_payload->>'LKW-Typ', ''), NULLIF(d.raw_payload->>'Type', '')) AS lkw_typ
+FROM drivers d
+LEFT JOIN companies c ON c.id = d.company_id
+WHERE COALESCE(d.is_active, true)
+  AND lower(trim(COALESCE(NULLIF(c.name, ''), NULLIF(d.raw_payload->>'Firma', ''), NULLIF(d.raw_payload->>'Company', ''), ''))) = lower(trim($1::text))
 ORDER BY d.external_id;
 `;
 
@@ -1489,6 +1561,18 @@ function makeFahrerCardFilename(driverQuery, at = new Date()) {
   const driver = sanitizeFilenamePart(driverQuery);
   if (driver) return `fahrer_card_${driver}.pdf`;
   return `fahrer_card_${formatUtcDateStamp(at)}.pdf`;
+}
+
+function makeFahrerTypeFilename(lkwType, at = new Date()) {
+  const kind = sanitizeFilenamePart(lkwType);
+  if (kind) return `fahrer_${kind}_${formatUtcDateStamp(at)}.pdf`;
+  return `fahrer_type_${formatUtcDateStamp(at)}.pdf`;
+}
+
+function makeFahrerFirmaFilename(firmaName, at = new Date()) {
+  const firma = sanitizeFilenamePart(firmaName);
+  if (firma) return `fahrer_firma_${firma}_${formatUtcDateStamp(at)}.pdf`;
+  return `fahrer_firma_${formatUtcDateStamp(at)}.pdf`;
 }
 
 function makeDockFilename(kind, at = new Date()) {
@@ -4773,6 +4857,139 @@ async function buildDockPdfWithPdfLib({ kind, rows, userId }) {
   return pdfDoc.save();
 }
 
+async function buildFahrerListPdfWithPdfLib({ title, subtitle, rows, userId }) {
+  const pdfDoc = await PDFDocument.create();
+  const font = await pdfDoc.embedFont(StandardFonts.Helvetica);
+  const boldFont = await pdfDoc.embedFont(StandardFonts.HelveticaBold);
+
+  const pageSize = [842, 595];
+  const margin = 22;
+  const rowHeight = 15;
+  const textSize = 8;
+  const columns = [
+    { key: "fahrer_id", label: "Fahrer-ID", width: 78 },
+    { key: "fahrername", label: "Fahrername", width: 180 },
+    { key: "firma", label: "Firma", width: 160 },
+    { key: "telefonnummer", label: "Telefonnummer", width: 118 },
+    { key: "lkw_typ", label: "Container / Planen", width: 140 },
+  ];
+  const tableWidth = columns.reduce((sum, col) => sum + col.width, 0);
+  const tableX = margin;
+  const borderColor = rgb(0.74, 0.8, 0.9);
+  const headerBg = rgb(0.93, 0.96, 1);
+  const oddBg = rgb(0.985, 0.99, 1);
+  const textColor = rgb(0.08, 0.14, 0.24);
+
+  let page = pdfDoc.addPage(pageSize);
+  let y = page.getHeight() - margin;
+
+  const drawHeader = () => {
+    page.drawText(title, {
+      x: margin,
+      y,
+      size: 13,
+      font: boldFont,
+      color: textColor,
+    });
+    y -= 16;
+    page.drawText(`${subtitle} | Total drivers: ${rows.length} | ${formatReportGeneratedLabel(userId)}`, {
+      x: margin,
+      y,
+      size: 8,
+      font,
+      color: rgb(0.24, 0.3, 0.4),
+    });
+    y -= 14;
+  };
+
+  const drawHeaderRow = () => {
+    page.drawRectangle({
+      x: tableX,
+      y: y - rowHeight + 2,
+      width: tableWidth,
+      height: rowHeight,
+      color: headerBg,
+      borderColor,
+      borderWidth: 1,
+    });
+    let x = tableX;
+    for (const col of columns) {
+      const label = fitTextToWidth(boldFont, col.label, textSize, col.width - 8);
+      const labelWidth = measureTextWidth(boldFont, label, textSize);
+      page.drawText(label, {
+        x: x + Math.max(4, (col.width - labelWidth) / 2),
+        y: y - 9,
+        size: textSize,
+        font: boldFont,
+        color: textColor,
+      });
+      x += col.width;
+    }
+    y -= rowHeight;
+  };
+
+  const nextPage = () => {
+    page = pdfDoc.addPage(pageSize);
+    y = page.getHeight() - margin;
+    drawHeader();
+    drawHeaderRow();
+  };
+
+  const ensureSpace = (needed) => {
+    if (y - needed >= margin) return;
+    nextPage();
+  };
+
+  drawHeader();
+  drawHeaderRow();
+
+  if (!rows.length) {
+    page.drawText("No active drivers found.", {
+      x: margin,
+      y: y - 10,
+      size: 9,
+      font,
+      color: textColor,
+    });
+    return pdfDoc.save();
+  }
+
+  rows.forEach((row, idx) => {
+    ensureSpace(rowHeight + 2);
+    if (idx % 2 === 1) {
+      page.drawRectangle({
+        x: tableX,
+        y: y - rowHeight + 2,
+        width: tableWidth,
+        height: rowHeight,
+        color: oddBg,
+      });
+    }
+    let x = tableX;
+    for (const col of columns) {
+      const value = fitTextToWidth(font, safeText(row?.[col.key], ""), textSize, col.width - 8);
+      const valueWidth = measureTextWidth(font, value, textSize);
+      page.drawText(value, {
+        x: x + Math.max(4, (col.width - valueWidth) / 2),
+        y: y - 9,
+        size: textSize,
+        font,
+        color: textColor,
+      });
+      x += col.width;
+    }
+    page.drawLine({
+      start: { x: tableX, y: y - rowHeight + 2 },
+      end: { x: tableX + tableWidth, y: y - rowHeight + 2 },
+      thickness: 0.5,
+      color: borderColor,
+    });
+    y -= rowHeight;
+  });
+
+  return pdfDoc.save();
+}
+
 function parseDdMmYyyy(value) {
   const m = /^(\d{2})\/(\d{2})\/(\d{4})$/.exec(String(value || "").trim());
   if (!m) return null;
@@ -7169,6 +7386,23 @@ function validateGeneratePayload(body) {
     return { ok: true, reportType, driverQuery };
   }
 
+  if (reportType === "fahrer_type") {
+    const lkwTypeRaw = String(body.lkw_type || "").trim();
+    const normalized = lkwTypeRaw.toLowerCase();
+    if (normalized !== "container" && normalized !== "planen") {
+      return { ok: false, status: 400, error: "Missing or invalid lkw_type" };
+    }
+    return { ok: true, reportType, lkwType: normalized === "container" ? "Container" : "Planen" };
+  }
+
+  if (reportType === "fahrer_firma") {
+    const firmaName = String(body.firma_name || "").trim().slice(0, 160);
+    if (!firmaName) {
+      return { ok: false, status: 400, error: "Missing firma_name" };
+    }
+    return { ok: true, reportType, firmaName };
+  }
+
   return { ok: true, reportType };
 }
 
@@ -7204,6 +7438,8 @@ async function handleGenerateWithBody(body, env, enforceRateLimit = true) {
     && valid.reportType !== "lkw_all"
     && valid.reportType !== "fahrer_all"
     && valid.reportType !== "fahrer_card"
+    && valid.reportType !== "fahrer_type"
+    && valid.reportType !== "fahrer_firma"
   ) {
     return json(
       {
@@ -8107,6 +8343,112 @@ async function handleGenerateWithBody(body, env, enforceRateLimit = true) {
     valid.reportYear = fahrerReportYear;
     valid.driverId = safeText(driver?.fahrer_id, driverQuery);
     valid.driverName = safeText(driver?.fahrername, "");
+  } else if (valid.reportType === "fahrer_type") {
+    let rows;
+    try {
+      const result = await queryNeon(dbConnectionString, FAHRER_TYPE_LIST_SQL, [valid.lkwType]);
+      rows = result.rows || [];
+    } catch (err) {
+      return json(
+        {
+          ok: false,
+          error: "Failed to execute SQL query",
+          code: "SQL_ERROR",
+          details: String(err?.message || err || "unknown error"),
+        },
+        500,
+        { "Cache-Control": "no-store" },
+      );
+    }
+
+    filename = makeFahrerTypeFilename(valid.lkwType);
+    outputKey = `fahrer_type:${valid.lkwType}`;
+    try {
+      pdfBytes = await buildFahrerListPdfWithPdfLib({
+        title: `Fahrer - ${valid.lkwType}`,
+        subtitle: `Active drivers from sheet Fahrer for ${valid.lkwType}`,
+        rows,
+        userId: reportUserLabel,
+      });
+    } catch (err) {
+      pdfEngine = "legacy-fallback";
+      const lines = [
+        `Filter: ${valid.lkwType}`,
+        `Total drivers: ${rows.length}`,
+        "",
+        "Fahrer-ID | Fahrername | Firma | Telefonnummer | Container / Planen",
+        "-".repeat(150),
+      ];
+      for (const row of rows) {
+        lines.push([
+          safeText(row?.fahrer_id, ""),
+          safeText(row?.fahrername, ""),
+          safeText(row?.firma, ""),
+          safeText(row?.telefonnummer, ""),
+          safeText(row?.lkw_typ, ""),
+        ].join(" | "));
+      }
+      pdfBytes = buildSimplePdf({
+        title: `Fahrer - ${valid.lkwType}`,
+        subtitle: formatReportGeneratedLabel(reportUserLabel),
+        lines,
+        pageWidth: 1040,
+        pageHeight: 595,
+      });
+    }
+  } else if (valid.reportType === "fahrer_firma") {
+    let rows;
+    try {
+      const result = await queryNeon(dbConnectionString, FAHRER_FIRMA_LIST_SQL, [valid.firmaName]);
+      rows = result.rows || [];
+    } catch (err) {
+      return json(
+        {
+          ok: false,
+          error: "Failed to execute SQL query",
+          code: "SQL_ERROR",
+          details: String(err?.message || err || "unknown error"),
+        },
+        500,
+        { "Cache-Control": "no-store" },
+      );
+    }
+
+    filename = makeFahrerFirmaFilename(valid.firmaName);
+    outputKey = `fahrer_firma:${valid.firmaName}`;
+    try {
+      pdfBytes = await buildFahrerListPdfWithPdfLib({
+        title: `Fahrer - Firma`,
+        subtitle: `Firma: ${valid.firmaName}`,
+        rows,
+        userId: reportUserLabel,
+      });
+    } catch (err) {
+      pdfEngine = "legacy-fallback";
+      const lines = [
+        `Firma: ${valid.firmaName}`,
+        `Total drivers: ${rows.length}`,
+        "",
+        "Fahrer-ID | Fahrername | Firma | Telefonnummer | Container / Planen",
+        "-".repeat(150),
+      ];
+      for (const row of rows) {
+        lines.push([
+          safeText(row?.fahrer_id, ""),
+          safeText(row?.fahrername, ""),
+          safeText(row?.firma, ""),
+          safeText(row?.telefonnummer, ""),
+          safeText(row?.lkw_typ, ""),
+        ].join(" | "));
+      }
+      pdfBytes = buildSimplePdf({
+        title: `Fahrer - Firma`,
+        subtitle: formatReportGeneratedLabel(reportUserLabel),
+        lines,
+        pageWidth: 1040,
+        pageHeight: 595,
+      });
+    }
   } else {
     let rows;
     const driverQuery = safeText(valid.driverQuery, "").trim();
@@ -8231,6 +8573,12 @@ async function handleGenerateWithBody(body, env, enforceRateLimit = true) {
     reportParams.driver_name = safeText(valid.driverName, "");
     if ("reportYear" in valid) reportParams.report_year = valid.reportYear;
   }
+  if (valid.reportType === "fahrer_type") {
+    reportParams.lkw_type = safeText(valid.lkwType, "");
+  }
+  if (valid.reportType === "fahrer_firma") {
+    reportParams.firma_name = safeText(valid.firmaName, "");
+  }
   if ("lkwId" in valid) {
     reportParams.lkw_id = valid.lkwId;
   }
@@ -8279,6 +8627,8 @@ async function handleGenerateGet(request, env) {
     period: url.searchParams.get("period") || "",
     lkw_id: url.searchParams.get("lkw_id") || "",
     driver_query: url.searchParams.get("driver_query") || "",
+    lkw_type: url.searchParams.get("lkw_type") || "",
+    firma_name: url.searchParams.get("firma_name") || "",
     disposition: url.searchParams.get("disposition") || "",
   };
   return handleGenerateWithBody(body, env, false);
@@ -8475,6 +8825,27 @@ async function buildMetaWithAccess(request, env) {
           fahrername: safeText(row.fahrername, ""),
           label: [safeText(row.fahrer_id, ""), safeText(row.fahrername, "")].filter(Boolean).join(" - "),
         })).filter((row) => row.fahrer_id);
+      } catch {
+        // Optional lookup only.
+      }
+      try {
+        const firmenResult = await queryNeon(
+          dbConnectionString,
+          `
+            SELECT DISTINCT
+              COALESCE(NULLIF(c.name, ''), NULLIF(d.raw_payload->>'Firma', ''), NULLIF(d.raw_payload->>'Company', '')) AS firma
+            FROM drivers d
+            LEFT JOIN companies c ON c.id = d.company_id
+            WHERE COALESCE(d.is_active, true)
+              AND COALESCE(NULLIF(c.name, ''), NULLIF(d.raw_payload->>'Firma', ''), NULLIF(d.raw_payload->>'Company', ''), '') <> ''
+            ORDER BY firma
+          `,
+          [],
+        );
+        meta.lookups = meta.lookups || {};
+        meta.lookups.fahrer_firms = (firmenResult.rows || [])
+          .map((row) => safeText(row.firma, ""))
+          .filter(Boolean);
       } catch {
         // Optional lookup only.
       }
