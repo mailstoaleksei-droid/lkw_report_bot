@@ -304,6 +304,42 @@ const REPORTS = [
     ],
   },
   {
+    id: "bonus_firma_month",
+    enabled: true,
+    icon: "bonus",
+    name: {
+      en: "Bonus (Company by Month)",
+      ru: "Bonus (фирма за месяц)",
+      de: "Bonus (Firma pro Monat)",
+    },
+    description: {
+      en: "Driver bonus list for one selected company and month with total bonus sum",
+      ru: "Список бонусов водителей по выбранной фирме и месяцу с общей суммой бонуса",
+      de: "Bonusliste der Fahrer fuer eine ausgewaehlte Firma und einen Monat mit Gesamtsumme",
+    },
+    params: [
+      {
+        id: "year",
+        type: "year",
+        label: { en: "Year", ru: "Год", de: "Jahr" },
+        min: 2025,
+        max: 2035,
+      },
+      {
+        id: "month",
+        type: "month",
+        label: { en: "Month", ru: "Месяц", de: "Monat" },
+        min: 1,
+        max: 12,
+      },
+      {
+        id: "firma_name",
+        type: "text",
+        label: { en: "Firma", ru: "Фирма", de: "Firma" },
+      },
+    ],
+  },
+  {
     id: "lkw_single",
     enabled: true,
     icon: "truck",
@@ -770,6 +806,30 @@ WHERE report_year = $1::int
     OR lower(fahrer_name) LIKE lower($3::text)
   )
 ORDER BY fahrer_name ASC, fahrer_id ASC, report_month ASC;
+`;
+
+const BONUS_FIRMA_MONTHLY_SQL = `
+SELECT
+  b.report_year,
+  b.report_month,
+  b.month_start,
+  b.fahrer_id,
+  b.fahrer_name,
+  COALESCE(b.days, 0)::numeric AS days,
+  COALESCE(b.km, 0)::numeric AS km,
+  COALESCE(b.pct_km, 0)::numeric AS pct_km,
+  COALESCE(b.ct, 0)::numeric AS ct,
+  COALESCE(b.pct_ct, 0)::numeric AS pct_ct,
+  COALESCE(b.bonus, 0)::numeric AS bonus,
+  COALESCE(b.penalty, 0)::numeric AS penalty,
+  COALESCE(b.final, 0)::numeric AS final
+FROM report_bonus_dynamik_monthly b
+LEFT JOIN drivers d ON lower(d.external_id) = lower(b.fahrer_id)
+LEFT JOIN companies c ON c.id = d.company_id
+WHERE b.report_year = $1::int
+  AND b.report_month = $2::int
+  AND lower(trim(COALESCE(NULLIF(c.name, ''), NULLIF(d.raw_payload->>'Firma', ''), NULLIF(d.raw_payload->>'Company', ''), ''))) = lower(trim($3::text))
+ORDER BY b.final DESC, b.fahrer_name ASC, b.fahrer_id ASC;
 `;
 
 const DOCK_KIND_TO_REPORT_TYPE = {
@@ -1547,6 +1607,16 @@ function makeBonusFilename(year, month, at = new Date(), period = "month") {
     return `bonus_${y}_${pad2(m)}.pdf`;
   }
   return `bonus_${formatUtcDateStamp(at)}.pdf`;
+}
+
+function makeBonusFirmaMonthFilename(year, month, firmaName, at = new Date()) {
+  const y = Number.parseInt(String(year), 10);
+  const m = Number.parseInt(String(month), 10);
+  const firma = sanitizeFilenamePart(firmaName);
+  if (Number.isFinite(y) && Number.isFinite(m) && y > 0 && m >= 1 && m <= 12) {
+    return `bonus_firma_${y}_${pad2(m)}${firma ? `_${firma}` : ""}.pdf`;
+  }
+  return `bonus_firma_${formatUtcDateStamp(at)}.pdf`;
 }
 
 function makeFahrerAllFilename(reportYear, at = new Date()) {
@@ -4160,7 +4230,7 @@ function summarizeBonusRows(rows = []) {
 }
 
 async function buildBonusPdfWithPdfLib({
-  userId, year, month, driverQuery, rows,
+  userId, year, month, driverQuery, rows, filterLabelOverride = "",
 }) {
   const matrixRows = buildBonusMatrixRows(rows);
   const summary = summarizeBonusRows(matrixRows);
@@ -4195,7 +4265,7 @@ async function buildBonusPdfWithPdfLib({
   let page = pdfDoc.addPage(pageSize);
   let y = page.getHeight() - margin;
   const monthTitle = monthNameDe(month);
-  const filterLabel = safeText(driverQuery, "").trim();
+  const filterLabel = safeText(filterLabelOverride || driverQuery, "").trim();
 
   const drawPageHeader = () => {
     page.drawText("Bonus (BonusDynamik)", {
@@ -7362,6 +7432,19 @@ function validateGeneratePayload(body) {
     return { ok: true, reportType, year, month, period, driverQuery };
   }
 
+  if (reportType === "bonus_firma_month") {
+    const year = Number.parseInt(String(body.year ?? ""), 10);
+    const month = Number.parseInt(String(body.month ?? ""), 10);
+    const firmaName = String(body.firma_name || "").trim().slice(0, 160);
+    if (!Number.isFinite(year) || year < 2025 || year > 2035 || !Number.isFinite(month) || month < 1 || month > 12) {
+      return { ok: false, status: 400, error: "Invalid year/month" };
+    }
+    if (!firmaName) {
+      return { ok: false, status: 400, error: "Missing firma_name" };
+    }
+    return { ok: true, reportType, year, month, firmaName };
+  }
+
   if (reportType === "lkw_single") {
     const lkwId = String(body.lkw_id || "").trim().slice(0, 40);
     if (!lkwId) {
@@ -7434,6 +7517,7 @@ async function handleGenerateWithBody(body, env, enforceRateLimit = true) {
     && valid.reportType !== "yf_lkw_week"
     && valid.reportType !== "yf_lkw_month"
     && valid.reportType !== "bonus"
+    && valid.reportType !== "bonus_firma_month"
     && valid.reportType !== "lkw_single"
     && valid.reportType !== "lkw_all"
     && valid.reportType !== "fahrer_all"
@@ -8449,6 +8533,74 @@ async function handleGenerateWithBody(body, env, enforceRateLimit = true) {
         pageHeight: 595,
       });
     }
+  } else if (valid.reportType === "bonus_firma_month") {
+    let rows;
+    try {
+      const result = await queryNeon(
+        dbConnectionString,
+        BONUS_FIRMA_MONTHLY_SQL,
+        [valid.year, valid.month, valid.firmaName],
+      );
+      rows = result.rows || [];
+    } catch (err) {
+      return json(
+        {
+          ok: false,
+          error: "Failed to execute SQL query",
+          code: "SQL_ERROR",
+          details: String(err?.message || err || "unknown error"),
+        },
+        500,
+        { "Cache-Control": "no-store" },
+      );
+    }
+
+    filename = makeBonusFirmaMonthFilename(valid.year, valid.month, valid.firmaName);
+    outputKey = `bonus_firma_month:${valid.year}:${pad2(valid.month)}:${valid.firmaName}`;
+    try {
+      pdfBytes = await buildBonusPdfWithPdfLib({
+        userId: reportUserLabel,
+        year: valid.year,
+        month: valid.month,
+        driverQuery: "",
+        filterLabelOverride: `Firma: ${valid.firmaName}`,
+        rows,
+      });
+    } catch (err) {
+      pdfEngine = "legacy-fallback";
+      const matrixRows = buildBonusMatrixRows(rows);
+      const totalFinal = matrixRows.reduce((sum, row) => sum + toNumberSafe(row?.final, 0), 0);
+      const lines = [];
+      lines.push(`Firma: ${valid.firmaName}`);
+      lines.push(`Monat: ${valid.year}/${pad2(valid.month)}`);
+      lines.push(`Gesamtbonus: ${formatMoney(totalFinal)}`);
+      lines.push("");
+      lines.push("ID | Fahrer | Days | KM | %KM | CT | %CT | Bonus | Penalty | Final");
+      lines.push("-".repeat(140));
+      for (const row of matrixRows) {
+        lines.push(
+          [
+            safeText(row.fahrer_id, ""),
+            safeText(row.fahrer_name, ""),
+            formatBonusCell(row.days, "int"),
+            formatBonusCell(row.km, "money_int"),
+            formatBonusCell(row.pct_km, "percent1"),
+            formatBonusCell(row.ct, "int"),
+            formatBonusCell(row.pct_ct, "percent1"),
+            formatBonusCell(row.bonus, "money"),
+            formatBonusCell(row.penalty, "money"),
+            formatBonusCell(row.final, "money_int"),
+          ].join(" | "),
+        );
+      }
+      pdfBytes = buildSimplePdf({
+        title: `Bonus - Firma ${valid.firmaName}`,
+        subtitle: formatReportGeneratedLabel(reportUserLabel),
+        lines,
+        pageWidth: 1040,
+        pageHeight: 595,
+      });
+    }
   } else {
     let rows;
     const driverQuery = safeText(valid.driverQuery, "").trim();
@@ -8564,6 +8716,11 @@ async function handleGenerateWithBody(body, env, enforceRateLimit = true) {
       reportParams.driver_query = safeText(valid.driverQuery, "").trim();
     }
   }
+  if (valid.reportType === "bonus_firma_month") {
+    reportParams.year = valid.year;
+    reportParams.month = valid.month;
+    reportParams.firma_name = safeText(valid.firmaName, "");
+  }
   if (valid.reportType === "fahrer_all" && "reportYear" in valid) {
     reportParams.report_year = valid.reportYear;
   }
@@ -8627,8 +8784,8 @@ async function handleGenerateGet(request, env) {
     period: url.searchParams.get("period") || "",
     lkw_id: url.searchParams.get("lkw_id") || "",
     driver_query: url.searchParams.get("driver_query") || "",
-    lkw_type: url.searchParams.get("lkw_type") || "",
     firma_name: url.searchParams.get("firma_name") || "",
+    lkw_type: url.searchParams.get("lkw_type") || "",
     disposition: url.searchParams.get("disposition") || "",
   };
   return handleGenerateWithBody(body, env, false);

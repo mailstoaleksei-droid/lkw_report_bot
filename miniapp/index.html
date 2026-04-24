@@ -2511,11 +2511,11 @@
       if (payload && payload.driver_query !== undefined && String(payload.driver_query).trim()) {
         u.searchParams.set("driver_query", String(payload.driver_query).trim());
       }
-      if (payload && payload.lkw_type !== undefined && String(payload.lkw_type).trim()) {
-        u.searchParams.set("lkw_type", String(payload.lkw_type).trim());
-      }
       if (payload && payload.firma_name !== undefined && String(payload.firma_name).trim()) {
         u.searchParams.set("firma_name", String(payload.firma_name).trim());
+      }
+      if (payload && payload.lkw_type !== undefined && String(payload.lkw_type).trim()) {
+        u.searchParams.set("lkw_type", String(payload.lkw_type).trim());
       }
       if (disposition) u.searchParams.set("disposition", disposition);
       return u.toString();
@@ -2619,6 +2619,19 @@
             year: Number(params.year || 0),
             month: Number(params.month || 0),
             driver_query: String(params.driver_query || ""),
+          },
+          initData || "",
+          disposition,
+        );
+      }
+      if (type === "bonus_firma_month") {
+        const params = item?.params || {};
+        return buildGenerateDirectUrl(
+          "bonus_firma_month",
+          {
+            year: Number(params.year || 0),
+            month: Number(params.month || 0),
+            firma_name: String(params.firma_name || ""),
           },
           initData || "",
           disposition,
@@ -4214,11 +4227,18 @@
               <button type="button" class="btn btn-primary" id="bonusChooseMonth">${L("month")}</button>
             </div>
           </div>
+          <div class="field">
+            <div class="note">Bonus list for one selected Firma and month with total bonus sum</div>
+            <div class="note-actions">
+              <button type="button" class="btn btn-primary" id="bonusChooseFirmaMonth">Firma / Monat</button>
+            </div>
+          </div>
         `);
         setNote("");
         hideSheetFooter();
         $("bonusChooseWhole").onclick = () => renderWholeYear();
         $("bonusChooseMonth").onclick = () => renderMonth();
+        $("bonusChooseFirmaMonth").onclick = () => renderFirmaMonth();
       };
 
       const renderWholeYear = () => {
@@ -4301,6 +4321,51 @@
             year,
             month,
             driver_query: driverQuery,
+          });
+        };
+      };
+
+      const renderFirmaMonth = async () => {
+        setSheetHeader("Bonus - Firma / Monat", "Bonus report for one selected Firma and month", "PDF");
+        setSheetCloseAction("back", renderMenu);
+        setSegments([], "", () => {});
+        setForm(`
+          <div class="field">
+            <label>Firma / Monat</label>
+            <select id="bonusFirmaMonthYear">${buildYearOptions(2025, 2035)}</select>
+            <div class="field" style="margin-top:12px; margin-bottom:0; padding:10px 10px 8px;">
+              <label>${L("month")}</label>
+              <select id="bonusFirmaMonthMonth">${buildMonthOptions()}</select>
+            </div>
+            <div class="field" style="margin-top:12px; margin-bottom:0; padding:10px 10px 8px;">
+              <label>Firma</label>
+              <select id="bonusFirmaMonthFirma"><option value="">${L("loadingHistory")}</option></select>
+            </div>
+            <div class="note">Generate the list of drivers for the selected Firma and month. The report includes total bonus sum.</div>
+            <div class="note-actions">
+              <button type="button" class="btn btn-primary" id="bonusFirmaMonthRun">${L("generate")}</button>
+            </div>
+          </div>
+        `);
+        setNote("");
+        hideSheetFooter();
+        const now = new Date();
+        if ($("bonusFirmaMonthYear")) $("bonusFirmaMonthYear").value = String(now.getFullYear());
+        if ($("bonusFirmaMonthMonth")) $("bonusFirmaMonthMonth").value = String(now.getMonth() + 1);
+        await populateFahrerFirmSelect("bonusFirmaMonthFirma");
+        $("bonusFirmaMonthRun").onclick = async () => {
+          const year = Number($("bonusFirmaMonthYear")?.value);
+          const month = Number($("bonusFirmaMonthMonth")?.value);
+          const firmaName = String($("bonusFirmaMonthFirma")?.value || "").trim();
+          if (!Number.isFinite(year) || year < 2025 || year > 2035 || !Number.isFinite(month) || month < 1 || month > 12 || !firmaName) {
+            haptic("error");
+            showToast(L("choose"));
+            return;
+          }
+          await sendReportGenerate("bonus_firma_month", {
+            year,
+            month,
+            firma_name: firmaName,
           });
         };
       };
