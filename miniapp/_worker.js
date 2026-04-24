@@ -6374,7 +6374,7 @@ async function buildFahrerCardPdfWithPdfLib({ userId, reportYear, driver, weekly
         ],
       },
       {
-        label: `Rabochee vremya ${effectiveYear}`,
+        label: `Work time ${effectiveYear}`,
         lines: [
           { text: `${formatTagCount(workedDaysYtd)} gearbeitet`, size: metricPrimarySize, font: boldFont, color: accentColor },
           { text: `${formatTagCount(vacationDaysYtd)} Urlaub | ${formatTagCount(sickDaysYtd)} krank`, size: metricSecondarySize, font, color: mutedColor },
