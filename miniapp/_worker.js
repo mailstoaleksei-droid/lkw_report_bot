@@ -1060,7 +1060,9 @@ WITH activity AS (
   SELECT
     report_year,
     report_month AS month_index,
+    SUM(COALESCE(days, 0))::int AS days,
     SUM(COALESCE(km, 0))::numeric AS bonus_km,
+    SUM(COALESCE(ct, 0))::int AS ct,
     SUM(COALESCE(bonus, 0))::numeric AS bonus,
     SUM(COALESCE(penalty, 0))::numeric AS penalty,
     SUM(COALESCE(final, 0))::numeric AS final
@@ -1075,7 +1077,9 @@ SELECT
   COALESCE(a.month_name, to_char(make_date(COALESCE(a.report_year, b.report_year)::int, COALESCE(a.month_index, b.month_index)::int, 1), 'FMMonth')) AS month_name,
   COALESCE(a.lkw_list, '') AS lkw_list,
   COALESCE(a.km, 0)::numeric AS km,
+  COALESCE(b.days, 0)::int AS days,
   COALESCE(b.bonus_km, 0)::numeric AS bonus_km,
+  COALESCE(b.ct, 0)::int AS ct,
   COALESCE(b.bonus, 0)::numeric AS bonus,
   COALESCE(b.penalty, 0)::numeric AS penalty,
   COALESCE(b.final, 0)::numeric AS final
@@ -1253,6 +1257,36 @@ function parseTelegramUserFromInitData(initDataRaw) {
   } catch {
     return null;
   }
+}
+
+function formatReportUserLabel(user, fallbackUserId) {
+  const firstName = String(user?.first_name || "").trim();
+  const lastName = String(user?.last_name || "").trim();
+  const fullName = `${lastName} ${firstName}`.trim();
+  if (fullName) return fullName;
+
+  const username = String(user?.username || "").replace(/^@+/, "").trim();
+  if (username) return username;
+
+  return String(fallbackUserId || "").trim() || "Unknown user";
+}
+
+function formatReportGeneratedLabel(userLabel, date = new Date()) {
+  const formatter = new Intl.DateTimeFormat("en-GB", {
+    timeZone: "Europe/Berlin",
+    day: "2-digit",
+    month: "2-digit",
+    year: "numeric",
+    hour: "2-digit",
+    minute: "2-digit",
+    hour12: false,
+  });
+  const parts = formatter.formatToParts(date);
+  const map = Object.fromEntries(parts.map((part) => [part.type, part.value]));
+  const datePart = `${map.day}/${map.month}/${map.year}`;
+  const timePart = `${map.hour}:${map.minute}`;
+  const author = String(userLabel || "").trim() || "Неизвестный пользователь";
+  return `Сгенерировано ${datePart} ${timePart} | ${author}`;
 }
 
 function getDbConnectionString(env) {
@@ -1752,7 +1786,7 @@ async function buildBerichtPdfWithPdfLib({ year, week, userId, rows, weekSummari
       color: textColor,
     });
     y -= 18;
-    page.drawText(`Generated: ${new Date().toISOString()} UTC | User: ${userId}`, {
+    page.drawText(formatReportGeneratedLabel(userId), {
       x: margin,
       y,
       size: 9,
@@ -2346,7 +2380,7 @@ async function buildDataPlanPdfWithPdfLib({ year, week, userId, rows }) {
       color: textColor,
     });
     y -= 16;
-    page.drawText(`Generated: ${new Date().toISOString()} UTC | User: ${userId}`, {
+    page.drawText(formatReportGeneratedLabel(userId), {
       x: margin,
       y,
       size: 8,
@@ -2605,7 +2639,7 @@ async function buildDataWeekPdfWithPdfLib({ year, week, userId, rows }) {
       color: textColor,
     });
     y -= 15;
-    page.drawText(`Generated: ${new Date().toISOString()} UTC | User: ${userId}`, {
+    page.drawText(formatReportGeneratedLabel(userId), {
       x: margin,
       y,
       size: 8,
@@ -2896,7 +2930,7 @@ async function buildEinnahmenPdfWithPdfLib({ userId, rows }) {
       color: textColor,
     });
     y -= 16;
-    page.drawText(`Generated: ${new Date().toISOString()} UTC | User: ${userId}`, {
+    page.drawText(formatReportGeneratedLabel(userId), {
       x: margin,
       y,
       size: 8,
@@ -3213,7 +3247,7 @@ function drawEinnahmenFirmChartPage({ pdfDoc, font, boldFont, userId, rows }) {
     color: textColor,
   });
   y -= 18;
-  page.drawText(`Generated: ${new Date().toISOString()} UTC | User: ${userId}`, {
+  page.drawText(formatReportGeneratedLabel(userId), {
     x: margin,
     y,
     size: 8,
@@ -3377,7 +3411,7 @@ function drawEinnahmenFirmBubblePage({ pdfDoc, font, boldFont, userId, rows }) {
     color: textColor,
   });
   y -= 18;
-  page.drawText(`Generated: ${new Date().toISOString()} UTC | User: ${userId}`, {
+  page.drawText(formatReportGeneratedLabel(userId), {
     x: margin,
     y,
     size: 8,
@@ -3533,7 +3567,7 @@ async function buildEinnahmenFirmPdfWithPdfLib({ userId, rows }) {
       color: textColor,
     });
     y -= 16;
-    page.drawText(`Rows: first 20 | Generated: ${new Date().toISOString()} UTC | User: ${userId}`, {
+    page.drawText(`Rows: first 20 | ${formatReportGeneratedLabel(userId)}`, {
       x: margin,
       y,
       size: 8,
@@ -3813,7 +3847,7 @@ async function buildDieselPdfWithPdfLib({ userId, rows }) {
       color: textColor,
     });
     y -= 16;
-    page.drawText(`Generated: ${new Date().toISOString()} UTC | User: ${userId}`, {
+    page.drawText(formatReportGeneratedLabel(userId), {
       x: margin,
       y,
       size: 8,
@@ -4089,7 +4123,7 @@ async function buildBonusPdfWithPdfLib({
     });
     y -= 16;
     page.drawText(
-      `Period: ${monthTitle} ${year} | Filter: ${filterLabel || "all Fahrer"} | Generated: ${new Date().toISOString()} UTC | User: ${userId}`,
+      `Period: ${monthTitle} ${year} | Filter: ${filterLabel || "all Fahrer"} | ${formatReportGeneratedLabel(userId)}`,
       {
         x: margin,
         y,
@@ -4317,7 +4351,7 @@ async function buildBonusYearPdfWithPdfLib({
     });
     y -= 16;
     page.drawText(
-      `Period: ${year} whole year | Filter: ${filterLabel || "all Fahrer"} | Generated: ${new Date().toISOString()} UTC | User: ${userId}`,
+      `Period: ${year} whole year | Filter: ${filterLabel || "all Fahrer"} | ${formatReportGeneratedLabel(userId)}`,
       {
         x: margin,
         y,
@@ -4621,7 +4655,7 @@ async function buildDockPdfWithPdfLib({ kind, rows, userId }) {
       color: textColor,
     });
     y -= 16;
-    page.drawText(`${spec.subtitle} | Generated: ${new Date().toISOString()} UTC | User: ${userId}`, {
+    page.drawText(`${spec.subtitle} | ${formatReportGeneratedLabel(userId)}`, {
       x: margin,
       y,
       size: 8,
@@ -4744,6 +4778,56 @@ function parseDdMmYyyy(value) {
   if (!m) return null;
   const ts = Date.UTC(Number(m[3]), Number(m[2]) - 1, Number(m[1]));
   return Number.isFinite(ts) ? ts : null;
+}
+
+const DAY_MS = 24 * 60 * 60 * 1000;
+
+function getBerlinDateParts(date = new Date()) {
+  const formatter = new Intl.DateTimeFormat("en-GB", {
+    timeZone: "Europe/Berlin",
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+  });
+  const parts = formatter.formatToParts(date);
+  const map = Object.fromEntries(parts.map((part) => [part.type, part.value]));
+  return {
+    year: toIntSafe(map.year, date.getUTCFullYear()),
+    month: toIntSafe(map.month, date.getUTCMonth() + 1),
+    day: toIntSafe(map.day, date.getUTCDate()),
+  };
+}
+
+function getBerlinTodayUtcTs(date = new Date()) {
+  const parts = getBerlinDateParts(date);
+  return Date.UTC(parts.year, parts.month - 1, parts.day);
+}
+
+function formatTagCount(value) {
+  const n = Math.max(0, Math.round(toNumberSafe(value, 0)));
+  return `${n} ${n === 1 ? "Tag" : "Tage"}`;
+}
+
+function countOverlapDays(startTs, endTs, rangeStartTs, rangeEndTs) {
+  if (!Number.isFinite(startTs) || !Number.isFinite(endTs) || !Number.isFinite(rangeStartTs) || !Number.isFinite(rangeEndTs)) {
+    return 0;
+  }
+  const fromTs = Math.max(startTs, rangeStartTs);
+  const toTs = Math.min(endTs, rangeEndTs);
+  if (toTs < fromTs) return 0;
+  return Math.floor((toTs - fromTs) / DAY_MS) + 1;
+}
+
+function countFahrerStatusDaysInRange(rows, targetCode, rangeStartTs, rangeEndTs) {
+  let total = 0;
+  for (const row of rows || []) {
+    const code = normalizeFahrerWeekCode(row?.week_code);
+    if (code !== targetCode || !toBoolish(row?.is_active_in_week)) continue;
+    const weekStartTs = parseDdMmYyyy(row?.week_start);
+    const weekEndTs = parseDdMmYyyy(row?.week_end);
+    total += countOverlapDays(weekStartTs, weekEndTs, rangeStartTs, rangeEndTs);
+  }
+  return total;
 }
 
 function formatLkwMasterCell(value, kind = "text") {
@@ -4917,7 +5001,7 @@ async function buildYfDriverMonthPdfWithPdfLib({ userId, month, driverQuery, row
       color: textColor,
     });
     y -= 16;
-    page.drawText(`Month: ${month} | Driver: ${safeText(driverQuery, "all")} | Generated: ${new Date().toISOString()} UTC | User: ${userId}`, {
+    page.drawText(`Month: ${month} | Driver: ${safeText(driverQuery, "all")} | ${formatReportGeneratedLabel(userId)}`, {
       x: margin,
       y,
       size: 8,
@@ -5078,7 +5162,7 @@ async function buildYfLkwWeekPdfWithPdfLib({ userId, year, week, lkwId, rows }) 
       color: textColor,
     });
     y -= 16;
-    page.drawText(`Year: ${year} | Week: ${week} | LKW: ${safeText(lkwId, "all")} | Generated: ${new Date().toISOString()} UTC | User: ${userId}`, {
+    page.drawText(`Year: ${year} | Week: ${week} | LKW: ${safeText(lkwId, "all")} | ${formatReportGeneratedLabel(userId)}`, {
       x: margin,
       y,
       size: 8,
@@ -5446,7 +5530,7 @@ async function buildYfLkwMonthPdfWithPdfLib({ userId, year, month, lkwId, rows }
     });
   }
 
-  summaryPage.drawText(`Generated: ${new Date().toISOString()} UTC | User: ${userId}`, {
+  summaryPage.drawText(formatReportGeneratedLabel(userId), {
     x: margin,
     y: margin - 2,
     size: 8,
@@ -5574,7 +5658,7 @@ async function buildDieselLkwCardPdfWithPdfLib({ userId, rows, lkwId }) {
     color: textColor,
   });
   y -= 18;
-  page.drawText(`Sheet LKW | LKW-ID: ${safeText(lkwId, "-")} | Generated: ${new Date().toISOString()} UTC | User: ${userId}`, {
+  page.drawText(`Sheet LKW | LKW-ID: ${safeText(lkwId, "-")} | ${formatReportGeneratedLabel(userId)}`, {
     x: margin,
     y,
     size: 9,
@@ -5723,7 +5807,7 @@ async function buildLkwMasterPdfWithPdfLib({ userId, rows, title }) {
       color: textColor,
     });
     y -= 16;
-    page.drawText(`Sheet LKW | Generated: ${new Date().toISOString()} UTC | User: ${userId}`, {
+    page.drawText(`Sheet LKW | ${formatReportGeneratedLabel(userId)}`, {
       x: margin,
       y,
       size: 8,
@@ -5956,7 +6040,7 @@ async function buildFahrerAllPdfWithPdfLib({ userId, reportYear, masterRows, wee
       color: textColor,
     });
     y -= 16;
-    page.drawText(`Sheet Fahrer | Generated: ${new Date().toISOString()} UTC | User: ${userId}`, {
+    page.drawText(`Sheet Fahrer | ${formatReportGeneratedLabel(userId)}`, {
       x: margin,
       y,
       size: 8,
@@ -6184,11 +6268,32 @@ async function buildFahrerCardPdfWithPdfLib({ userId, reportYear, driver, weekly
   const effectiveYear = toIntSafe(reportYear, new Date().getUTCFullYear());
   const vacationSpans = buildFahrerWeekSpans(weeklyRows, "U");
   const sickSpans = buildFahrerWeekSpans(weeklyRows, "K");
-  const totalKm = (monthlyRows || []).reduce((sum, row) => sum + toNumberSafe(row?.km, 0), 0);
-  const totalBonus = (monthlyRows || []).reduce((sum, row) => sum + toNumberSafe(row?.final, 0), 0);
-  const activeMonths = new Set((monthlyRows || [])
-    .filter((row) => Math.abs(toNumberSafe(row?.km, 0)) > 0.1 || Math.abs(toNumberSafe(row?.final, 0)) > 0.1)
-    .map((row) => `${row?.report_year}-${row?.month_index}`)).size;
+  const berlinTodayParts = getBerlinDateParts();
+  const currentBerlinYear = berlinTodayParts.year;
+  const currentBerlinMonth = berlinTodayParts.month;
+  const monthsCovered = effectiveYear < currentBerlinYear ? 12 : (effectiveYear === currentBerlinYear ? currentBerlinMonth : 0);
+  const yearMonthlyRows = (monthlyRows || []).filter((row) => toIntSafe(row?.report_year, effectiveYear) === effectiveYear);
+  const ytdMonthlyRows = yearMonthlyRows.filter((row) => {
+    const monthIndex = toIntSafe(row?.month_index, 0);
+    return monthIndex >= 1 && monthIndex <= monthsCovered;
+  });
+  const totalKm = ytdMonthlyRows.reduce((sum, row) => sum + toNumberSafe(row?.bonus_km, 0), 0);
+  const avgKmPerMonth = monthsCovered > 0 ? (totalKm / monthsCovered) : 0;
+  const totalCt = ytdMonthlyRows.reduce((sum, row) => sum + toIntSafe(row?.ct, 0), 0);
+  const avgCtPerMonth = monthsCovered > 0 ? (totalCt / monthsCovered) : 0;
+  const totalBonus = ytdMonthlyRows.reduce((sum, row) => sum + toNumberSafe(row?.final, 0), 0);
+  const workedDaysYtd = ytdMonthlyRows.reduce((sum, row) => sum + toIntSafe(row?.days, 0), 0);
+  const yearStartTs = Date.UTC(effectiveYear, 0, 1);
+  const yearEndTs = Date.UTC(effectiveYear, 11, 31);
+  const statusRangeEndTs = effectiveYear < currentBerlinYear
+    ? yearEndTs
+    : (effectiveYear === currentBerlinYear ? Math.min(getBerlinTodayUtcTs(), yearEndTs) : (yearStartTs - DAY_MS));
+  const vacationDaysYtd = statusRangeEndTs >= yearStartTs
+    ? countFahrerStatusDaysInRange(weeklyRows, "U", yearStartTs, statusRangeEndTs)
+    : 0;
+  const sickDaysYtd = statusRangeEndTs >= yearStartTs
+    ? countFahrerStatusDaysInRange(weeklyRows, "K", yearStartTs, statusRangeEndTs)
+    : 0;
 
   let page = pdfDoc.addPage(pageSize);
   let y = page.getHeight() - margin;
@@ -6218,7 +6323,7 @@ async function buildFahrerCardPdfWithPdfLib({ userId, reportYear, driver, weekly
     drawText(`${safeText(driver?.fahrer_id, "")} - ${safeText(driver?.fahrername, "")}`, margin + 18, y - 50, 15, boldFont, textColor, 360);
     drawText(`Firma: ${safeText(driver?.firma, "-")}`, margin + 430, y - 26, 10, boldFont, textColor, 250);
     drawText(`Arbeitsplan: ${safeText(driver?.arbeitsplan, "-")}`, margin + 430, y - 43, 10, font, mutedColor, 250);
-    drawText(`Generated: ${new Date().toISOString()} UTC | User: ${userId}`, margin + 430, y - 60, 8, font, mutedColor, 320);
+    drawText(formatReportGeneratedLabel(userId), margin + 430, y - 60, 8, font, mutedColor, 320);
     y -= 96;
   };
 
@@ -6230,27 +6335,66 @@ async function buildFahrerCardPdfWithPdfLib({ userId, reportYear, driver, weekly
 
   const drawMetricCards = () => {
     const cards = [
-      { label: `Urlaub ${effectiveYear}`, value: safeText(driver?.urlaub_gesamt, "0") },
-      { label: `Krankheit ${effectiveYear}`, value: safeText(driver?.krankheitstage, "0") },
-      { label: "KM gesamt", value: `${formatMoneyInt(totalKm)} km` },
-      { label: "Bonus final", value: formatMoneyInt(totalBonus) },
-      { label: "Aktive Monate", value: String(activeMonths) },
+      {
+        label: `Urlaub ${effectiveYear}`,
+        lines: [{ text: formatTagCount(driver?.urlaub_gesamt), size: 12.5, font: boldFont, color: accentColor }],
+      },
+      {
+        label: `Krankheit ${effectiveYear}`,
+        lines: [{ text: formatTagCount(driver?.krankheitstage), size: 12.5, font: boldFont, color: accentColor }],
+      },
+      {
+        label: "KM gesamt",
+        lines: [
+          { text: `${formatMoneyInt(totalKm)} km`, size: 11.5, font: boldFont, color: accentColor },
+          { text: `Avg ${formatMoneyInt(avgKmPerMonth)} km/Monat`, size: 7.2, font, color: mutedColor },
+        ],
+      },
+      {
+        label: "Container",
+        lines: [
+          { text: `${formatMoneyInt(totalCt)} CT`, size: 11.5, font: boldFont, color: accentColor },
+          { text: `Avg ${formatMoneyInt(avgCtPerMonth)} CT/Monat`, size: 7.2, font, color: mutedColor },
+        ],
+      },
+      {
+        label: "Bonus final",
+        lines: [{ text: `${formatMoneyInt(totalBonus)} Euro`, size: 12.5, font: boldFont, color: accentColor }],
+      },
+      {
+        label: "Aktive Monate",
+        lines: [
+          { text: `${formatTagCount(workedDaysYtd)} gearbeitet`, size: 6.1, font: boldFont, color: accentColor },
+          { text: `${formatTagCount(vacationDaysYtd)} Urlaub`, size: 6.1, font, color: mutedColor },
+          { text: `${formatTagCount(sickDaysYtd)} krank`, size: 6.1, font, color: mutedColor },
+        ],
+      },
     ];
-    const gap = 10;
+    const gap = 8;
     const width = (page.getWidth() - margin * 2 - gap * (cards.length - 1)) / cards.length;
+    const cardHeight = 72;
     cards.forEach((card, idx) => {
       const x = margin + idx * (width + gap);
-      page.drawRectangle({ x, y: y - 54, width, height: 54, color: cardBg, borderColor, borderWidth: 1 });
-      centerText(card.value, x, y - 25, width, 13, boldFont, accentColor);
-      centerText(card.label, x, y - 43, width, 7.5, font, mutedColor);
+      page.drawRectangle({ x, y: y - cardHeight, width, height: cardHeight, color: cardBg, borderColor, borderWidth: 1 });
+      const lines = Array.isArray(card.lines) && card.lines.length ? card.lines : [{ text: safeText(card.value, ""), size: 12.5, font: boldFont, color: accentColor }];
+      let lineY = lines.length === 1 ? (y - 26) : (y - 20);
+      for (const line of lines) {
+        centerText(line.text, x, lineY, width, line.size || 12, line.font || font, line.color || textColor);
+        lineY -= (line.size || 12) >= 10 ? 11 : 9;
+      }
+      centerText(card.label, x, y - 61, width, 7.5, font, mutedColor);
     });
-    y -= 72;
+    y -= 88;
   };
 
   const drawSectionTitle = (title) => {
-    ensureSpace(22);
-    drawText(title, margin, y, 11, boldFont, textColor);
-    y -= 14;
+    const titleBandHeight = 22;
+    const titleTopGap = 8;
+    ensureSpace(titleBandHeight + titleTopGap);
+    y -= titleTopGap;
+    const textY = y - ((titleBandHeight - 11) / 2) - 1;
+    drawText(title, margin, textY, 11, boldFont, textColor);
+    y -= titleBandHeight;
   };
 
   const drawKeyValueGrid = (title, items, columns = 4) => {
@@ -6475,10 +6619,11 @@ async function validateTelegramInitData(initDataRaw, env) {
   }
 
   let userId = null;
+  let user = null;
   try {
     const userJson = parsed.params.get("user") || "";
     if (userJson) {
-      const user = JSON.parse(userJson);
+      user = JSON.parse(userJson);
       const id = Number.parseInt(String(user?.id ?? ""), 10);
       if (Number.isFinite(id) && id > 0) userId = id;
     }
@@ -6490,7 +6635,7 @@ async function validateTelegramInitData(initDataRaw, env) {
     return { ok: false, error: "User id is missing in initData" };
   }
 
-  return { ok: true, userId };
+  return { ok: true, userId, user };
 }
 
 function parseJsonSafe(value, fallback = {}) {
@@ -6527,6 +6672,8 @@ async function authorizeUserByInitData(initDataRaw, env) {
   return {
     ok: true,
     userId: auth.userId,
+    user: auth.user,
+    reportUserLabel: formatReportUserLabel(auth.user, auth.userId),
     dbConnectionString,
   };
 }
@@ -6766,7 +6913,7 @@ async function handleDockPdf(request, env) {
     pdfBytes = await buildDockPdfWithPdfLib({
       kind,
       rows,
-      userId: authz.userId,
+      userId: authz.reportUserLabel,
     });
   } catch (err) {
     pdfEngine = "legacy-fallback";
@@ -6782,7 +6929,7 @@ async function handleDockPdf(request, env) {
     }
     pdfBytes = buildSimplePdf({
       title: spec.title,
-      subtitle: `Generated at ${new Date().toISOString()} UTC, user ${authz.userId}`,
+      subtitle: formatReportGeneratedLabel(authz.reportUserLabel),
       lines,
     });
   }
@@ -7030,6 +7177,7 @@ async function handleGenerateWithBody(body, env, enforceRateLimit = true) {
       "Cache-Control": "no-store",
     });
   }
+  const reportUserLabel = formatReportUserLabel(auth.user, auth.userId);
 
   if (
     valid.reportType !== "bericht"
@@ -7154,7 +7302,7 @@ async function handleGenerateWithBody(body, env, enforceRateLimit = true) {
       pdfBytes = await buildBerichtPdfWithPdfLib({
         year: valid.year,
         week: valid.week,
-        userId: auth.userId,
+        userId: reportUserLabel,
         rows,
         weekSummaries,
       });
@@ -7164,7 +7312,7 @@ async function handleGenerateWithBody(body, env, enforceRateLimit = true) {
       const lines = formatBerichtLines(rows, weekSummaries);
       pdfBytes = buildSimplePdf({
         title: `Bericht (Trucks by Company) - ${valid.year}/W${pad2(valid.week)}`,
-        subtitle: `Generated at ${new Date().toISOString()} UTC, user ${auth.userId}`,
+        subtitle: formatReportGeneratedLabel(reportUserLabel),
         lines: [
           `PDF engine fallback activated (${String(err?.message || "unknown")})`,
           "",
@@ -7196,7 +7344,7 @@ async function handleGenerateWithBody(body, env, enforceRateLimit = true) {
       pdfBytes = await buildDataPlanPdfWithPdfLib({
         year: valid.year,
         week: valid.week,
-        userId: auth.userId,
+        userId: reportUserLabel,
         rows,
       });
     } catch (err) {
@@ -7220,7 +7368,7 @@ async function handleGenerateWithBody(body, env, enforceRateLimit = true) {
       }
       pdfBytes = buildSimplePdf({
         title: `Data/Plan - ${valid.year}/W${pad2(valid.week)} (+3 weeks)`,
-        subtitle: `Generated at ${new Date().toISOString()} UTC, user ${auth.userId}`,
+        subtitle: formatReportGeneratedLabel(reportUserLabel),
         lines,
         pageWidth: 842,
         pageHeight: 595,
@@ -7250,7 +7398,7 @@ async function handleGenerateWithBody(body, env, enforceRateLimit = true) {
       pdfBytes = await buildDataWeekPdfWithPdfLib({
         year: valid.year,
         week: valid.week,
-        userId: auth.userId,
+        userId: reportUserLabel,
         rows,
       });
     } catch (err) {
@@ -7274,7 +7422,7 @@ async function handleGenerateWithBody(body, env, enforceRateLimit = true) {
       }
       pdfBytes = buildSimplePdf({
         title: `Data (Kalender) - ${valid.year}/W${pad2(valid.week)} (7 days)`,
-        subtitle: `Generated at ${new Date().toISOString()} UTC, user ${auth.userId}`,
+        subtitle: formatReportGeneratedLabel(reportUserLabel),
         lines,
         pageWidth: 842,
         pageHeight: 595,
@@ -7302,7 +7450,7 @@ async function handleGenerateWithBody(body, env, enforceRateLimit = true) {
     outputKey = `einnahmen:${formatUtcDateStamp(new Date())}`;
     try {
       pdfBytes = await buildEinnahmenPdfWithPdfLib({
-        userId: auth.userId,
+        userId: reportUserLabel,
         rows,
       });
     } catch (err) {
@@ -7323,7 +7471,7 @@ async function handleGenerateWithBody(body, env, enforceRateLimit = true) {
       }
       pdfBytes = buildSimplePdf({
         title: "Einnahmen (Bericht_Dispo)",
-        subtitle: `Generated at ${new Date().toISOString()} UTC, user ${auth.userId}`,
+        subtitle: formatReportGeneratedLabel(reportUserLabel),
         lines,
         pageWidth: 842,
         pageHeight: 595,
@@ -7351,7 +7499,7 @@ async function handleGenerateWithBody(body, env, enforceRateLimit = true) {
     outputKey = `einnahmen_firm:${formatUtcDateStamp(new Date())}`;
     try {
       pdfBytes = await buildEinnahmenFirmPdfWithPdfLib({
-        userId: auth.userId,
+        userId: reportUserLabel,
         rows,
       });
     } catch (err) {
@@ -7382,7 +7530,7 @@ async function handleGenerateWithBody(body, env, enforceRateLimit = true) {
       }
       pdfBytes = buildSimplePdf({
         title: "Einnahmen nach Firma (Bericht_Dispo BS:CF)",
-        subtitle: `Generated at ${new Date().toISOString()} UTC, user ${auth.userId}`,
+        subtitle: formatReportGeneratedLabel(reportUserLabel),
         lines,
         pageWidth: 1190,
         pageHeight: 842,
@@ -7410,7 +7558,7 @@ async function handleGenerateWithBody(body, env, enforceRateLimit = true) {
     outputKey = `diesel:${formatUtcDateStamp(new Date())}`;
     try {
       pdfBytes = await buildDieselPdfWithPdfLib({
-        userId: auth.userId,
+        userId: reportUserLabel,
         rows,
       });
     } catch (err) {
@@ -7466,7 +7614,7 @@ async function handleGenerateWithBody(body, env, enforceRateLimit = true) {
       }
       pdfBytes = buildSimplePdf({
         title: "Diesel Snapshot",
-        subtitle: `Generated at ${new Date().toISOString()} UTC | user ${auth.userId}`,
+        subtitle: formatReportGeneratedLabel(reportUserLabel),
         lines,
         pageWidth: 842,
         pageHeight: 595,
@@ -7499,7 +7647,7 @@ async function handleGenerateWithBody(body, env, enforceRateLimit = true) {
     outputKey = `diesel_lkw_card:${filterLkwId}`;
     try {
       pdfBytes = await buildDieselLkwCardPdfWithPdfLib({
-        userId: auth.userId,
+        userId: reportUserLabel,
         rows,
         lkwId: filterLkwId,
       });
@@ -7521,7 +7669,7 @@ async function handleGenerateWithBody(body, env, enforceRateLimit = true) {
       }
       pdfBytes = buildSimplePdf({
         title: `Diesel - LKW Karte ${filterLkwId}`,
-        subtitle: `Generated at ${new Date().toISOString()} UTC, user ${auth.userId}`,
+        subtitle: formatReportGeneratedLabel(reportUserLabel),
         lines,
         pageWidth: 842,
         pageHeight: 595,
@@ -7555,7 +7703,7 @@ async function handleGenerateWithBody(body, env, enforceRateLimit = true) {
     outputKey = `yf_driver_month:${pad2(valid.month)}:${driverQuery}`;
     try {
       pdfBytes = await buildYfDriverMonthPdfWithPdfLib({
-        userId: auth.userId,
+        userId: reportUserLabel,
         month: valid.month,
         driverQuery,
         rows,
@@ -7577,7 +7725,7 @@ async function handleGenerateWithBody(body, env, enforceRateLimit = true) {
       }
       pdfBytes = buildSimplePdf({
         title: `Yellow Fox - Driver Month ${pad2(valid.month)}`,
-        subtitle: `Generated at ${new Date().toISOString()} UTC, user ${auth.userId}`,
+        subtitle: formatReportGeneratedLabel(reportUserLabel),
         lines,
         pageWidth: 842,
         pageHeight: 595,
@@ -7610,7 +7758,7 @@ async function handleGenerateWithBody(body, env, enforceRateLimit = true) {
     outputKey = `yf_lkw_week:${valid.year}:W${pad2(valid.week)}:${lkwId}`;
     try {
       pdfBytes = await buildYfLkwWeekPdfWithPdfLib({
-        userId: auth.userId,
+        userId: reportUserLabel,
         year: valid.year,
         week: valid.week,
         lkwId,
@@ -7637,7 +7785,7 @@ async function handleGenerateWithBody(body, env, enforceRateLimit = true) {
       }
       pdfBytes = buildSimplePdf({
         title: `Yellow Fox - LKW Week ${valid.year}/W${pad2(valid.week)}`,
-        subtitle: `Generated at ${new Date().toISOString()} UTC, user ${auth.userId}`,
+        subtitle: formatReportGeneratedLabel(reportUserLabel),
         lines,
         pageWidth: 1040,
         pageHeight: 595,
@@ -7670,7 +7818,7 @@ async function handleGenerateWithBody(body, env, enforceRateLimit = true) {
     outputKey = `yf_lkw_month:${valid.year}:${pad2(valid.month)}:${lkwId}`;
     try {
       pdfBytes = await buildYfLkwMonthPdfWithPdfLib({
-        userId: auth.userId,
+        userId: reportUserLabel,
         year: valid.year,
         month: valid.month,
         lkwId,
@@ -7695,7 +7843,7 @@ async function handleGenerateWithBody(body, env, enforceRateLimit = true) {
       }
       pdfBytes = buildSimplePdf({
         title: `Yellow Fox - LKW Month ${valid.year}/${pad2(valid.month)}`,
-        subtitle: `Generated at ${new Date().toISOString()} UTC, user ${auth.userId}`,
+        subtitle: formatReportGeneratedLabel(reportUserLabel),
         lines,
         pageWidth: 1040,
         pageHeight: 595,
@@ -7732,7 +7880,7 @@ async function handleGenerateWithBody(body, env, enforceRateLimit = true) {
       : `lkw_all:${formatUtcDateStamp(new Date())}`;
     try {
       pdfBytes = await buildLkwMasterPdfWithPdfLib({
-        userId: auth.userId,
+        userId: reportUserLabel,
         rows,
         title: valid.reportType === "lkw_single" ? `LKW ${filterLkwId}` : "LKW All",
       });
@@ -7768,7 +7916,7 @@ async function handleGenerateWithBody(body, env, enforceRateLimit = true) {
       }
       pdfBytes = buildSimplePdf({
         title: valid.reportType === "lkw_single" ? `LKW ${filterLkwId}` : "LKW All",
-        subtitle: `Generated at ${new Date().toISOString()} UTC, user ${auth.userId}`,
+        subtitle: formatReportGeneratedLabel(reportUserLabel),
         lines,
         pageWidth: 1190,
         pageHeight: 595,
@@ -7806,7 +7954,7 @@ async function handleGenerateWithBody(body, env, enforceRateLimit = true) {
     outputKey = `fahrer_all:${fahrerReportYear}`;
     try {
       pdfBytes = await buildFahrerAllPdfWithPdfLib({
-        userId: auth.userId,
+        userId: reportUserLabel,
         reportYear: fahrerReportYear,
         masterRows,
         weeklyRows,
@@ -7846,7 +7994,7 @@ async function handleGenerateWithBody(body, env, enforceRateLimit = true) {
       }
       pdfBytes = buildSimplePdf({
         title: `Fahrer - Daten aller Fahrer (${fahrerReportYear})`,
-        subtitle: `Generated at ${new Date().toISOString()} UTC, user ${auth.userId}`,
+        subtitle: formatReportGeneratedLabel(reportUserLabel),
         lines,
         pageWidth: 1040,
         pageHeight: 595,
@@ -7904,7 +8052,7 @@ async function handleGenerateWithBody(body, env, enforceRateLimit = true) {
     outputKey = `fahrer_card:${safeText(driver?.fahrer_id, driverQuery)}`;
     try {
       pdfBytes = await buildFahrerCardPdfWithPdfLib({
-        userId: auth.userId,
+        userId: reportUserLabel,
         reportYear: fahrerReportYear,
         driver,
         weeklyRows,
@@ -7926,15 +8074,17 @@ async function handleGenerateWithBody(body, env, enforceRateLimit = true) {
         safeText(driver?.krankheitstage, "0"),
       ].join(" | "));
       lines.push("");
-      lines.push("Periode | Monat | LKW | YF KM | Bonus KM | Bonus | Penalty | Final");
-      lines.push("-".repeat(150));
+      lines.push("Periode | Monat | LKW | Days | YF KM | Bonus KM | CT | Bonus | Penalty | Final");
+      lines.push("-".repeat(180));
       for (const row of monthlyRows) {
         lines.push([
           `${safeText(row?.report_year, "")}/${pad2(toIntSafe(row?.month_index, 0))}`,
           safeText(row?.month_name, ""),
           safeText(row?.lkw_list, "-"),
+          formatTagCount(row?.days),
           formatMoneyInt(row?.km),
           formatMoneyInt(row?.bonus_km),
+          formatMoneyInt(row?.ct),
           formatMoneyInt(row?.bonus),
           formatMoneyInt(row?.penalty),
           formatMoneyInt(row?.final),
@@ -7942,7 +8092,7 @@ async function handleGenerateWithBody(body, env, enforceRateLimit = true) {
       }
       pdfBytes = buildSimplePdf({
         title: `Fahrerkarte - ${safeText(driver?.fahrer_id, driverQuery)} ${safeText(driver?.fahrername, "")}`,
-        subtitle: `Generated at ${new Date().toISOString()} UTC, user ${auth.userId}`,
+        subtitle: formatReportGeneratedLabel(reportUserLabel),
         lines,
         pageWidth: 1040,
         pageHeight: 595,
@@ -7984,13 +8134,13 @@ async function handleGenerateWithBody(body, env, enforceRateLimit = true) {
     try {
       pdfBytes = valid.period === "year"
         ? await buildBonusYearPdfWithPdfLib({
-          userId: auth.userId,
+          userId: reportUserLabel,
           year: valid.year,
           driverQuery,
           rows,
         })
         : await buildBonusPdfWithPdfLib({
-          userId: auth.userId,
+          userId: reportUserLabel,
           year: valid.year,
           month: valid.month,
           driverQuery,
@@ -8036,7 +8186,7 @@ async function handleGenerateWithBody(body, env, enforceRateLimit = true) {
       }
       pdfBytes = buildSimplePdf({
         title: valid.period === "year" ? `Bonus - ${valid.year} (whole year)` : `Bonus - ${valid.year}/${pad2(valid.month)}`,
-        subtitle: `Generated at ${new Date().toISOString()} UTC, user ${auth.userId}`,
+        subtitle: formatReportGeneratedLabel(reportUserLabel),
         lines,
         pageWidth: valid.period === "year" ? 1040 : 842,
         pageHeight: 595,
