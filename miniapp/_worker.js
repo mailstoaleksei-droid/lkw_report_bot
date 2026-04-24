@@ -6516,7 +6516,7 @@ async function buildFahrerCardPdfWithPdfLib({ userId, reportYear, driver, weekly
     spanRows,
   );
 
-  const monthlyTableRows = (monthlyRows || []).map((row) => ({
+  const monthlyTableRows = yearMonthlyRows.map((row) => ({
     period: `${safeText(row?.report_year, "")}/${pad2(toIntSafe(row?.month_index, 0))}`,
     month: safeText(row?.month_name, ""),
     lkw: safeText(row?.lkw_list, "-"),
@@ -8085,7 +8085,7 @@ async function handleGenerateWithBody(body, env, enforceRateLimit = true) {
       lines.push("");
       lines.push("Periode | Monat | LKW | Days | KM | CT | Bonus");
       lines.push("-".repeat(150));
-      for (const row of monthlyRows) {
+      for (const row of monthlyRows.filter((item) => toIntSafe(item?.report_year, fahrerReportYear) === fahrerReportYear)) {
         lines.push([
           `${safeText(row?.report_year, "")}/${pad2(toIntSafe(row?.month_index, 0))}`,
           safeText(row?.month_name, ""),
