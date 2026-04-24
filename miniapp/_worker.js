@@ -1285,8 +1285,8 @@ function formatReportGeneratedLabel(userLabel, date = new Date()) {
   const map = Object.fromEntries(parts.map((part) => [part.type, part.value]));
   const datePart = `${map.day}/${map.month}/${map.year}`;
   const timePart = `${map.hour}:${map.minute}`;
-  const author = String(userLabel || "").trim() || "Неизвестный пользователь";
-  return `Сгенерировано ${datePart} ${timePart} | ${author}`;
+  const author = String(userLabel || "").trim() || "Unknown user";
+  return `Generated ${datePart} ${timePart} | ${author}`;
 }
 
 function getDbConnectionString(env) {
@@ -6334,39 +6334,50 @@ async function buildFahrerCardPdfWithPdfLib({ userId, reportYear, driver, weekly
   };
 
   const drawMetricCards = () => {
+    const metricPrimarySize = 10.8;
+    const metricSecondarySize = 6.8;
+    const metricLabelSize = 7.2;
     const cards = [
       {
         label: `Urlaub ${effectiveYear}`,
-        lines: [{ text: formatTagCount(driver?.urlaub_gesamt), size: 12.5, font: boldFont, color: accentColor }],
+        lines: [
+          { text: formatTagCount(driver?.urlaub_gesamt), size: metricPrimarySize, font: boldFont, color: accentColor },
+          { text: "", size: metricSecondarySize, font, color: mutedColor },
+        ],
       },
       {
         label: `Krankheit ${effectiveYear}`,
-        lines: [{ text: formatTagCount(driver?.krankheitstage), size: 12.5, font: boldFont, color: accentColor }],
-      },
-      {
-        label: "KM gesamt",
         lines: [
-          { text: `${formatMoneyInt(totalKm)} km`, size: 11.5, font: boldFont, color: accentColor },
-          { text: `Avg ${formatMoneyInt(avgKmPerMonth)} km/Monat`, size: 7.2, font, color: mutedColor },
+          { text: formatTagCount(driver?.krankheitstage), size: metricPrimarySize, font: boldFont, color: accentColor },
+          { text: "", size: metricSecondarySize, font, color: mutedColor },
         ],
       },
       {
-        label: "Container",
+        label: `KM ${effectiveYear}`,
         lines: [
-          { text: `${formatMoneyInt(totalCt)} CT`, size: 11.5, font: boldFont, color: accentColor },
-          { text: `Avg ${formatMoneyInt(avgCtPerMonth)} CT/Monat`, size: 7.2, font, color: mutedColor },
+          { text: `${formatMoneyInt(totalKm)} km`, size: metricPrimarySize, font: boldFont, color: accentColor },
+          { text: `Avg ${formatMoneyInt(avgKmPerMonth)} km/Monat`, size: metricSecondarySize, font, color: mutedColor },
         ],
       },
       {
-        label: "Bonus final",
-        lines: [{ text: `${formatMoneyInt(totalBonus)} Euro`, size: 12.5, font: boldFont, color: accentColor }],
+        label: `Container ${effectiveYear}`,
+        lines: [
+          { text: `${formatMoneyInt(totalCt)} CT`, size: metricPrimarySize, font: boldFont, color: accentColor },
+          { text: `Avg ${formatMoneyInt(avgCtPerMonth)} CT/Monat`, size: metricSecondarySize, font, color: mutedColor },
+        ],
       },
       {
-        label: "Aktive Monate",
+        label: `Bonus ${effectiveYear}`,
         lines: [
-          { text: `${formatTagCount(workedDaysYtd)} gearbeitet`, size: 6.1, font: boldFont, color: accentColor },
-          { text: `${formatTagCount(vacationDaysYtd)} Urlaub`, size: 6.1, font, color: mutedColor },
-          { text: `${formatTagCount(sickDaysYtd)} krank`, size: 6.1, font, color: mutedColor },
+          { text: `${formatMoneyInt(totalBonus)} Euro`, size: metricPrimarySize, font: boldFont, color: accentColor },
+          { text: "", size: metricSecondarySize, font, color: mutedColor },
+        ],
+      },
+      {
+        label: `Rabochee vremya ${effectiveYear}`,
+        lines: [
+          { text: `${formatTagCount(workedDaysYtd)} gearbeitet`, size: metricPrimarySize, font: boldFont, color: accentColor },
+          { text: `${formatTagCount(vacationDaysYtd)} Urlaub | ${formatTagCount(sickDaysYtd)} krank`, size: metricSecondarySize, font, color: mutedColor },
         ],
       },
     ];
@@ -6376,13 +6387,13 @@ async function buildFahrerCardPdfWithPdfLib({ userId, reportYear, driver, weekly
     cards.forEach((card, idx) => {
       const x = margin + idx * (width + gap);
       page.drawRectangle({ x, y: y - cardHeight, width, height: cardHeight, color: cardBg, borderColor, borderWidth: 1 });
-      const lines = Array.isArray(card.lines) && card.lines.length ? card.lines : [{ text: safeText(card.value, ""), size: 12.5, font: boldFont, color: accentColor }];
-      let lineY = lines.length === 1 ? (y - 26) : (y - 20);
+      const lines = Array.isArray(card.lines) && card.lines.length ? card.lines : [{ text: safeText(card.value, ""), size: metricPrimarySize, font: boldFont, color: accentColor }];
+      let lineY = y - 20;
       for (const line of lines) {
         centerText(line.text, x, lineY, width, line.size || 12, line.font || font, line.color || textColor);
-        lineY -= (line.size || 12) >= 10 ? 11 : 9;
+        lineY -= 11;
       }
-      centerText(card.label, x, y - 61, width, 7.5, font, mutedColor);
+      centerText(card.label, x, y - 61, width, metricLabelSize, font, mutedColor);
     });
     y -= 88;
   };
