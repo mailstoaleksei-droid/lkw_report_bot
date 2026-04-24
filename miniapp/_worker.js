@@ -6520,23 +6520,21 @@ async function buildFahrerCardPdfWithPdfLib({ userId, reportYear, driver, weekly
     period: `${safeText(row?.report_year, "")}/${pad2(toIntSafe(row?.month_index, 0))}`,
     month: safeText(row?.month_name, ""),
     lkw: safeText(row?.lkw_list, "-"),
-    km: `${formatMoneyInt(row?.km)} km`,
-    bonus_km: `${formatMoneyInt(row?.bonus_km)} km`,
-    bonus: formatMoneyInt(row?.bonus),
-    penalty: formatMoneyInt(row?.penalty),
-    final: formatMoneyInt(row?.final),
+    days: formatTagCount(row?.days),
+    km: `${formatMoneyInt(row?.bonus_km)} km`,
+    ct: formatMoneyInt(row?.ct),
+    bonus: formatMoneyInt(row?.final),
   }));
   drawTable(
     "Monatliche Leistung: KM, LKW und Bonus",
     [
       { key: "period", label: "Periode", width: 70 },
       { key: "month", label: "Monat", width: 86 },
-      { key: "lkw", label: "LKW", width: 190 },
-      { key: "km", label: "YF KM", width: 82 },
-      { key: "bonus_km", label: "Bonus KM", width: 82 },
-      { key: "bonus", label: "Bonus", width: 70 },
-      { key: "penalty", label: "Penalty", width: 70 },
-      { key: "final", label: "Final", width: 70 },
+      { key: "lkw", label: "LKW", width: 240 },
+      { key: "days", label: "Days", width: 82 },
+      { key: "km", label: "KM", width: 90 },
+      { key: "ct", label: "CT", width: 62 },
+      { key: "bonus", label: "Bonus", width: 90 },
     ],
     monthlyTableRows,
     { textSize: 7.5, rowHeight: 17 },
@@ -8085,19 +8083,16 @@ async function handleGenerateWithBody(body, env, enforceRateLimit = true) {
         safeText(driver?.krankheitstage, "0"),
       ].join(" | "));
       lines.push("");
-      lines.push("Periode | Monat | LKW | Days | YF KM | Bonus KM | CT | Bonus | Penalty | Final");
-      lines.push("-".repeat(180));
+      lines.push("Periode | Monat | LKW | Days | KM | CT | Bonus");
+      lines.push("-".repeat(150));
       for (const row of monthlyRows) {
         lines.push([
           `${safeText(row?.report_year, "")}/${pad2(toIntSafe(row?.month_index, 0))}`,
           safeText(row?.month_name, ""),
           safeText(row?.lkw_list, "-"),
           formatTagCount(row?.days),
-          formatMoneyInt(row?.km),
           formatMoneyInt(row?.bonus_km),
           formatMoneyInt(row?.ct),
-          formatMoneyInt(row?.bonus),
-          formatMoneyInt(row?.penalty),
           formatMoneyInt(row?.final),
         ].join(" | "));
       }
