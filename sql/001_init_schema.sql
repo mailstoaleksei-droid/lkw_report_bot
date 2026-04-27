@@ -202,6 +202,24 @@ CREATE TABLE IF NOT EXISTS report_yf_lkw_daily (
     PRIMARY KEY (report_year, iso_week, lkw_nummer, report_date, source_row)
 );
 
+CREATE TABLE IF NOT EXISTS report_sim_contado (
+    lkw_number TEXT PRIMARY KEY,
+    sim_name TEXT NOT NULL DEFAULT '',
+    password TEXT NOT NULL DEFAULT '',
+    source_row INTEGER NOT NULL DEFAULT 0,
+    raw_payload JSONB NOT NULL DEFAULT '{}'::JSONB,
+    updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+CREATE TABLE IF NOT EXISTS report_sim_vodafone (
+    lkw_number TEXT PRIMARY KEY,
+    pin TEXT NOT NULL DEFAULT '',
+    puk TEXT NOT NULL DEFAULT '',
+    source_row INTEGER NOT NULL DEFAULT 0,
+    raw_payload JSONB NOT NULL DEFAULT '{}'::JSONB,
+    updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
 CREATE INDEX IF NOT EXISTS idx_trucks_company_id ON trucks(company_id);
 CREATE INDEX IF NOT EXISTS idx_drivers_company_id ON drivers(company_id);
 
@@ -217,5 +235,7 @@ CREATE INDEX IF NOT EXISTS idx_reports_log_type_requested_at ON reports_log(repo
 CREATE INDEX IF NOT EXISTS idx_report_bonus_dynamik_lookup ON report_bonus_dynamik_monthly(report_year, report_month, fahrer_name);
 CREATE INDEX IF NOT EXISTS idx_report_yf_fahrer_lookup ON report_yf_fahrer_monthly(month_index, fahrer_name);
 CREATE INDEX IF NOT EXISTS idx_report_yf_lkw_lookup ON report_yf_lkw_daily(report_year, iso_week, lkw_nummer, report_date, source_row);
+CREATE INDEX IF NOT EXISTS idx_report_sim_contado_lkw ON report_sim_contado(lkw_number);
+CREATE INDEX IF NOT EXISTS idx_report_sim_vodafone_lkw ON report_sim_vodafone(lkw_number);
 
 COMMIT;

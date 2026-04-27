@@ -2508,6 +2508,9 @@
       if (payload && payload.lkw_id !== undefined && String(payload.lkw_id).trim()) {
         u.searchParams.set("lkw_id", String(payload.lkw_id).trim());
       }
+      if (payload && payload.lkw_number !== undefined && String(payload.lkw_number).trim()) {
+        u.searchParams.set("lkw_number", String(payload.lkw_number).trim());
+      }
       if (payload && payload.driver_query !== undefined && String(payload.driver_query).trim()) {
         u.searchParams.set("driver_query", String(payload.driver_query).trim());
       }
@@ -2663,6 +2666,24 @@
         return buildGenerateDirectUrl(
           "fahrer_firma",
           { firma_name: String(params.firma_name || "") },
+          initData || "",
+          disposition,
+        );
+      }
+      if (type === "fahrer_password_contado") {
+        const params = item?.params || {};
+        return buildGenerateDirectUrl(
+          "fahrer_password_contado",
+          { lkw_number: String(params.lkw_number || "") },
+          initData || "",
+          disposition,
+        );
+      }
+      if (type === "fahrer_vodafone") {
+        const params = item?.params || {};
+        return buildGenerateDirectUrl(
+          "fahrer_vodafone",
+          { lkw_number: String(params.lkw_number || "") },
           initData || "",
           disposition,
         );
@@ -2931,6 +2952,20 @@
         select.innerHTML = opts.join("");
       } catch (err) {
         select.innerHTML = `<option value="">${escapeHtml(err?.message || L("choose"))}</option>`;
+      }
+    }
+
+    async function populateSimLkwSelect(selectId, lookupKey, fallbackMessage = "Choose") {
+      const select = $(selectId);
+      if (!select) return;
+      try {
+        const meta = await fetchMetaServer();
+        const items = Array.isArray(meta?.lookups?.[lookupKey]) ? meta.lookups[lookupKey] : [];
+        const opts = [`<option value="">${L("choose")}</option>`]
+          .concat(items.map((item) => `<option value="${escapeHtml(item)}">${escapeHtml(item)}</option>`));
+        select.innerHTML = opts.join("");
+      } catch (err) {
+        select.innerHTML = `<option value="">${escapeHtml(err?.message || fallbackMessage)}</option>`;
       }
     }
 
@@ -3782,6 +3817,18 @@
               <button type="button" class="btn btn-primary" id="fahrerChooseFirma">Firma</button>
             </div>
           </div>
+          <div class="field">
+            <div class="note">SIM login report from sheet Contado by selected truck number.</div>
+            <div class="note-actions">
+              <button type="button" class="btn btn-primary" id="fahrerChooseContado">Password Contado</button>
+            </div>
+          </div>
+          <div class="field">
+            <div class="note">SIM PIN/PUK report from sheet Vodafone&O2 SIM-Karten Neu by selected truck number.</div>
+            <div class="note-actions">
+              <button type="button" class="btn btn-primary" id="fahrerChooseVodafone">Vodafone</button>
+            </div>
+          </div>
         `);
         setNote("");
         hideSheetFooter();
@@ -3789,6 +3836,8 @@
         $("fahrerChooseCard").onclick = () => renderDriverCard();
         $("fahrerChooseType").onclick = () => renderDriverType();
         $("fahrerChooseFirma").onclick = () => renderFirmaList();
+        $("fahrerChooseContado").onclick = () => renderContadoPassword();
+        $("fahrerChooseVodafone").onclick = () => renderVodafone();
       };
 
       const renderAllDrivers = () => {
@@ -3892,6 +3941,60 @@
             return;
           }
           await sendReportGenerate("fahrer_firma", { firma_name: firmaName });
+        };
+      };
+
+      const renderContadoPassword = async () => {
+        setSheetHeader("Fahrer - Password Contado", "Select a truck number and generate login data from sheet Contado.", "PDF");
+        setSheetCloseAction("back", renderMenu);
+        setSegments([], "", () => {});
+        setForm(`
+          <div class="field">
+            <label>LKW Nummer</label>
+            <select id="fahrerContadoLkw"><option value="">${L("loadingHistory")}</option></select>
+            <div class="note">The report shows truck number, name and password from sheet Contado.</div>
+            <div class="note-actions">
+              <button type="button" class="btn btn-primary" id="fahrerContadoRun">${L("generate")}</button>
+            </div>
+          </div>
+        `);
+        setNote("");
+        hideSheetFooter();
+        await populateSimLkwSelect("fahrerContadoLkw", "sim_contado_lkw_numbers", L("choose"));
+        $("fahrerContadoRun").onclick = async () => {
+          const lkwNumber = String($("fahrerContadoLkw")?.value || "").trim();
+          if (!lkwNumber) {
+            showToast(L("choose"));
+            return;
+          }
+          await sendReportGenerate("fahrer_password_contado", { lkw_number: lkwNumber });
+        };
+      };
+
+      const renderVodafone = async () => {
+        setSheetHeader("Fahrer - Vodafone", "Select a truck number and generate PIN/PUK data from sheet Vodafone&O2 SIM-Karten Neu.", "PDF");
+        setSheetCloseAction("back", renderMenu);
+        setSegments([], "", () => {});
+        setForm(`
+          <div class="field">
+            <label>LKW Kennzeichen</label>
+            <select id="fahrerVodafoneLkw"><option value="">${L("loadingHistory")}</option></select>
+            <div class="note">The report shows truck number, PIN and PUK from sheet Vodafone&O2 SIM-Karten Neu.</div>
+            <div class="note-actions">
+              <button type="button" class="btn btn-primary" id="fahrerVodafoneRun">${L("generate")}</button>
+            </div>
+          </div>
+        `);
+        setNote("");
+        hideSheetFooter();
+        await populateSimLkwSelect("fahrerVodafoneLkw", "sim_vodafone_lkw_numbers", L("choose"));
+        $("fahrerVodafoneRun").onclick = async () => {
+          const lkwNumber = String($("fahrerVodafoneLkw")?.value || "").trim();
+          if (!lkwNumber) {
+            showToast(L("choose"));
+            return;
+          }
+          await sendReportGenerate("fahrer_vodafone", { lkw_number: lkwNumber });
         };
       };
 

@@ -53,7 +53,7 @@ def notify_admin(text: str) -> None:
         log(f"WARN: failed to notify admin: {exc}")
 
 
-def run_step(name: str, script: str) -> None:
+def run_step(name: str, script: str, required: bool = True) -> bool:
     py = BASE_DIR / ".venv" / "Scripts" / "python.exe"
     cmd = [str(py), str(BASE_DIR / script)]
     log(f"STEP START: {name} -> {' '.join(cmd)}")
@@ -63,8 +63,12 @@ def run_step(name: str, script: str) -> None:
     if cp.stderr.strip():
         log(f"{name} stderr: {cp.stderr.strip()}")
     if cp.returncode != 0:
-        raise RuntimeError(f"{name} failed with exit code {cp.returncode}")
+        if required:
+            raise RuntimeError(f"{name} failed with exit code {cp.returncode}")
+        log(f"STEP WARN: {name} failed with exit code {cp.returncode} (optional step)")
+        return False
     log(f"STEP OK: {name}")
+    return True
 
 
 def rotate_log_if_needed(max_bytes: int = 512_000, keep_lines: int = 1200) -> None:
@@ -163,6 +167,7 @@ def main() -> int:
     try:
         run_step("xlsm", "etl_xlsm_to_postgres.py")
         run_step("xlsb", "etl_xlsb_to_postgres.py")
+        run_step("sim_cards", "etl_sim_cards_to_postgres.py", required=False)
         finished = datetime.now()
         summary["status"] = "success"
         summary["finished_at"] = finished.isoformat()

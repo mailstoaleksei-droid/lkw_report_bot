@@ -460,6 +460,50 @@ const REPORTS = [
     ],
   },
   {
+    id: "fahrer_password_contado",
+    enabled: true,
+    icon: "drivers",
+    name: {
+      en: "Fahrer (Password Contado)",
+      ru: "Fahrer (Password Contado)",
+      de: "Fahrer (Password Contado)",
+    },
+    description: {
+      en: "SIM login report from sheet Contado by selected truck number",
+      ru: "Отчёт по SIM login из листа Contado по выбранному номеру машины",
+      de: "SIM-Login-Bericht aus Blatt Contado nach ausgewaehlter LKW-Nummer",
+    },
+    params: [
+      {
+        id: "lkw_number",
+        type: "text",
+        label: { en: "LKW Nummer", ru: "Номер машины", de: "LKW Nummer" },
+      },
+    ],
+  },
+  {
+    id: "fahrer_vodafone",
+    enabled: true,
+    icon: "drivers",
+    name: {
+      en: "Fahrer (Vodafone)",
+      ru: "Fahrer (Vodafone)",
+      de: "Fahrer (Vodafone)",
+    },
+    description: {
+      en: "SIM PIN/PUK report from sheet Vodafone&O2 SIM-Karten Neu by selected truck number",
+      ru: "Отчёт по SIM PIN/PUK из листа Vodafone&O2 SIM-Karten Neu по выбранному номеру машины",
+      de: "SIM PIN/PUK-Bericht aus Blatt Vodafone&O2 SIM-Karten Neu nach ausgewaehlter LKW-Nummer",
+    },
+    params: [
+      {
+        id: "lkw_number",
+        type: "text",
+        label: { en: "LKW Kennzeichen", ru: "Номер машины", de: "LKW Kennzeichen" },
+      },
+    ],
+  },
+  {
     id: "tankkarten",
     enabled: false,
     icon: "fuel",
@@ -1040,6 +1084,28 @@ LEFT JOIN companies c ON c.id = d.company_id
 WHERE COALESCE(d.is_active, true)
   AND lower(trim(COALESCE(NULLIF(c.name, ''), NULLIF(d.raw_payload->>'Firma', ''), NULLIF(d.raw_payload->>'Company', ''), ''))) = lower(trim($1::text))
 ORDER BY d.external_id;
+`;
+
+const FAHRER_PASSWORD_CONTADO_SQL = `
+SELECT
+  lkw_number,
+  sim_name AS name,
+  password
+FROM report_sim_contado
+WHERE regexp_replace(lower(trim(COALESCE(lkw_number, ''))), '\\s+', '', 'g')
+      = regexp_replace(lower(trim($1::text)), '\\s+', '', 'g')
+ORDER BY lkw_number;
+`;
+
+const FAHRER_VODAFONE_SQL = `
+SELECT
+  lkw_number,
+  pin,
+  puk
+FROM report_sim_vodafone
+WHERE regexp_replace(lower(trim(COALESCE(lkw_number, ''))), '\\s+', '', 'g')
+      = regexp_replace(lower(trim($1::text)), '\\s+', '', 'g')
+ORDER BY lkw_number;
 `;
 
 const FAHRER_ALL_SQL = `
@@ -1643,6 +1709,18 @@ function makeFahrerFirmaFilename(firmaName, at = new Date()) {
   const firma = sanitizeFilenamePart(firmaName);
   if (firma) return `fahrer_firma_${firma}_${formatUtcDateStamp(at)}.pdf`;
   return `fahrer_firma_${formatUtcDateStamp(at)}.pdf`;
+}
+
+function makeFahrerPasswordContadoFilename(lkwNumber, at = new Date()) {
+  const lkw = sanitizeFilenamePart(lkwNumber);
+  if (lkw) return `fahrer_password_contado_${lkw}.pdf`;
+  return `fahrer_password_contado_${formatUtcDateStamp(at)}.pdf`;
+}
+
+function makeFahrerVodafoneFilename(lkwNumber, at = new Date()) {
+  const lkw = sanitizeFilenamePart(lkwNumber);
+  if (lkw) return `fahrer_vodafone_${lkw}.pdf`;
+  return `fahrer_vodafone_${formatUtcDateStamp(at)}.pdf`;
 }
 
 function makeDockFilename(kind, at = new Date()) {
@@ -5060,6 +5138,145 @@ async function buildFahrerListPdfWithPdfLib({ title, subtitle, rows, userId }) {
   return pdfDoc.save();
 }
 
+async function buildCenteredLookupPdfWithPdfLib({
+  title,
+  subtitle,
+  rows,
+  columns,
+  emptyMessage,
+  userId,
+}) {
+  const pdfDoc = await PDFDocument.create();
+  const font = await pdfDoc.embedFont(StandardFonts.Helvetica);
+  const boldFont = await pdfDoc.embedFont(StandardFonts.HelveticaBold);
+
+  const pageSize = [842, 595];
+  const margin = 28;
+  const rowHeight = 24;
+  const textSize = 10;
+  const tableWidth = columns.reduce((sum, col) => sum + col.width, 0);
+  const tableX = (pageSize[0] - tableWidth) / 2;
+  const borderColor = rgb(0.74, 0.8, 0.9);
+  const headerBg = rgb(0.93, 0.96, 1);
+  const oddBg = rgb(0.985, 0.99, 1);
+  const textColor = rgb(0.08, 0.14, 0.24);
+
+  let page = pdfDoc.addPage(pageSize);
+  let y = page.getHeight() - margin;
+
+  const drawHeader = () => {
+    const titleWidth = measureTextWidth(boldFont, title, 16);
+    page.drawText(title, {
+      x: Math.max(margin, (page.getWidth() - titleWidth) / 2),
+      y,
+      size: 16,
+      font: boldFont,
+      color: textColor,
+    });
+    y -= 20;
+
+    const metaLine = `${subtitle} | ${formatReportGeneratedLabel(userId)}`;
+    const metaWidth = measureTextWidth(font, metaLine, 9);
+    page.drawText(metaLine, {
+      x: Math.max(margin, (page.getWidth() - metaWidth) / 2),
+      y,
+      size: 9,
+      font,
+      color: rgb(0.24, 0.3, 0.4),
+    });
+    y -= 22;
+  };
+
+  const drawHeaderRow = () => {
+    page.drawRectangle({
+      x: tableX,
+      y: y - rowHeight + 2,
+      width: tableWidth,
+      height: rowHeight,
+      color: headerBg,
+      borderColor,
+      borderWidth: 1,
+    });
+    let x = tableX;
+    for (const col of columns) {
+      const label = fitTextToWidth(boldFont, col.label, textSize, col.width - 10);
+      const labelWidth = measureTextWidth(boldFont, label, textSize);
+      page.drawText(label, {
+        x: x + Math.max(4, (col.width - labelWidth) / 2),
+        y: y - 14,
+        size: textSize,
+        font: boldFont,
+        color: textColor,
+      });
+      x += col.width;
+    }
+    y -= rowHeight;
+  };
+
+  const nextPage = () => {
+    page = pdfDoc.addPage(pageSize);
+    y = page.getHeight() - margin;
+    drawHeader();
+    drawHeaderRow();
+  };
+
+  const ensureSpace = (needed) => {
+    if (y - needed >= margin) return;
+    nextPage();
+  };
+
+  drawHeader();
+  drawHeaderRow();
+
+  if (!rows.length) {
+    const message = safeText(emptyMessage, "No data found.");
+    const width = measureTextWidth(font, message, 11);
+    page.drawText(message, {
+      x: Math.max(margin, (page.getWidth() - width) / 2),
+      y: y - 16,
+      size: 11,
+      font,
+      color: textColor,
+    });
+    return pdfDoc.save();
+  }
+
+  rows.forEach((row, idx) => {
+    ensureSpace(rowHeight + 2);
+    if (idx % 2 === 1) {
+      page.drawRectangle({
+        x: tableX,
+        y: y - rowHeight + 2,
+        width: tableWidth,
+        height: rowHeight,
+        color: oddBg,
+      });
+    }
+    let x = tableX;
+    for (const col of columns) {
+      const value = fitTextToWidth(font, safeText(row?.[col.key], ""), textSize, col.width - 10);
+      const valueWidth = measureTextWidth(font, value, textSize);
+      page.drawText(value, {
+        x: x + Math.max(4, (col.width - valueWidth) / 2),
+        y: y - 14,
+        size: textSize,
+        font,
+        color: textColor,
+      });
+      x += col.width;
+    }
+    page.drawLine({
+      start: { x: tableX, y: y - rowHeight + 2 },
+      end: { x: tableX + tableWidth, y: y - rowHeight + 2 },
+      thickness: 0.5,
+      color: borderColor,
+    });
+    y -= rowHeight;
+  });
+
+  return pdfDoc.save();
+}
+
 function parseDdMmYyyy(value) {
   const m = /^(\d{2})\/(\d{2})\/(\d{4})$/.exec(String(value || "").trim());
   if (!m) return null;
@@ -7486,6 +7703,14 @@ function validateGeneratePayload(body) {
     return { ok: true, reportType, firmaName };
   }
 
+  if (reportType === "fahrer_password_contado" || reportType === "fahrer_vodafone") {
+    const lkwNumber = String(body.lkw_number || "").trim().slice(0, 120);
+    if (!lkwNumber) {
+      return { ok: false, status: 400, error: "Missing lkw_number" };
+    }
+    return { ok: true, reportType, lkwNumber };
+  }
+
   return { ok: true, reportType };
 }
 
@@ -7524,6 +7749,8 @@ async function handleGenerateWithBody(body, env, enforceRateLimit = true) {
     && valid.reportType !== "fahrer_card"
     && valid.reportType !== "fahrer_type"
     && valid.reportType !== "fahrer_firma"
+    && valid.reportType !== "fahrer_password_contado"
+    && valid.reportType !== "fahrer_vodafone"
   ) {
     return json(
       {
@@ -8533,6 +8760,118 @@ async function handleGenerateWithBody(body, env, enforceRateLimit = true) {
         pageHeight: 595,
       });
     }
+  } else if (valid.reportType === "fahrer_password_contado") {
+    let rows;
+    try {
+      const result = await queryNeon(dbConnectionString, FAHRER_PASSWORD_CONTADO_SQL, [valid.lkwNumber]);
+      rows = result.rows || [];
+    } catch (err) {
+      return json(
+        {
+          ok: false,
+          error: "Failed to execute SQL query",
+          code: "SQL_ERROR",
+          details: String(err?.message || err || "unknown error"),
+        },
+        500,
+        { "Cache-Control": "no-store" },
+      );
+    }
+
+    filename = makeFahrerPasswordContadoFilename(valid.lkwNumber);
+    outputKey = `fahrer_password_contado:${valid.lkwNumber}`;
+    try {
+      pdfBytes = await buildCenteredLookupPdfWithPdfLib({
+        title: "Password Contado",
+        subtitle: `LKW: ${valid.lkwNumber}`,
+        rows,
+        columns: [
+          { key: "lkw_number", label: "Nummer Maschine", width: 200 },
+          { key: "name", label: "Name", width: 280 },
+          { key: "password", label: "Password", width: 220 },
+        ],
+        emptyMessage: "No Contado data found for the selected truck.",
+        userId: reportUserLabel,
+      });
+    } catch (err) {
+      pdfEngine = "legacy-fallback";
+      const lines = [
+        `LKW: ${valid.lkwNumber}`,
+        "",
+        "Nummer Maschine | Name | Password",
+        "-".repeat(120),
+      ];
+      for (const row of rows) {
+        lines.push([
+          safeText(row?.lkw_number, ""),
+          safeText(row?.name, ""),
+          safeText(row?.password, ""),
+        ].join(" | "));
+      }
+      pdfBytes = buildSimplePdf({
+        title: "Password Contado",
+        subtitle: formatReportGeneratedLabel(reportUserLabel),
+        lines,
+        pageWidth: 842,
+        pageHeight: 595,
+      });
+    }
+  } else if (valid.reportType === "fahrer_vodafone") {
+    let rows;
+    try {
+      const result = await queryNeon(dbConnectionString, FAHRER_VODAFONE_SQL, [valid.lkwNumber]);
+      rows = result.rows || [];
+    } catch (err) {
+      return json(
+        {
+          ok: false,
+          error: "Failed to execute SQL query",
+          code: "SQL_ERROR",
+          details: String(err?.message || err || "unknown error"),
+        },
+        500,
+        { "Cache-Control": "no-store" },
+      );
+    }
+
+    filename = makeFahrerVodafoneFilename(valid.lkwNumber);
+    outputKey = `fahrer_vodafone:${valid.lkwNumber}`;
+    try {
+      pdfBytes = await buildCenteredLookupPdfWithPdfLib({
+        title: "Vodafone",
+        subtitle: `LKW: ${valid.lkwNumber}`,
+        rows,
+        columns: [
+          { key: "lkw_number", label: "LKW Kennzeichen", width: 250 },
+          { key: "pin", label: "PIN", width: 150 },
+          { key: "puk", label: "PUK", width: 180 },
+        ],
+        emptyMessage: "No Vodafone data found for the selected truck.",
+        userId: reportUserLabel,
+      });
+    } catch (err) {
+      pdfEngine = "legacy-fallback";
+      const lines = [
+        `LKW: ${valid.lkwNumber}`,
+        "",
+        "LKW Kennzeichen | PIN | PUK",
+        "-".repeat(100),
+      ];
+      for (const row of rows) {
+        lines.push([
+          safeText(row?.lkw_number, ""),
+          safeText(row?.pin, ""),
+          safeText(row?.puk, ""),
+        ].join(" | "));
+      }
+      pdfBytes = buildSimplePdf({
+        title: "Vodafone",
+        subtitle: formatReportGeneratedLabel(reportUserLabel),
+        lines,
+        pageWidth: 842,
+        pageHeight: 595,
+      });
+    }
   } else if (valid.reportType === "bonus_firma_month") {
     let rows;
     try {
@@ -8736,6 +9075,9 @@ async function handleGenerateWithBody(body, env, enforceRateLimit = true) {
   if (valid.reportType === "fahrer_firma") {
     reportParams.firma_name = safeText(valid.firmaName, "");
   }
+  if (valid.reportType === "fahrer_password_contado" || valid.reportType === "fahrer_vodafone") {
+    reportParams.lkw_number = safeText(valid.lkwNumber, "");
+  }
   if ("lkwId" in valid) {
     reportParams.lkw_id = valid.lkwId;
   }
@@ -8783,6 +9125,7 @@ async function handleGenerateGet(request, env) {
     month: url.searchParams.get("month"),
     period: url.searchParams.get("period") || "",
     lkw_id: url.searchParams.get("lkw_id") || "",
+    lkw_number: url.searchParams.get("lkw_number") || "",
     driver_query: url.searchParams.get("driver_query") || "",
     firma_name: url.searchParams.get("firma_name") || "",
     lkw_type: url.searchParams.get("lkw_type") || "",
@@ -9038,6 +9381,42 @@ async function buildMetaWithAccess(request, env) {
         meta.lookups = meta.lookups || {};
         meta.lookups.yf_lkw_numbers = (yfLkwResult.rows || [])
           .map((row) => safeText(row.lkw_nummer, ""))
+          .filter(Boolean);
+      } catch {
+        // Optional lookup only.
+      }
+      try {
+        const contadoResult = await queryNeon(
+          dbConnectionString,
+          `
+            SELECT DISTINCT lkw_number
+            FROM report_sim_contado
+            WHERE COALESCE(lkw_number, '') <> ''
+            ORDER BY lkw_number
+          `,
+          [],
+        );
+        meta.lookups = meta.lookups || {};
+        meta.lookups.sim_contado_lkw_numbers = (contadoResult.rows || [])
+          .map((row) => safeText(row.lkw_number, ""))
+          .filter(Boolean);
+      } catch {
+        // Optional lookup only.
+      }
+      try {
+        const vodafoneResult = await queryNeon(
+          dbConnectionString,
+          `
+            SELECT DISTINCT lkw_number
+            FROM report_sim_vodafone
+            WHERE COALESCE(lkw_number, '') <> ''
+            ORDER BY lkw_number
+          `,
+          [],
+        );
+        meta.lookups = meta.lookups || {};
+        meta.lookups.sim_vodafone_lkw_numbers = (vodafoneResult.rows || [])
+          .map((row) => safeText(row.lkw_number, ""))
           .filter(Boolean);
       } catch {
         // Optional lookup only.
