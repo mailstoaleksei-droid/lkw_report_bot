@@ -1,6 +1,6 @@
 # LKW Telegram Mini App - Implementation Checklist
 
-> Last updated: 2026-04-20
+> Last updated: 2026-04-28
 > Status legend: [ ] pending | [~] in progress | [x] done
 
 ## 1) Infra and Deploy
@@ -35,6 +35,12 @@
   - tables: `report_yf_fahrer_monthly`, `report_yf_lkw_daily`
   - parser + Worker integration active
   - ETL verified on live workbook data
+- [x] ETL import for SIM card lookup workbook added:
+  - source: `LOG_INs 2.xlsx`
+  - sheets: `Contado`, `Vodafone&O2 SIM-Karten  Neu`
+  - tables: `report_sim_contado`, `report_sim_vodafone`
+  - source-change watcher extended to include SIM workbook
+  - pipeline step is optional and does not block core LKW ETL on SIM source failures
 - [x] ETL import for Fahrer weekly vacation/sick status added:
   - table: `report_fahrer_weekly_status`
   - source: sheet `Fahrer`, weekly columns `AH:CG`
@@ -87,6 +93,11 @@
 - [x] `Bonus` (whole year)
   - separate block in mini app
   - columns: `ID`, `Fahrer`, `Jan..Dec Final`, yearly cumulative total
+- [x] `Bonus` (Firma / Monat)
+  - params: `year`, `month`, `Firma`
+  - source: `report_bonus_dynamik_monthly` joined with `drivers` / `companies`
+  - PDF shows driver list for selected company and month
+  - report includes total bonus sum for the selected company/month
 - [x] `LKW`
   - `1 LKW` PDF
   - `Alle LKW` PDF
@@ -106,6 +117,25 @@
   - report 2: `Fahrerkarte` / `Карточка водителя`
   - select one driver by `Fahrer-ID` or `Fahrername` from a searchable list
   - PDF includes centered driver card fields from sheet `Fahrer` columns `A-W`, vacation/sick totals and weekly spans, monthly Yellow Fox mileage by LKW, and monthly bonus values
+  - `Fahrerkarte` visual and metric updates:
+    - generated label normalized to ASCII-safe format for default PDF font
+    - KPI cards unified by font sizes and spacing
+    - cards added/expanded: `KM 2026`, `Container 2026`, `Bonus 2026`, `Work time 2026`
+    - work time uses `Days` from `BonusDynamik`
+    - containers use `CT` from `BonusDynamik`
+    - monthly performance table limited to the report year and rebuilt from `BonusDynamik` columns `KM`, `CT`, `Final`, `Days`
+  - report 3: `Container / Planen`
+    - list of active drivers filtered by type from sheet `Fahrer`
+  - report 4: `Firma`
+    - list of active drivers for one selected company with total driver count
+  - report 5: `Password Contado`
+    - source: SIM workbook sheet `Contado`
+    - param: truck number
+    - PDF columns: `Nummer Maschine`, `Name`, `Password`
+  - report 6: `Vodafone`
+    - source: SIM workbook sheet `Vodafone&O2 SIM-Karten  Neu`
+    - param: truck number
+    - PDF columns: `LKW Kennzeichen`, `PIN`, `PUK`
 - [x] `Yellow Fox`
   - report 1: driver/month from `YF_Fahrer`
     - params: `month`, `Fahrer`
