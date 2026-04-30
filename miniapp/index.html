@@ -2688,6 +2688,18 @@
           disposition,
         );
       }
+      if (type === "lkw_repair_all") {
+        return buildGenerateDirectUrl("lkw_repair_all", {}, initData || "", disposition);
+      }
+      if (type === "lkw_repair_single") {
+        const params = item?.params || {};
+        return buildGenerateDirectUrl(
+          "lkw_repair_single",
+          { lkw_number: String(params.lkw_number || "") },
+          initData || "",
+          disposition,
+        );
+      }
 
       const dockKind = item?.dock_kind || {
         lkw_list: "lkw-list",
@@ -2905,6 +2917,22 @@
             const label = item.label || value;
             return `<option value="${escapeHtml(value)}">${escapeHtml(label)}</option>`;
           }));
+        select.innerHTML = opts.join("");
+      } catch (err) {
+        select.innerHTML = `<option value="">${escapeHtml(err?.message || L("failedLoadLkwList"))}</option>`;
+      }
+    }
+
+    async function populateRepairLkwSelect(selectId) {
+      const select = $(selectId);
+      if (!select) return;
+      try {
+        const meta = await fetchMetaServer();
+        const repairItems = Array.isArray(meta?.lookups?.repair_lkw_numbers) ? meta.lookups.repair_lkw_numbers : [];
+        const fallbackItems = Array.isArray(meta?.lookups?.lkw_vehicles) ? meta.lookups.lkw_vehicles.map((item) => item.lkw_nummer || item.lkw_id).filter(Boolean) : [];
+        const items = repairItems.length ? repairItems : fallbackItems;
+        const opts = [`<option value="">${L("choose")}</option>`]
+          .concat(items.map((item) => `<option value="${escapeHtml(item)}">${escapeHtml(item)}</option>`));
         select.innerHTML = opts.join("");
       } catch (err) {
         select.innerHTML = `<option value="">${escapeHtml(err?.message || L("failedLoadLkwList"))}</option>`;
@@ -3729,11 +3757,25 @@
               <button type="button" class="btn btn-primary" id="lkwChooseAll">Alle LKW</button>
             </div>
           </div>
+          <div class="field">
+            <div class="note">Repair & Service costs for all LKW from sheet Repair. Top 15 costs are highlighted in red.</div>
+            <div class="note-actions">
+              <button type="button" class="btn btn-primary" id="lkwChooseRepairAll">Repair All LKW</button>
+            </div>
+          </div>
+          <div class="field">
+            <div class="note">Repair & Service costs for one selected LKW with monthly, weekly and invoice details.</div>
+            <div class="note-actions">
+              <button type="button" class="btn btn-primary" id="lkwChooseRepairSingle">Repair 1 LKW</button>
+            </div>
+          </div>
         `);
         setNote("");
         hideSheetFooter();
         $("lkwChooseSingle").onclick = () => renderSingle();
         $("lkwChooseAll").onclick = () => renderAll();
+        $("lkwChooseRepairAll").onclick = () => renderRepairAll();
+        $("lkwChooseRepairSingle").onclick = () => renderRepairSingle();
       };
 
       const renderSingle = async () => {
@@ -3780,6 +3822,54 @@
         hideSheetFooter();
         $("lkwAllRun").onclick = async () => {
           await sendReportGenerate("lkw_all", {});
+        };
+      };
+
+      const renderRepairAll = () => {
+        setSheetHeader("LKW - Repair All LKW", "Repair & Service costs for all LKW from sheet Repair", "PDF");
+        setSheetCloseAction("back", renderMenu);
+        setSegments([], "", () => {});
+        setForm(`
+          <div class="field">
+            <label>Repair All LKW</label>
+            <div class="note">Generate a management PDF with total Repair & Service costs for every LKW. Top 15 by total cost are highlighted in red.</div>
+            <div class="note-actions">
+              <button type="button" class="btn btn-primary" id="lkwRepairAllRun">${L("generate")}</button>
+            </div>
+          </div>
+        `);
+        setNote("");
+        hideSheetFooter();
+        $("lkwRepairAllRun").onclick = async () => {
+          await sendReportGenerate("lkw_repair_all", {});
+        };
+      };
+
+      const renderRepairSingle = async () => {
+        setSheetHeader("LKW - Repair 1 LKW", "Repair & Service costs for one selected LKW from sheet Repair", "PDF");
+        setSheetCloseAction("back", renderMenu);
+        setSegments([], "", () => {});
+        setForm(`
+          <div class="field">
+            <label>LKW</label>
+            <select id="lkwRepairVehicle"><option value="">${L("loadingHistory")}</option></select>
+            <div class="note">The PDF includes total costs, breakdown by months and years, breakdown by weeks, and invoice-level details.</div>
+            <div class="note-actions">
+              <button type="button" class="btn btn-primary" id="lkwRepairSingleRun">${L("generate")}</button>
+            </div>
+          </div>
+        `);
+        setNote("");
+        hideSheetFooter();
+        await populateRepairLkwSelect("lkwRepairVehicle");
+        $("lkwRepairSingleRun").onclick = async () => {
+          const lkwNumber = String($("lkwRepairVehicle")?.value || "").trim();
+          if (!lkwNumber) {
+            haptic("error");
+            showToast(L("choose"));
+            return;
+          }
+          await sendReportGenerate("lkw_repair_single", { lkw_number: lkwNumber });
         };
       };
 

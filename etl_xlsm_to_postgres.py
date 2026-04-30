@@ -48,6 +48,13 @@ BONUS_DYNAMIK_SHEET = "BonusDynamik"
 DIESEL_SHEET = "Diesel"
 YF_FAHRER_SHEET = "YF_Fahrer"
 YF_SHEET = "YF"
+REPAIR_SHEET = "Repair"
+REPAIR_TRUCK_RENAMES = {
+    "DE-FN186": "GR-OO2103",
+    "DE-FN401": "GR-OO2104",
+    "DE-FN179": "GR-OO2205",
+    "DE-FN400": "GR-OO2206",
+}
 MONTHS_DE = {
     "januar": (1, "Januar"),
     "jan": (1, "Januar"),
@@ -181,6 +188,16 @@ def _parse_decimal(value: object) -> Decimal:
         return Decimal(cleaned).quantize(Decimal("0.01"), rounding=ROUND_HALF_UP)
     except (InvalidOperation, ValueError):
         return Decimal("0.00")
+
+
+def _normalize_repair_truck_number(value: object) -> str | None:
+    raw = _clean_text(value)
+    if not raw:
+        return None
+    compact = re.sub(r"\s+", " ", raw).strip().upper()
+    if compact.startswith("EX "):
+        compact = compact[3:].strip()
+    return REPAIR_TRUCK_RENAMES.get(compact, compact)
 
 
 def _parse_month_token(value: object) -> tuple[int, str] | None:
@@ -392,9 +409,117 @@ class YFLkwDayRow:
     raw_payload: dict[str, object]
 
 
+@dataclass
+class RepairRow:
+    report_year: int
+    report_month: int
+    iso_week: int
+    invoice_date: date | None
+    truck_number: str
+    original_truck_number: str | None
+    repair_name: str | None
+    total_price: Decimal
+    invoice: str | None
+    seller: str | None
+    buyer: str | None
+    kategorie: str | None
+    source_row: int
+    raw_payload: dict[str, object]
+
+
 def _iter_sheet_rows(ws, header_row_idx: int):
     for row in ws.iter_rows(min_row=header_row_idx + 1, values_only=True):
         yield list(row)
+
+
+def extract_repairs(wb) -> list[RepairRow]:
+    if REPAIR_SHEET not in wb.sheetnames:
+        return []
+
+    ws = wb[REPAIR_SHEET]
+    header_row_idx = _find_header_row(ws, ("year", "month", "week", "truck", "totalprice"))
+    header = _get_row_values(ws, header_row_idx)
+    index = _build_col_index(header)
+
+    col_year = _pick_col(index, "Year")
+    col_month = _pick_col(index, "Month")
+    col_week = _pick_col(index, "Week")
+    col_date = _pick_col(index, "Date Invoice", "Invoice Date", "Date")
+    col_truck = _pick_col(index, "Truck")
+    col_name = _pick_col(index, "Name")
+    col_total = _pick_col(index, "Total Price", "Price", "Total")
+    col_invoice = _pick_col(index, "Invoice")
+    col_seller = _pick_col(index, "Seller")
+    col_buyer = _pick_col(index, "Buyer", "Byuer")
+    col_kategorie = _pick_col(index, "Kategorie", "Category")
+
+    if col_truck is None or col_total is None:
+        return []
+
+    rows: list[RepairRow] = []
+    for row_idx, row in enumerate(_iter_sheet_rows(ws, header_row_idx), start=header_row_idx + 1):
+        if col_truck >= len(row):
+            continue
+        truck_raw = _clean_text(row[col_truck])
+        truck_number = _normalize_repair_truck_number(truck_raw)
+        if not truck_number:
+            continue
+
+        invoice_date = _parse_date(row[col_date]) if col_date is not None and col_date < len(row) else None
+        report_year = (
+            _parse_strict_positive_int(row[col_year])
+            if col_year is not None and col_year < len(row)
+            else None
+        )
+        report_month = (
+            _parse_strict_positive_int(row[col_month])
+            if col_month is not None and col_month < len(row)
+            else None
+        )
+        iso_week = (
+            _parse_strict_positive_int(row[col_week])
+            if col_week is not None and col_week < len(row)
+            else None
+        )
+        if invoice_date:
+            report_year = report_year or invoice_date.year
+            report_month = report_month or invoice_date.month
+            iso_week = iso_week or int(invoice_date.isocalendar()[1])
+        if not report_year or report_year < 2020 or report_year > 2100:
+            continue
+        if not report_month or report_month < 1 or report_month > 12:
+            report_month = 1
+        if not iso_week or iso_week < 1 or iso_week > 53:
+            iso_week = 1
+
+        payload = {
+            str(header[i]).strip() if i < len(header) and header[i] is not None else f"col_{i+1}":
+            row[i] if i < len(row) else None
+            for i in range(len(header))
+        }
+        payload["normalized_truck_number"] = truck_number
+        payload["source_row"] = row_idx
+
+        rows.append(
+            RepairRow(
+                report_year=report_year,
+                report_month=report_month,
+                iso_week=iso_week,
+                invoice_date=invoice_date,
+                truck_number=truck_number,
+                original_truck_number=truck_raw,
+                repair_name=_clean_text(row[col_name]) if col_name is not None and col_name < len(row) else None,
+                total_price=_parse_decimal(row[col_total]) if col_total < len(row) else Decimal("0.00"),
+                invoice=_clean_text(row[col_invoice]) if col_invoice is not None and col_invoice < len(row) else None,
+                seller=_clean_text(row[col_seller]) if col_seller is not None and col_seller < len(row) else None,
+                buyer=_clean_text(row[col_buyer]) if col_buyer is not None and col_buyer < len(row) else None,
+                kategorie=_clean_text(row[col_kategorie]) if col_kategorie is not None and col_kategorie < len(row) else None,
+                source_row=row_idx,
+                raw_payload=payload,
+            )
+        )
+
+    return sorted(rows, key=lambda r: (r.report_year, r.report_month, r.iso_week, r.truck_number, r.source_row))
 
 
 def extract_trucks(wb) -> list[TruckRow]:
@@ -1353,6 +1478,42 @@ def _ensure_fahrer_weekly_status_table(cur) -> None:
     )
 
 
+def _ensure_repair_table(cur) -> None:
+    cur.execute(
+        """
+        CREATE TABLE IF NOT EXISTS report_repair_records (
+            source_row INTEGER PRIMARY KEY,
+            report_year SMALLINT NOT NULL CHECK (report_year BETWEEN 2020 AND 2100),
+            report_month SMALLINT NOT NULL CHECK (report_month BETWEEN 1 AND 12),
+            iso_week SMALLINT NOT NULL CHECK (iso_week BETWEEN 1 AND 53),
+            invoice_date DATE,
+            truck_number TEXT NOT NULL,
+            original_truck_number TEXT,
+            repair_name TEXT,
+            total_price NUMERIC(14, 2) NOT NULL DEFAULT 0,
+            invoice TEXT,
+            seller TEXT,
+            buyer TEXT,
+            kategorie TEXT,
+            raw_payload JSONB NOT NULL DEFAULT '{}'::jsonb,
+            updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+        )
+        """
+    )
+    cur.execute(
+        """
+        CREATE INDEX IF NOT EXISTS idx_report_repair_truck_date
+            ON report_repair_records (truck_number, invoice_date, report_year, report_month, iso_week)
+        """
+    )
+    cur.execute(
+        """
+        CREATE INDEX IF NOT EXISTS idx_report_repair_total
+            ON report_repair_records (total_price DESC)
+        """
+    )
+
+
 def run_etl(database_url: str, xlsm_path: Path) -> dict[str, int]:
     psycopg = _lazy_import_psycopg()
     created_copy = False
@@ -1384,6 +1545,7 @@ def run_etl(database_url: str, xlsm_path: Path) -> dict[str, int]:
             diesel_rows = extract_diesel_months(wb)
             yf_fahrer_rows = extract_yf_fahrer_months(wb)
             yf_lkw_rows = extract_yf_lkw_days(wb)
+            repair_rows = extract_repairs(wb)
             wb.close()
 
             company_names = sorted(
@@ -1406,6 +1568,7 @@ def run_etl(database_url: str, xlsm_path: Path) -> dict[str, int]:
                 _ensure_yf_fahrer_table(cur)
                 _ensure_yf_lkw_table(cur)
                 _ensure_fahrer_weekly_status_table(cur)
+                _ensure_repair_table(cur)
 
                 rows_inserted = 0
                 rows_updated = 0
@@ -1756,6 +1919,49 @@ def run_etl(database_url: str, xlsm_path: Path) -> dict[str, int]:
                     )
                     rows_inserted += 1
 
+                cur.execute("DELETE FROM report_repair_records")
+                rows_deleted += int(cur.rowcount or 0)
+                for rec in repair_rows:
+                    cur.execute(
+                        """
+                        INSERT INTO report_repair_records (
+                            source_row,
+                            report_year,
+                            report_month,
+                            iso_week,
+                            invoice_date,
+                            truck_number,
+                            original_truck_number,
+                            repair_name,
+                            total_price,
+                            invoice,
+                            seller,
+                            buyer,
+                            kategorie,
+                            raw_payload,
+                            updated_at
+                        )
+                        VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s::jsonb, NOW())
+                        """,
+                        (
+                            rec.source_row,
+                            rec.report_year,
+                            rec.report_month,
+                            rec.iso_week,
+                            rec.invoice_date,
+                            rec.truck_number,
+                            rec.original_truck_number,
+                            rec.repair_name,
+                            rec.total_price,
+                            rec.invoice,
+                            rec.seller,
+                            rec.buyer,
+                            rec.kategorie,
+                            json.dumps(rec.raw_payload, ensure_ascii=False, default=str),
+                        ),
+                    )
+                    rows_inserted += 1
+
                 cur.execute(
                     """
                     UPDATE etl_log
@@ -1770,7 +1976,7 @@ def run_etl(database_url: str, xlsm_path: Path) -> dict[str, int]:
                     WHERE id = %s
                     """,
                     (
-                        len(trucks) + len(drivers) + len(fahrer_weekly_rows) + len(einnahmen_rows) + len(einnahmen_firm_rows) + len(bonus_rows) + len(diesel_rows) + len(yf_fahrer_rows) + len(yf_lkw_rows),
+                        len(trucks) + len(drivers) + len(fahrer_weekly_rows) + len(einnahmen_rows) + len(einnahmen_firm_rows) + len(bonus_rows) + len(diesel_rows) + len(yf_fahrer_rows) + len(yf_lkw_rows) + len(repair_rows),
                         rows_inserted,
                         rows_updated,
                         rows_deleted,
@@ -1786,6 +1992,7 @@ def run_etl(database_url: str, xlsm_path: Path) -> dict[str, int]:
                                 "diesel_months": len(diesel_rows),
                                 "yf_fahrer_rows": len(yf_fahrer_rows),
                                 "yf_lkw_rows": len(yf_lkw_rows),
+                                "repair_rows": len(repair_rows),
                                 "workbook_used": str(readable_path),
                             },
                             ensure_ascii=False,
@@ -1806,6 +2013,7 @@ def run_etl(database_url: str, xlsm_path: Path) -> dict[str, int]:
                 "diesel_months": len(diesel_rows),
                 "yf_fahrer_rows": len(yf_fahrer_rows),
                 "yf_lkw_rows": len(yf_lkw_rows),
+                "repair_rows": len(repair_rows),
             }
 
         except Exception as exc:
@@ -1853,7 +2061,8 @@ def main() -> int:
         f"bonus_rows={result['bonus_rows']} "
         f"diesel_months={result['diesel_months']} "
         f"yf_fahrer_rows={result['yf_fahrer_rows']} "
-        f"yf_lkw_rows={result['yf_lkw_rows']}"
+        f"yf_lkw_rows={result['yf_lkw_rows']} "
+        f"repair_rows={result['repair_rows']}"
     )
     return 0
 

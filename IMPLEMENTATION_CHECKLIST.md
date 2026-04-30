@@ -1,6 +1,6 @@
 # LKW Telegram Mini App - Implementation Checklist
 
-> Last updated: 2026-04-28
+> Last updated: 2026-05-01
 > Status legend: [ ] pending | [~] in progress | [x] done
 
 ## 1) Infra and Deploy
@@ -46,6 +46,12 @@
   - source: sheet `Fahrer`, weekly columns `AH:CG`
   - codes: `U` = Urlaub, `K` / `К` = Krankheit
   - inactive drivers are excluded from weekly summary from their dismissal week
+- [x] ETL import for LKW repair/service costs added:
+  - source: sheet `Repair` in `LKW_Fahrer_Data.xlsm`
+  - table: `report_repair_records`
+  - columns: year, month, week, invoice date, truck number, work name, total price, invoice, seller, buyer, category
+  - historical truck renames are normalized:
+    `EX DE-FN186 -> GR-OO2103`, `EX DE-FN401 -> GR-OO2104`, `EX DE-FN179 -> GR-OO2205`, `EX DE-FN400 -> GR-OO2206`
 - [x] ETL freshness monitor active (`ETL_STALE_AFTER_HOURS=4`)
 - [x] ETL schedule updated:
   - Weekdays: hourly (07:00-18:00)
@@ -101,6 +107,16 @@
 - [x] `LKW`
   - `1 LKW` PDF
   - `Alle LKW` PDF
+  - `Repair All LKW` PDF:
+    - source: sheet `Repair`
+    - full-period management summary by truck
+    - centered table values
+    - top 15 trucks by total repair/service cost highlighted in red
+  - `Repair 1 LKW` PDF:
+    - select one truck number
+    - full-period total plus breakdown by year/month and ISO week
+    - detailed invoice table with date, invoice number, work name, seller, category, and amount
+    - historical truck renames are included through normalized truck numbers
   - source: sheet `LKW`
   - columns: `A-G`, `L-Z`
   - centered values

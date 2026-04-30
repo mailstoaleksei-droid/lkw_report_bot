@@ -378,6 +378,44 @@ const REPORTS = [
     params: [],
   },
   {
+    id: "lkw_repair_all",
+    enabled: true,
+    icon: "truck",
+    name: {
+      en: "Repair & Service Costs (All LKW)",
+      ru: "Затраты на ремонт и сервис (все LKW)",
+      de: "Reparatur- und Servicekosten (alle LKW)",
+    },
+    description: {
+      en: "Management PDF summary of repair and service costs for all LKW from sheet Repair",
+      ru: "PDF-сводка для руководства по затратам на ремонт и сервис всех LKW с листа Repair",
+      de: "Management-PDF mit Reparatur- und Servicekosten aller LKW aus Blatt Repair",
+    },
+    params: [],
+  },
+  {
+    id: "lkw_repair_single",
+    enabled: true,
+    icon: "truck",
+    name: {
+      en: "Repair & Service Costs (One LKW)",
+      ru: "Затраты на ремонт и сервис (один LKW)",
+      de: "Reparatur- und Servicekosten (ein LKW)",
+    },
+    description: {
+      en: "PDF by selected truck: monthly/yearly, weekly and detailed invoice breakdown from sheet Repair",
+      ru: "PDF по выбранной машине: месяцы/годы, недели и детализация счетов с листа Repair",
+      de: "PDF fuer ausgewaehltes LKW: Monate/Jahre, Wochen und Rechnungsdetails aus Blatt Repair",
+    },
+    params: [
+      {
+        id: "lkw_number",
+        type: "text",
+        label: { en: "LKW number", ru: "Номер LKW", de: "LKW Kennzeichen" },
+      },
+    ],
+  },
+  {
     id: "fahrer_all",
     enabled: true,
     icon: "drivers",
@@ -937,6 +975,62 @@ WHERE (
   OR lower(t.external_id) = lower($1::text)
 )
 ORDER BY t.external_id;
+`;
+
+const LKW_REPAIR_ALL_SQL = `
+WITH aggregated AS (
+  SELECT
+    truck_number,
+    string_agg(DISTINCT original_truck_number, ', ' ORDER BY original_truck_number)
+      FILTER (WHERE original_truck_number IS NOT NULL AND original_truck_number <> truck_number) AS previous_numbers,
+    COUNT(*)::int AS records_count,
+    COUNT(DISTINCT NULLIF(invoice, ''))::int AS invoice_count,
+    COALESCE(SUM(total_price), 0)::numeric AS total_price,
+    COALESCE(SUM(total_price) FILTER (WHERE lower(COALESCE(kategorie, '')) LIKE '%service%'), 0)::numeric AS service_cost,
+    COALESCE(SUM(total_price) FILTER (WHERE lower(COALESCE(kategorie, '')) LIKE '%wash%'), 0)::numeric AS wash_cost,
+    MIN(invoice_date) AS first_invoice_date,
+    MAX(invoice_date) AS last_invoice_date
+  FROM report_repair_records
+  WHERE COALESCE(truck_number, '') <> ''
+  GROUP BY truck_number
+), ranked AS (
+  SELECT
+    row_number() OVER (ORDER BY total_price DESC, truck_number ASC)::int AS cost_rank,
+    *
+  FROM aggregated
+)
+SELECT
+  cost_rank,
+  truck_number,
+  COALESCE(previous_numbers, '') AS previous_numbers,
+  records_count,
+  invoice_count,
+  total_price,
+  service_cost,
+  wash_cost,
+  to_char(first_invoice_date, 'DD/MM/YYYY') AS first_invoice_date,
+  to_char(last_invoice_date, 'DD/MM/YYYY') AS last_invoice_date
+FROM ranked
+ORDER BY total_price DESC, truck_number ASC;
+`;
+
+const LKW_REPAIR_SINGLE_DETAIL_SQL = `
+SELECT
+  report_year,
+  report_month,
+  iso_week,
+  to_char(invoice_date, 'DD/MM/YYYY') AS invoice_date,
+  truck_number,
+  COALESCE(original_truck_number, '') AS original_truck_number,
+  COALESCE(repair_name, '') AS repair_name,
+  COALESCE(total_price, 0)::numeric AS total_price,
+  COALESCE(invoice, '') AS invoice,
+  COALESCE(seller, '') AS seller,
+  COALESCE(buyer, '') AS buyer,
+  COALESCE(kategorie, '') AS kategorie
+FROM report_repair_records
+WHERE lower(truck_number) = lower($1::text)
+ORDER BY report_year, report_month, iso_week, invoice_date NULLS LAST, source_row;
 `;
 
 const DIESEL_LKW_CARD_SQL = `
@@ -6445,6 +6539,310 @@ async function buildLkwMasterPdfWithPdfLib({ userId, rows, title }) {
   return pdfDoc.save();
 }
 
+function buildRepairSingleSummaries(rows = []) {
+  const byMonth = new Map();
+  const byWeek = new Map();
+  let total = 0;
+  let invoiceCount = 0;
+  const invoices = new Set();
+
+  for (const row of rows || []) {
+    const amount = toNumberSafe(row?.total_price, 0);
+    total += amount;
+    const invoice = safeText(row?.invoice, "").trim();
+    if (invoice && !invoices.has(invoice)) {
+      invoices.add(invoice);
+      invoiceCount += 1;
+    }
+    const year = toIntSafe(row?.report_year, 0);
+    const month = toIntSafe(row?.report_month, 0);
+    const week = toIntSafe(row?.iso_week, 0);
+    if (year && month) {
+      const key = `${year}-${pad2(month)}`;
+      if (!byMonth.has(key)) byMonth.set(key, { period: `${year}/${pad2(month)}`, report_year: year, report_month: month, records_count: 0, total_price: 0 });
+      const item = byMonth.get(key);
+      item.records_count += 1;
+      item.total_price += amount;
+    }
+    if (year && week) {
+      const key = `${year}-W${pad2(week)}`;
+      if (!byWeek.has(key)) byWeek.set(key, { period: `${year}/W${pad2(week)}`, report_year: year, iso_week: week, records_count: 0, total_price: 0 });
+      const item = byWeek.get(key);
+      item.records_count += 1;
+      item.total_price += amount;
+    }
+  }
+
+  return {
+    total,
+    invoiceCount,
+    monthRows: Array.from(byMonth.values()).sort((a, b) => (a.report_year - b.report_year) || (a.report_month - b.report_month)),
+    weekRows: Array.from(byWeek.values()).sort((a, b) => (a.report_year - b.report_year) || (a.iso_week - b.iso_week)),
+  };
+}
+
+async function buildLkwRepairAllPdfWithPdfLib({ userId, rows }) {
+  const pdfDoc = await PDFDocument.create();
+  const font = await pdfDoc.embedFont(StandardFonts.Helvetica);
+  const boldFont = await pdfDoc.embedFont(StandardFonts.HelveticaBold);
+
+  const pageSize = [842, 595];
+  const margin = 22;
+  const rowHeight = 16;
+  const textSize = 8;
+  const textColor = rgb(0.08, 0.14, 0.24);
+  const mutedColor = rgb(0.24, 0.3, 0.4);
+  const borderColor = rgb(0.74, 0.8, 0.9);
+  const headerBg = rgb(0.93, 0.96, 1);
+  const oddBg = rgb(0.985, 0.99, 1);
+  const topBg = rgb(1, 0.88, 0.88);
+  const topText = rgb(0.72, 0.04, 0.04);
+  const tableMaxWidth = pageSize[0] - (margin * 2);
+  const columns = resolveAutoColumns({
+    columns: [
+      { key: "cost_rank", label: "#", width: 36 },
+      { key: "truck_number", label: "LKW", width: "auto", min_width: 78, max_width: 112 },
+      { key: "previous_numbers", label: "Old number", width: "auto", min_width: 86, max_width: 140 },
+      { key: "records_count", label: "Rows", width: 50 },
+      { key: "invoice_count", label: "Invoices", width: 62 },
+      { key: "service_cost", label: "Service", width: 78 },
+      { key: "wash_cost", label: "Wash", width: 72 },
+      { key: "total_price", label: "Total", width: 92 },
+      { key: "first_invoice_date", label: "First", width: 72 },
+      { key: "last_invoice_date", label: "Last", width: 72 },
+    ],
+    rows,
+    font,
+    size: textSize,
+    maxTableWidth: tableMaxWidth,
+  });
+  const tableWidth = columns.reduce((sum, c) => sum + c.width, 0);
+  const tableX = margin;
+  const total = (rows || []).reduce((sum, row) => sum + toNumberSafe(row?.total_price, 0), 0);
+  const invoiceCount = (rows || []).reduce((sum, row) => sum + toIntSafe(row?.invoice_count, 0), 0);
+
+  let page = pdfDoc.addPage(pageSize);
+  let y = page.getHeight() - margin;
+
+  const drawPageHeader = () => {
+    page.drawText("Repair & Service Costs - All LKW", { x: margin, y, size: 15, font: boldFont, color: textColor });
+    y -= 18;
+    page.drawText(`Sheet Repair | Full period | ${formatReportGeneratedLabel(userId)}`, { x: margin, y, size: 8, font, color: mutedColor });
+    y -= 18;
+  };
+
+  const drawSummary = () => {
+    const cards = [
+      ["Total costs", formatMoney(total)],
+      ["LKW count", String((rows || []).length)],
+      ["Invoices", String(invoiceCount)],
+      ["Top 15", "highlighted red"],
+    ];
+    const cardW = (tableMaxWidth - 24) / 4;
+    for (let i = 0; i < cards.length; i += 1) {
+      const x = margin + (i * (cardW + 8));
+      page.drawRectangle({ x, y: y - 44, width: cardW, height: 40, color: rgb(0.965, 0.98, 1), borderColor, borderWidth: 1 });
+      page.drawText(cards[i][0], { x: x + 8, y: y - 17, size: 7, font, color: mutedColor });
+      const value = fitTextToWidth(boldFont, cards[i][1], 13, cardW - 16);
+      page.drawText(value, { x: x + 8, y: y - 34, size: 13, font: boldFont, color: textColor });
+    }
+    y -= 54;
+  };
+
+  const drawHeaderRow = () => {
+    page.drawRectangle({ x: tableX, y: y - rowHeight + 2, width: tableWidth, height: rowHeight, color: headerBg, borderColor, borderWidth: 1 });
+    let x = tableX;
+    for (const col of columns) {
+      const label = fitTextToWidth(boldFont, col.label, textSize, col.width - 8);
+      const labelWidth = measureTextWidth(boldFont, label, textSize);
+      page.drawText(label, { x: x + ((col.width - labelWidth) / 2), y: y - 10, size: textSize, font: boldFont, color: textColor });
+      x += col.width;
+      if (x < tableX + tableWidth - 0.5) page.drawLine({ start: { x, y: y - rowHeight + 2 }, end: { x, y: y + 2 }, thickness: 0.8, color: borderColor });
+    }
+    y -= rowHeight;
+  };
+
+  const ensureSpace = (needed) => {
+    if (y - needed >= margin) return;
+    page = pdfDoc.addPage(pageSize);
+    y = page.getHeight() - margin;
+    drawPageHeader();
+    drawHeaderRow();
+  };
+
+  const drawRow = (row, idx) => {
+    const isTop = toIntSafe(row?.cost_rank, idx + 1) <= 15;
+    const fill = isTop ? topBg : (idx % 2 === 1 ? oddBg : null);
+    if (fill) page.drawRectangle({ x: tableX, y: y - rowHeight + 2, width: tableWidth, height: rowHeight, color: fill });
+    let x = tableX;
+    for (const col of columns) {
+      const raw = ["total_price", "service_cost", "wash_cost"].includes(col.key)
+        ? formatMoney(row?.[col.key])
+        : safeText(row?.[col.key], "");
+      const cellFont = isTop && ["cost_rank", "truck_number", "total_price"].includes(col.key) ? boldFont : font;
+      const value = fitTextToWidth(cellFont, raw, textSize, col.width - 8);
+      const valueWidth = measureTextWidth(cellFont, value, textSize);
+      page.drawText(value, { x: x + ((col.width - valueWidth) / 2), y: y - 10, size: textSize, font: cellFont, color: isTop ? topText : textColor });
+      x += col.width;
+      if (x < tableX + tableWidth - 0.5) page.drawLine({ start: { x, y: y - rowHeight + 2 }, end: { x, y: y + 2 }, thickness: 0.5, color: borderColor });
+    }
+    page.drawLine({ start: { x: tableX, y: y - rowHeight + 2 }, end: { x: tableX + tableWidth, y: y - rowHeight + 2 }, thickness: 0.5, color: borderColor });
+    y -= rowHeight;
+  };
+
+  drawPageHeader();
+  drawSummary();
+  drawHeaderRow();
+  for (let idx = 0; idx < (rows || []).length; idx += 1) {
+    ensureSpace(rowHeight + 2);
+    drawRow(rows[idx], idx);
+  }
+  if (!rows?.length) {
+    page.drawText("No repair rows found.", { x: margin, y: y - 12, size: 9, font, color: textColor });
+  }
+
+  return pdfDoc.save();
+}
+
+async function buildLkwRepairSinglePdfWithPdfLib({ userId, lkwNumber, rows }) {
+  const pdfDoc = await PDFDocument.create();
+  const font = await pdfDoc.embedFont(StandardFonts.Helvetica);
+  const boldFont = await pdfDoc.embedFont(StandardFonts.HelveticaBold);
+  const pageSize = [842, 595];
+  const margin = 22;
+  const rowHeight = 16;
+  const textSize = 8;
+  const textColor = rgb(0.08, 0.14, 0.24);
+  const mutedColor = rgb(0.24, 0.3, 0.4);
+  const borderColor = rgb(0.74, 0.8, 0.9);
+  const headerBg = rgb(0.93, 0.96, 1);
+  const oddBg = rgb(0.985, 0.99, 1);
+  const tableMaxWidth = pageSize[0] - (margin * 2);
+  const summary = buildRepairSingleSummaries(rows);
+
+  let page = pdfDoc.addPage(pageSize);
+  let y = page.getHeight() - margin;
+
+  const drawPageHeader = (section = "") => {
+    page.drawText(`Repair & Service Costs - ${lkwNumber}`, { x: margin, y, size: 15, font: boldFont, color: textColor });
+    y -= 18;
+    page.drawText(`Sheet Repair | Full period${section ? ` | ${section}` : ""} | ${formatReportGeneratedLabel(userId)}`, { x: margin, y, size: 8, font, color: mutedColor });
+    y -= 18;
+  };
+
+  const addPage = (section = "") => {
+    page = pdfDoc.addPage(pageSize);
+    y = page.getHeight() - margin;
+    drawPageHeader(section);
+  };
+
+  const drawCards = () => {
+    const firstDate = safeText(rows?.[0]?.invoice_date, "");
+    const lastDate = safeText(rows?.[rows.length - 1]?.invoice_date, "");
+    const cards = [
+      ["Total costs", formatMoney(summary.total)],
+      ["Invoices", String(summary.invoiceCount)],
+      ["Rows", String((rows || []).length)],
+      ["Period", [firstDate, lastDate].filter(Boolean).join(" - ") || "all time"],
+    ];
+    const cardW = (tableMaxWidth - 24) / 4;
+    for (let i = 0; i < cards.length; i += 1) {
+      const x = margin + (i * (cardW + 8));
+      page.drawRectangle({ x, y: y - 44, width: cardW, height: 40, color: rgb(0.965, 0.98, 1), borderColor, borderWidth: 1 });
+      page.drawText(cards[i][0], { x: x + 8, y: y - 17, size: 7, font, color: mutedColor });
+      const value = fitTextToWidth(boldFont, cards[i][1], 12, cardW - 16);
+      page.drawText(value, { x: x + 8, y: y - 34, size: 12, font: boldFont, color: textColor });
+    }
+    y -= 58;
+  };
+
+  const drawTable = ({ title, columns, dataRows, formatValue }) => {
+    if (y < margin + 80) addPage(title);
+    page.drawText(title, { x: margin, y, size: 11, font: boldFont, color: textColor });
+    y -= 16;
+    const resolvedColumns = resolveAutoColumns({ columns, rows: dataRows, font, size: textSize, maxTableWidth: tableMaxWidth });
+    const tableWidth = resolvedColumns.reduce((sum, c) => sum + c.width, 0);
+    const drawHeaderRow = () => {
+      page.drawRectangle({ x: margin, y: y - rowHeight + 2, width: tableWidth, height: rowHeight, color: headerBg, borderColor, borderWidth: 1 });
+      let x = margin;
+      for (const col of resolvedColumns) {
+        const label = fitTextToWidth(boldFont, col.label, textSize, col.width - 8);
+        const labelWidth = measureTextWidth(boldFont, label, textSize);
+        page.drawText(label, { x: x + ((col.width - labelWidth) / 2), y: y - 10, size: textSize, font: boldFont, color: textColor });
+        x += col.width;
+        if (x < margin + tableWidth - 0.5) page.drawLine({ start: { x, y: y - rowHeight + 2 }, end: { x, y: y + 2 }, thickness: 0.8, color: borderColor });
+      }
+      y -= rowHeight;
+    };
+    drawHeaderRow();
+    if (!dataRows?.length) {
+      page.drawText("No rows found.", { x: margin, y: y - 10, size: 9, font, color: textColor });
+      y -= 24;
+      return;
+    }
+    for (let idx = 0; idx < dataRows.length; idx += 1) {
+      if (y - rowHeight < margin) {
+        addPage(title);
+        drawHeaderRow();
+      }
+      if (idx % 2 === 1) page.drawRectangle({ x: margin, y: y - rowHeight + 2, width: tableWidth, height: rowHeight, color: oddBg });
+      let x = margin;
+      for (const col of resolvedColumns) {
+        const raw = formatValue ? formatValue(dataRows[idx], col.key) : safeText(dataRows[idx]?.[col.key], "");
+        const value = fitTextToWidth(font, raw, textSize, col.width - 8);
+        const valueWidth = measureTextWidth(font, value, textSize);
+        page.drawText(value, { x: x + ((col.width - valueWidth) / 2), y: y - 10, size: textSize, font, color: textColor });
+        x += col.width;
+        if (x < margin + tableWidth - 0.5) page.drawLine({ start: { x, y: y - rowHeight + 2 }, end: { x, y: y + 2 }, thickness: 0.5, color: borderColor });
+      }
+      page.drawLine({ start: { x: margin, y: y - rowHeight + 2 }, end: { x: margin + tableWidth, y: y - rowHeight + 2 }, thickness: 0.5, color: borderColor });
+      y -= rowHeight;
+    }
+    y -= 12;
+  };
+
+  drawPageHeader();
+  drawCards();
+  drawTable({
+    title: "Costs by Year and Month",
+    columns: [
+      { key: "period", label: "Year/Month", width: 110 },
+      { key: "records_count", label: "Rows", width: 70 },
+      { key: "total_price", label: "Total", width: 110 },
+    ],
+    dataRows: summary.monthRows,
+    formatValue: (row, key) => key === "total_price" ? formatMoney(row?.[key]) : safeText(row?.[key], ""),
+  });
+  drawTable({
+    title: "Costs by ISO Week",
+    columns: [
+      { key: "period", label: "Year/Week", width: 110 },
+      { key: "records_count", label: "Rows", width: 70 },
+      { key: "total_price", label: "Total", width: 110 },
+    ],
+    dataRows: summary.weekRows,
+    formatValue: (row, key) => key === "total_price" ? formatMoney(row?.[key]) : safeText(row?.[key], ""),
+  });
+  drawTable({
+    title: "Invoice Details",
+    columns: [
+      { key: "invoice_date", label: "Date", width: 70 },
+      { key: "report_year", label: "Year", width: 46 },
+      { key: "report_month", label: "Month", width: 52 },
+      { key: "iso_week", label: "Week", width: 46 },
+      { key: "invoice", label: "Invoice", width: "auto", min_width: 80, max_width: 112 },
+      { key: "repair_name", label: "Work", width: "auto", min_width: 130, max_width: 210 },
+      { key: "seller", label: "Seller", width: "auto", min_width: 110, max_width: 170 },
+      { key: "kategorie", label: "Category", width: 72 },
+      { key: "total_price", label: "Total", width: 86 },
+    ],
+    dataRows: rows,
+    formatValue: (row, key) => key === "total_price" ? formatMoney(row?.[key]) : safeText(row?.[key], ""),
+  });
+
+  return pdfDoc.save();
+}
+
 function normalizeFahrerWeekCode(value) {
   const raw = safeText(value, "").trim().toUpperCase();
   if (raw === "U") return "U";
@@ -7674,6 +8072,18 @@ function validateGeneratePayload(body) {
     return { ok: true, reportType };
   }
 
+  if (reportType === "lkw_repair_all") {
+    return { ok: true, reportType };
+  }
+
+  if (reportType === "lkw_repair_single") {
+    const lkwNumber = String(body.lkw_number || "").trim().slice(0, 120);
+    if (!lkwNumber) {
+      return { ok: false, status: 400, error: "Missing lkw_number" };
+    }
+    return { ok: true, reportType, lkwNumber };
+  }
+
   if (reportType === "fahrer_all") {
     return { ok: true, reportType };
   }
@@ -7745,6 +8155,8 @@ async function handleGenerateWithBody(body, env, enforceRateLimit = true) {
     && valid.reportType !== "bonus_firma_month"
     && valid.reportType !== "lkw_single"
     && valid.reportType !== "lkw_all"
+    && valid.reportType !== "lkw_repair_all"
+    && valid.reportType !== "lkw_repair_single"
     && valid.reportType !== "fahrer_all"
     && valid.reportType !== "fahrer_card"
     && valid.reportType !== "fahrer_type"
@@ -8478,6 +8890,125 @@ async function handleGenerateWithBody(body, env, enforceRateLimit = true) {
         pageHeight: 595,
       });
     }
+  } else if (valid.reportType === "lkw_repair_all") {
+    let rows;
+    try {
+      const result = await queryNeon(dbConnectionString, LKW_REPAIR_ALL_SQL, []);
+      rows = result.rows || [];
+    } catch (err) {
+      return json(
+        {
+          ok: false,
+          error: "Failed to execute SQL query",
+          code: "SQL_ERROR",
+          details: String(err?.message || err || "unknown error"),
+        },
+        500,
+        { "Cache-Control": "no-store" },
+      );
+    }
+
+    filename = `lkw_repair_all_${formatUtcDateStamp(new Date())}.pdf`;
+    outputKey = `lkw_repair_all:${formatUtcDateStamp(new Date())}`;
+    try {
+      pdfBytes = await buildLkwRepairAllPdfWithPdfLib({
+        userId: reportUserLabel,
+        rows,
+      });
+    } catch (err) {
+      pdfEngine = "legacy-fallback";
+      const lines = [
+        "Rank | LKW | Old numbers | Rows | Invoices | Service | Wash | Total | First | Last",
+        "-".repeat(150),
+      ];
+      for (const row of rows) {
+        lines.push([
+          safeText(row.cost_rank, ""),
+          safeText(row.truck_number, ""),
+          safeText(row.previous_numbers, ""),
+          safeText(row.records_count, ""),
+          safeText(row.invoice_count, ""),
+          formatMoney(row.service_cost),
+          formatMoney(row.wash_cost),
+          formatMoney(row.total_price),
+          safeText(row.first_invoice_date, ""),
+          safeText(row.last_invoice_date, ""),
+        ].join(" | "));
+      }
+      pdfBytes = buildSimplePdf({
+        title: "Repair & Service Costs - All LKW",
+        subtitle: formatReportGeneratedLabel(reportUserLabel),
+        lines,
+        pageWidth: 842,
+        pageHeight: 595,
+      });
+    }
+  } else if (valid.reportType === "lkw_repair_single") {
+    let rows;
+    const lkwNumber = safeText(valid.lkwNumber, "").trim();
+    try {
+      const result = await queryNeon(dbConnectionString, LKW_REPAIR_SINGLE_DETAIL_SQL, [lkwNumber]);
+      rows = result.rows || [];
+    } catch (err) {
+      return json(
+        {
+          ok: false,
+          error: "Failed to execute SQL query",
+          code: "SQL_ERROR",
+          details: String(err?.message || err || "unknown error"),
+        },
+        500,
+        { "Cache-Control": "no-store" },
+      );
+    }
+
+    filename = `lkw_repair_${lkwNumber}_${formatUtcDateStamp(new Date())}.pdf`;
+    outputKey = `lkw_repair_single:${lkwNumber}`;
+    try {
+      pdfBytes = await buildLkwRepairSinglePdfWithPdfLib({
+        userId: reportUserLabel,
+        lkwNumber,
+        rows,
+      });
+    } catch (err) {
+      pdfEngine = "legacy-fallback";
+      const summary = buildRepairSingleSummaries(rows);
+      const lines = [
+        `Total costs: ${formatMoney(summary.total)}`,
+        `Invoices: ${summary.invoiceCount}`,
+        "",
+        "Year/Month | Rows | Total",
+        "-".repeat(80),
+        ...summary.monthRows.map((row) => [row.period, row.records_count, formatMoney(row.total_price)].join(" | ")),
+        "",
+        "Year/Week | Rows | Total",
+        "-".repeat(80),
+        ...summary.weekRows.map((row) => [row.period, row.records_count, formatMoney(row.total_price)].join(" | ")),
+        "",
+        "Date | Year | Month | Week | Invoice | Work | Seller | Category | Total",
+        "-".repeat(150),
+      ];
+      for (const row of rows) {
+        lines.push([
+          safeText(row.invoice_date, ""),
+          safeText(row.report_year, ""),
+          safeText(row.report_month, ""),
+          safeText(row.iso_week, ""),
+          safeText(row.invoice, ""),
+          safeText(row.repair_name, ""),
+          safeText(row.seller, ""),
+          safeText(row.kategorie, ""),
+          formatMoney(row.total_price),
+        ].join(" | "));
+      }
+      pdfBytes = buildSimplePdf({
+        title: `Repair & Service Costs - ${lkwNumber}`,
+        subtitle: formatReportGeneratedLabel(reportUserLabel),
+        lines,
+        pageWidth: 842,
+        pageHeight: 595,
+      });
+    }
   } else if (valid.reportType === "fahrer_all") {
     let masterRows;
     let weeklyRows;
@@ -9078,6 +9609,9 @@ async function handleGenerateWithBody(body, env, enforceRateLimit = true) {
   if (valid.reportType === "fahrer_password_contado" || valid.reportType === "fahrer_vodafone") {
     reportParams.lkw_number = safeText(valid.lkwNumber, "");
   }
+  if (valid.reportType === "lkw_repair_single") {
+    reportParams.lkw_number = safeText(valid.lkwNumber, "");
+  }
   if ("lkwId" in valid) {
     reportParams.lkw_id = valid.lkwId;
   }
@@ -9417,6 +9951,24 @@ async function buildMetaWithAccess(request, env) {
         meta.lookups = meta.lookups || {};
         meta.lookups.sim_vodafone_lkw_numbers = (vodafoneResult.rows || [])
           .map((row) => safeText(row.lkw_number, ""))
+          .filter(Boolean);
+      } catch {
+        // Optional lookup only.
+      }
+      try {
+        const repairLkwResult = await queryNeon(
+          dbConnectionString,
+          `
+            SELECT DISTINCT truck_number
+            FROM report_repair_records
+            WHERE COALESCE(truck_number, '') <> ''
+            ORDER BY truck_number
+          `,
+          [],
+        );
+        meta.lookups = meta.lookups || {};
+        meta.lookups.repair_lkw_numbers = (repairLkwResult.rows || [])
+          .map((row) => safeText(row.truck_number, ""))
           .filter(Boolean);
       } catch {
         // Optional lookup only.

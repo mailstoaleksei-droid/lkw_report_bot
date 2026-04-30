@@ -220,6 +220,24 @@ CREATE TABLE IF NOT EXISTS report_sim_vodafone (
     updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 
+CREATE TABLE IF NOT EXISTS report_repair_records (
+    source_row INTEGER PRIMARY KEY,
+    report_year SMALLINT NOT NULL CHECK (report_year BETWEEN 2020 AND 2100),
+    report_month SMALLINT NOT NULL CHECK (report_month BETWEEN 1 AND 12),
+    iso_week SMALLINT NOT NULL CHECK (iso_week BETWEEN 1 AND 53),
+    invoice_date DATE,
+    truck_number TEXT NOT NULL,
+    original_truck_number TEXT,
+    repair_name TEXT,
+    total_price NUMERIC(14, 2) NOT NULL DEFAULT 0,
+    invoice TEXT,
+    seller TEXT,
+    buyer TEXT,
+    kategorie TEXT,
+    raw_payload JSONB NOT NULL DEFAULT '{}'::JSONB,
+    updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
 CREATE INDEX IF NOT EXISTS idx_trucks_company_id ON trucks(company_id);
 CREATE INDEX IF NOT EXISTS idx_drivers_company_id ON drivers(company_id);
 
@@ -237,5 +255,7 @@ CREATE INDEX IF NOT EXISTS idx_report_yf_fahrer_lookup ON report_yf_fahrer_month
 CREATE INDEX IF NOT EXISTS idx_report_yf_lkw_lookup ON report_yf_lkw_daily(report_year, iso_week, lkw_nummer, report_date, source_row);
 CREATE INDEX IF NOT EXISTS idx_report_sim_contado_lkw ON report_sim_contado(lkw_number);
 CREATE INDEX IF NOT EXISTS idx_report_sim_vodafone_lkw ON report_sim_vodafone(lkw_number);
+CREATE INDEX IF NOT EXISTS idx_report_repair_truck_date ON report_repair_records(truck_number, invoice_date, report_year, report_month, iso_week);
+CREATE INDEX IF NOT EXISTS idx_report_repair_total ON report_repair_records(total_price DESC);
 
 COMMIT;
