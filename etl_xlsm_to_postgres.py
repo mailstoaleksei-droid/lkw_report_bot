@@ -437,17 +437,17 @@ def extract_repairs(wb) -> list[RepairRow]:
         return []
 
     ws = wb[REPAIR_SHEET]
-    header_row_idx = _find_header_row(ws, ("year", "month", "week", "truck", "totalprice"))
+    header_row_idx = _find_header_row(ws, ("month", "week", "truck", "totalprice"))
     header = _get_row_values(ws, header_row_idx)
     index = _build_col_index(header)
 
-    col_year = _pick_col(index, "Year")
+    col_year = _pick_col(index, "Year", "Yaer")
     col_month = _pick_col(index, "Month")
     col_week = _pick_col(index, "Week")
     col_date = _pick_col(index, "Date Invoice", "Invoice Date", "Date")
     col_truck = _pick_col(index, "Truck")
     col_name = _pick_col(index, "Name")
-    col_total = _pick_col(index, "Total Price", "Price", "Total")
+    col_total = _pick_col(index, "Total Price", "TotalPrice", "Price", "Total")
     col_invoice = _pick_col(index, "Invoice")
     col_seller = _pick_col(index, "Seller")
     col_buyer = _pick_col(index, "Buyer", "Byuer")
