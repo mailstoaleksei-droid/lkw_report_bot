@@ -108,7 +108,7 @@
   - `1 LKW` PDF:
     - modern card-style report aligned with `Fahrerkarte`
     - source master data: sheet `LKW`, columns `A-V`
-    - includes Repair full-period total, breakdown by year/month, and day-level detail for the selected truck number
+    - includes Repair full-period total, separate yearly and monthly visual cost summaries, and day-level detail for the selected truck number
     - includes separate Staack + Shell Diesel monthly liters/net amounts and yearly average consumption (`liters / yearly KM * 100`)
     - includes separate Staack + Shell AdBlue monthly liters/net amounts and yearly average consumption (`liters / yearly KM * 100`)
     - includes Carlo + Contado monthly revenue for the selected truck number

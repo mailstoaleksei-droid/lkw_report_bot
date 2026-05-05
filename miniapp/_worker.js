@@ -6675,8 +6675,8 @@ async function buildLkwSinglePdfWithPdfLib({ userId, truck, repairRows, fuelRows
       ["Diesel", `${formatMoneyInt(totalDieselLiters)} L`, `${formatMoney(totalDieselNet)} Euro`],
       ["AdBlue", `${formatMoneyInt(totalAdBlueLiters)} L`, `${formatMoney(totalAdBlueNet)} Euro`],
       ["Revenue", `${formatMoney(totalRevenue)} Euro`, "Carlo + Contado"],
+      ["KM 2025", `${formatMoneyInt(truck?.km_2025)} km`, ""],
       ["KM 2026", `${formatMoneyInt(truck?.km_2026)} km`, ""],
-      ["Maintenance", `${formatMoney(truck?.wartung_total)} Euro`, "Sheet LKW"],
     ];
     const gap = 8;
     const width = (page.getWidth() - margin * 2 - gap * (cards.length - 1)) / cards.length;
@@ -6765,6 +6765,61 @@ async function buildLkwSinglePdfWithPdfLib({ userId, truck, repairRows, fuelRows
     y -= 10;
   };
 
+  const drawRepairVisualTable = (title, rows, periodLabel) => {
+    drawSectionTitle(title);
+    const dataRows = rows || [];
+    const rowH = 22;
+    const textSize = 8;
+    const periodW = 82;
+    const rowsW = 54;
+    const amountW = 96;
+    const barW = 430;
+    const tableW = periodW + rowsW + amountW + barW;
+    const tableX = margin;
+    const maxAmount = Math.max(1, ...dataRows.map((row) => toNumberSafe(row?.total_price, 0)));
+
+    const drawHeaderRow = () => {
+      page.drawRectangle({ x: tableX, y: y - rowH + 2, width: tableW, height: rowH, color: tableHeadBg });
+      centerText(periodLabel, tableX, y - 13, periodW, textSize, boldFont, tableHeadText);
+      centerText("Zeilen", tableX + periodW, y - 13, rowsW, textSize, boldFont, tableHeadText);
+      centerText("Kosten", tableX + periodW + rowsW, y - 13, amountW, textSize, boldFont, tableHeadText);
+      centerText("Verteilung", tableX + periodW + rowsW + amountW, y - 13, barW, textSize, boldFont, tableHeadText);
+      y -= rowH;
+    };
+
+    drawHeaderRow();
+    if (!dataRows.length) {
+      page.drawRectangle({ x: tableX, y: y - rowH + 2, width: tableW, height: rowH, color: oddBg, borderColor, borderWidth: 0.5 });
+      centerText("Keine Daten", tableX, y - 13, tableW, textSize, font, mutedColor);
+      y -= rowH + 8;
+      return;
+    }
+
+    dataRows.forEach((row, idx) => {
+      if (y - rowH < margin) {
+        page = pdfDoc.addPage(pageSize);
+        y = page.getHeight() - margin;
+        drawHeaderRow();
+      }
+      const amount = toNumberSafe(row?.total_price, 0);
+      const pct = Math.max(0, Math.min(1, amount / maxAmount));
+      const fill = idx % 2 ? oddBg : rgb(1, 1, 1);
+      page.drawRectangle({ x: tableX, y: y - rowH + 2, width: tableW, height: rowH, color: fill, borderColor, borderWidth: 0.45 });
+      centerText(row?.period, tableX, y - 13, periodW, textSize, font, textColor);
+      centerText(row?.records_count, tableX + periodW, y - 13, rowsW, textSize, font, textColor);
+      centerText(formatMoney(amount), tableX + periodW + rowsW, y - 13, amountW, textSize, boldFont, textColor);
+
+      const barX = tableX + periodW + rowsW + amountW + 12;
+      const barY = y - 15;
+      const maxBarW = barW - 74;
+      page.drawRectangle({ x: barX, y: barY, width: maxBarW, height: 7, color: rgb(0.91, 0.94, 0.98) });
+      page.drawRectangle({ x: barX, y: barY, width: Math.max(2, maxBarW * pct), height: 7, color: accentColor });
+      drawText(`${Math.round(pct * 100)}%`, barX + maxBarW + 10, y - 15, 7, font, mutedColor, 48);
+      y -= rowH;
+    });
+    y -= 10;
+  };
+
   drawHeader();
   drawMetricCards();
 
@@ -6793,16 +6848,8 @@ async function buildLkwSinglePdfWithPdfLib({ userId, truck, repairRows, fuelRows
     { label: "Wartung gesamt", value: formatMoney(truck?.wartung_total) },
   ], 4);
 
-  drawTable(
-    "Repair: Kosten nach Jahr und Monat",
-    [
-      { key: "period", label: "Jahr/Monat", width: 110 },
-      { key: "records_count", label: "Zeilen", width: 70 },
-      { key: "total_price", label: "Kosten", width: 110 },
-    ],
-    repairSummary.monthRows,
-    { formatValue: (row, key) => key === "total_price" ? formatMoney(row?.[key]) : safeText(row?.[key], "") },
-  );
+  drawRepairVisualTable("Repair: Kosten nach Jahr", repairSummary.yearRows, "Jahr");
+  drawRepairVisualTable("Repair: Kosten nach Monat", repairSummary.monthRows, "Monat");
 
   drawTable(
     "Repair: Details nach Tagen",
@@ -6899,6 +6946,7 @@ async function buildLkwSinglePdfWithPdfLib({ userId, truck, repairRows, fuelRows
 }
 
 function buildRepairSingleSummaries(rows = []) {
+  const byYear = new Map();
   const byMonth = new Map();
   const byWeek = new Map();
   let total = 0;
@@ -6916,6 +6964,13 @@ function buildRepairSingleSummaries(rows = []) {
     const year = toIntSafe(row?.report_year, 0);
     const month = toIntSafe(row?.report_month, 0);
     const week = toIntSafe(row?.iso_week, 0);
+    if (year) {
+      const key = String(year);
+      if (!byYear.has(key)) byYear.set(key, { period: key, report_year: year, records_count: 0, total_price: 0 });
+      const item = byYear.get(key);
+      item.records_count += 1;
+      item.total_price += amount;
+    }
     if (year && month) {
       const key = `${year}-${pad2(month)}`;
       if (!byMonth.has(key)) byMonth.set(key, { period: `${year}/${pad2(month)}`, report_year: year, report_month: month, records_count: 0, total_price: 0 });
@@ -6935,6 +6990,7 @@ function buildRepairSingleSummaries(rows = []) {
   return {
     total,
     invoiceCount,
+    yearRows: Array.from(byYear.values()).sort((a, b) => a.report_year - b.report_year),
     monthRows: Array.from(byMonth.values()).sort((a, b) => (a.report_year - b.report_year) || (a.report_month - b.report_month)),
     weekRows: Array.from(byWeek.values()).sort((a, b) => (a.report_year - b.report_year) || (a.iso_week - b.iso_week)),
   };
