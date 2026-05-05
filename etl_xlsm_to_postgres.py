@@ -49,6 +49,10 @@ DIESEL_SHEET = "Diesel"
 YF_FAHRER_SHEET = "YF_Fahrer"
 YF_SHEET = "YF"
 REPAIR_SHEET = "Repair"
+STAACK_SHEET = "Staack"
+SHELL_SHEET = "Shell"
+CARLO_SHEET = "Carlo"
+CONTADO_SHEET = "Contado"
 REPAIR_TRUCK_RENAMES = {
     "DE-FN186": "GR-OO2103",
     "DE-FN401": "GR-OO2104",
@@ -198,6 +202,28 @@ def _normalize_repair_truck_number(value: object) -> str | None:
     if compact.startswith("EX "):
         compact = compact[3:].strip()
     return REPAIR_TRUCK_RENAMES.get(compact, compact)
+
+
+def _normalize_lkw_number(value: object) -> str | None:
+    raw = _clean_text(value)
+    if not raw:
+        return None
+    compact = re.sub(r"\s+", " ", raw.strip().strip("'")).strip().upper()
+    if compact.startswith("EX "):
+        compact = compact[3:].strip()
+    return REPAIR_TRUCK_RENAMES.get(compact, compact)
+
+
+def _normalize_fuel_product(value: object) -> str | None:
+    product = _clean_text(value)
+    norm = _norm(product)
+    if not norm:
+        return None
+    if "adblue" in norm:
+        return "AdBlue"
+    if "diesel" in norm:
+        return "Diesel"
+    return None
 
 
 def _parse_month_token(value: object) -> tuple[int, str] | None:
@@ -378,6 +404,34 @@ class DieselMonthRow:
     euro_per_liter_shell: Decimal
     euro_per_liter_dkv: Decimal
     euro_per_liter_avg: Decimal
+    raw_payload: dict[str, object]
+
+
+@dataclass
+class LkwFuelTransactionRow:
+    source: str
+    source_row: int
+    report_year: int
+    report_month: int
+    iso_week: int
+    transaction_date: date | None
+    lkw_number: str
+    product_name: str
+    quantity_liters: Decimal
+    total_net: Decimal
+    driver_name: str | None
+    raw_payload: dict[str, object]
+
+
+@dataclass
+class LkwRevenueRow:
+    source: str
+    source_row: int
+    report_year: int
+    report_month: int
+    iso_week: int
+    lkw_number: str
+    revenue_amount: Decimal
     raw_payload: dict[str, object]
 
 
@@ -1241,6 +1295,183 @@ def extract_diesel_months(wb) -> list[DieselMonthRow]:
     return sorted(rows, key=lambda r: (r.report_year, r.month_index))
 
 
+def _row_value(row: list[object], zero_based_idx: int) -> object:
+    return row[zero_based_idx] if 0 <= zero_based_idx < len(row) else None
+
+
+def _row_payload(header: list[object], row: list[object], sheet: str, source_row: int) -> dict[str, object]:
+    payload = {
+        str(header[i]).strip() if i < len(header) and header[i] is not None else f"col_{i+1}":
+        row[i] if i < len(row) else None
+        for i in range(len(header))
+    }
+    payload["sheet"] = sheet
+    payload["source_row"] = source_row
+    return payload
+
+
+def extract_lkw_fuel_transactions(wb) -> list[LkwFuelTransactionRow]:
+    rows: list[LkwFuelTransactionRow] = []
+
+    if STAACK_SHEET in wb.sheetnames:
+        ws = wb[STAACK_SHEET]
+        header = _get_row_values(ws, 1)
+        # User-provided Staack structure, converted to zero-based indexes.
+        idx_year, idx_month, idx_week = 0, 1, 2
+        idx_product, idx_date, idx_quantity, idx_total_net = 18, 20, 22, 28
+        idx_lkw, idx_driver = 43, 46
+        for row_idx, row in enumerate(_iter_sheet_rows(ws, 1), start=2):
+            product = _normalize_fuel_product(_row_value(row, idx_product))
+            lkw_number = _normalize_lkw_number(_row_value(row, idx_lkw))
+            if not product or not lkw_number:
+                continue
+            report_year = _parse_int_like(_row_value(row, idx_year))
+            report_month = _parse_int_like(_row_value(row, idx_month))
+            iso_week = _parse_int_like(_row_value(row, idx_week)) or 1
+            transaction_date = _parse_date(_row_value(row, idx_date))
+            if transaction_date:
+                report_year = report_year or transaction_date.year
+                report_month = report_month or transaction_date.month
+                iso_week = iso_week or int(transaction_date.isocalendar()[1])
+            if not report_year or not report_month or not (1 <= report_month <= 12):
+                continue
+            rows.append(
+                LkwFuelTransactionRow(
+                    source=STAACK_SHEET,
+                    source_row=row_idx,
+                    report_year=report_year,
+                    report_month=report_month,
+                    iso_week=iso_week if 1 <= iso_week <= 53 else 1,
+                    transaction_date=transaction_date,
+                    lkw_number=lkw_number,
+                    product_name=product,
+                    quantity_liters=_parse_decimal(_row_value(row, idx_quantity)),
+                    total_net=_parse_decimal(_row_value(row, idx_total_net)),
+                    driver_name=_clean_text(_row_value(row, idx_driver)),
+                    raw_payload=_row_payload(header, row, STAACK_SHEET, row_idx),
+                )
+            )
+
+    if SHELL_SHEET in wb.sheetnames:
+        ws = wb[SHELL_SHEET]
+        header = _get_row_values(ws, 1)
+        index = _build_col_index(header)
+        idx_year = _pick_col(index, "Year")
+        idx_month = _pick_col(index, "Month")
+        idx_week = _pick_col(index, "Week")
+        idx_date = _pick_col(index, "Lieferdatum", "Date")
+        idx_lkw = _pick_col(index, "KFZ-Kennzeichen", "CardLicanse Tag", "CardLicense Tag")
+        idx_quantity = _pick_col(index, "Menge", "Quantity")
+        idx_total_net = _pick_col(index, "NettobetraginTransaktionswährung", "Nettobetrag in Transaktionswährung")
+        idx_product = _pick_col(index, "Produktname", "Product Name")
+        idx_driver = _pick_col(index, "Fahrername", "Driver")
+        required = (idx_year, idx_month, idx_week, idx_date, idx_lkw, idx_quantity, idx_total_net, idx_product)
+        if all(col is not None for col in required):
+            for row_idx, row in enumerate(_iter_sheet_rows(ws, 1), start=2):
+                product = _normalize_fuel_product(_row_value(row, idx_product))
+                lkw_number = _normalize_lkw_number(_row_value(row, idx_lkw))
+                if not product or not lkw_number:
+                    continue
+                report_year = _parse_int_like(_row_value(row, idx_year))
+                report_month = _parse_int_like(_row_value(row, idx_month))
+                iso_week = _parse_int_like(_row_value(row, idx_week)) or 1
+                transaction_date = _parse_date(_row_value(row, idx_date))
+                if transaction_date:
+                    report_year = report_year or transaction_date.year
+                    report_month = report_month or transaction_date.month
+                    iso_week = iso_week or int(transaction_date.isocalendar()[1])
+                if not report_year or not report_month or not (1 <= report_month <= 12):
+                    continue
+                rows.append(
+                    LkwFuelTransactionRow(
+                        source=SHELL_SHEET,
+                        source_row=row_idx,
+                        report_year=report_year,
+                        report_month=report_month,
+                        iso_week=iso_week if 1 <= iso_week <= 53 else 1,
+                        transaction_date=transaction_date,
+                        lkw_number=lkw_number,
+                        product_name=product,
+                        quantity_liters=_parse_decimal(_row_value(row, idx_quantity)),
+                        total_net=_parse_decimal(_row_value(row, idx_total_net)),
+                        driver_name=_clean_text(_row_value(row, idx_driver)) if idx_driver is not None else None,
+                        raw_payload=_row_payload(header, row, SHELL_SHEET, row_idx),
+                    )
+                )
+
+    return sorted(rows, key=lambda r: (r.report_year, r.report_month, r.source, r.lkw_number, r.source_row))
+
+
+def extract_lkw_revenue_rows(wb) -> list[LkwRevenueRow]:
+    rows: list[LkwRevenueRow] = []
+
+    if CARLO_SHEET in wb.sheetnames:
+        ws = wb[CARLO_SHEET]
+        header = _get_row_values(ws, 1)
+        index = _build_col_index(header)
+        idx_year = _pick_col(index, "Year")
+        idx_month = _pick_col(index, "Month")
+        idx_week = _pick_col(index, "Week")
+        idx_lkw = _pick_col(index, "LKW(Soll)", "LKW Soll", "LKW")
+        idx_amount = _pick_col(index, "Rechnung Betrag", "RechnungBetrag")
+        if all(col is not None for col in (idx_year, idx_month, idx_week, idx_lkw, idx_amount)):
+            for row_idx, row in enumerate(_iter_sheet_rows(ws, 1), start=2):
+                lkw_number = _normalize_lkw_number(_row_value(row, idx_lkw))
+                if not lkw_number:
+                    continue
+                report_year = _parse_int_like(_row_value(row, idx_year))
+                report_month = _parse_int_like(_row_value(row, idx_month))
+                iso_week = _parse_int_like(_row_value(row, idx_week)) or 1
+                if not report_year or not report_month or not (1 <= report_month <= 12):
+                    continue
+                rows.append(
+                    LkwRevenueRow(
+                        source=CARLO_SHEET,
+                        source_row=row_idx,
+                        report_year=report_year,
+                        report_month=report_month,
+                        iso_week=iso_week if 1 <= iso_week <= 53 else 1,
+                        lkw_number=lkw_number,
+                        revenue_amount=_parse_decimal(_row_value(row, idx_amount)),
+                        raw_payload=_row_payload(header, row, CARLO_SHEET, row_idx),
+                    )
+                )
+
+    if CONTADO_SHEET in wb.sheetnames:
+        ws = wb[CONTADO_SHEET]
+        header = _get_row_values(ws, 1)
+        index = _build_col_index(header)
+        idx_lkw = _pick_col(index, "LKW")
+        idx_year = _pick_col(index, "Year")
+        idx_month = _pick_col(index, "Month")
+        idx_week = _pick_col(index, "Week")
+        idx_amount = _pick_col(index, "Kosten")
+        if all(col is not None for col in (idx_lkw, idx_year, idx_month, idx_week, idx_amount)):
+            for row_idx, row in enumerate(_iter_sheet_rows(ws, 1), start=2):
+                lkw_number = _normalize_lkw_number(_row_value(row, idx_lkw))
+                if not lkw_number:
+                    continue
+                report_year = _parse_int_like(_row_value(row, idx_year))
+                report_month = _parse_int_like(_row_value(row, idx_month))
+                iso_week = _parse_int_like(_row_value(row, idx_week)) or 1
+                if not report_year or not report_month or not (1 <= report_month <= 12):
+                    continue
+                rows.append(
+                    LkwRevenueRow(
+                        source=CONTADO_SHEET,
+                        source_row=row_idx,
+                        report_year=report_year,
+                        report_month=report_month,
+                        iso_week=iso_week if 1 <= iso_week <= 53 else 1,
+                        lkw_number=lkw_number,
+                        revenue_amount=_parse_decimal(_row_value(row, idx_amount)),
+                        raw_payload=_row_payload(header, row, CONTADO_SHEET, row_idx),
+                    )
+                )
+
+    return sorted(rows, key=lambda r: (r.report_year, r.report_month, r.source, r.lkw_number, r.source_row))
+
+
 def _prepare_readable_xlsm(source_path: Path) -> tuple[Path, bool]:
     """
     Returns (path, is_temp_copy_created_by_this_run).
@@ -1378,6 +1609,60 @@ def _ensure_diesel_table(cur) -> None:
             updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
             PRIMARY KEY (report_year, month_index)
         )
+        """
+    )
+
+
+def _ensure_lkw_fuel_transactions_table(cur) -> None:
+    cur.execute(
+        """
+        CREATE TABLE IF NOT EXISTS report_lkw_fuel_transactions (
+            source TEXT NOT NULL,
+            source_row INTEGER NOT NULL,
+            report_year SMALLINT NOT NULL CHECK (report_year BETWEEN 2020 AND 2100),
+            report_month SMALLINT NOT NULL CHECK (report_month BETWEEN 1 AND 12),
+            iso_week SMALLINT NOT NULL CHECK (iso_week BETWEEN 1 AND 53),
+            transaction_date DATE,
+            lkw_number TEXT NOT NULL,
+            product_name TEXT NOT NULL,
+            quantity_liters NUMERIC(14, 2) NOT NULL DEFAULT 0,
+            total_net NUMERIC(14, 2) NOT NULL DEFAULT 0,
+            driver_name TEXT,
+            raw_payload JSONB NOT NULL DEFAULT '{}'::jsonb,
+            updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+            PRIMARY KEY (source, source_row)
+        )
+        """
+    )
+    cur.execute(
+        """
+        CREATE INDEX IF NOT EXISTS idx_report_lkw_fuel_lookup
+            ON report_lkw_fuel_transactions (lkw_number, report_year, report_month, product_name, source)
+        """
+    )
+
+
+def _ensure_lkw_revenue_table(cur) -> None:
+    cur.execute(
+        """
+        CREATE TABLE IF NOT EXISTS report_lkw_revenue_records (
+            source TEXT NOT NULL,
+            source_row INTEGER NOT NULL,
+            report_year SMALLINT NOT NULL CHECK (report_year BETWEEN 2020 AND 2100),
+            report_month SMALLINT NOT NULL CHECK (report_month BETWEEN 1 AND 12),
+            iso_week SMALLINT NOT NULL CHECK (iso_week BETWEEN 1 AND 53),
+            lkw_number TEXT NOT NULL,
+            revenue_amount NUMERIC(14, 2) NOT NULL DEFAULT 0,
+            raw_payload JSONB NOT NULL DEFAULT '{}'::jsonb,
+            updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+            PRIMARY KEY (source, source_row)
+        )
+        """
+    )
+    cur.execute(
+        """
+        CREATE INDEX IF NOT EXISTS idx_report_lkw_revenue_lookup
+            ON report_lkw_revenue_records (lkw_number, report_year, report_month, source)
         """
     )
 
@@ -1543,6 +1828,8 @@ def run_etl(database_url: str, xlsm_path: Path) -> dict[str, int]:
             einnahmen_firm_rows = extract_einnahmen_firm_rows(wb)
             bonus_rows = extract_bonus_dynamik_months(wb)
             diesel_rows = extract_diesel_months(wb)
+            lkw_fuel_rows = extract_lkw_fuel_transactions(wb)
+            lkw_revenue_rows = extract_lkw_revenue_rows(wb)
             yf_fahrer_rows = extract_yf_fahrer_months(wb)
             yf_lkw_rows = extract_yf_lkw_days(wb)
             repair_rows = extract_repairs(wb)
@@ -1565,6 +1852,8 @@ def run_etl(database_url: str, xlsm_path: Path) -> dict[str, int]:
                 _ensure_einnahmen_firm_table(cur)
                 _ensure_bonus_table(cur)
                 _ensure_diesel_table(cur)
+                _ensure_lkw_fuel_transactions_table(cur)
+                _ensure_lkw_revenue_table(cur)
                 _ensure_yf_fahrer_table(cur)
                 _ensure_yf_lkw_table(cur)
                 _ensure_fahrer_weekly_status_table(cur)
@@ -1849,6 +2138,76 @@ def run_etl(database_url: str, xlsm_path: Path) -> dict[str, int]:
                     )
                     rows_inserted += 1
 
+                cur.execute("DELETE FROM report_lkw_fuel_transactions")
+                rows_deleted += int(cur.rowcount or 0)
+                for rec in lkw_fuel_rows:
+                    cur.execute(
+                        """
+                        INSERT INTO report_lkw_fuel_transactions (
+                            source,
+                            source_row,
+                            report_year,
+                            report_month,
+                            iso_week,
+                            transaction_date,
+                            lkw_number,
+                            product_name,
+                            quantity_liters,
+                            total_net,
+                            driver_name,
+                            raw_payload,
+                            updated_at
+                        )
+                        VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s::jsonb, NOW())
+                        """,
+                        (
+                            rec.source,
+                            rec.source_row,
+                            rec.report_year,
+                            rec.report_month,
+                            rec.iso_week,
+                            rec.transaction_date,
+                            rec.lkw_number,
+                            rec.product_name,
+                            rec.quantity_liters,
+                            rec.total_net,
+                            rec.driver_name,
+                            json.dumps(rec.raw_payload, ensure_ascii=False, default=str),
+                        ),
+                    )
+                    rows_inserted += 1
+
+                cur.execute("DELETE FROM report_lkw_revenue_records")
+                rows_deleted += int(cur.rowcount or 0)
+                for rec in lkw_revenue_rows:
+                    cur.execute(
+                        """
+                        INSERT INTO report_lkw_revenue_records (
+                            source,
+                            source_row,
+                            report_year,
+                            report_month,
+                            iso_week,
+                            lkw_number,
+                            revenue_amount,
+                            raw_payload,
+                            updated_at
+                        )
+                        VALUES (%s, %s, %s, %s, %s, %s, %s, %s::jsonb, NOW())
+                        """,
+                        (
+                            rec.source,
+                            rec.source_row,
+                            rec.report_year,
+                            rec.report_month,
+                            rec.iso_week,
+                            rec.lkw_number,
+                            rec.revenue_amount,
+                            json.dumps(rec.raw_payload, ensure_ascii=False, default=str),
+                        ),
+                    )
+                    rows_inserted += 1
+
                 cur.execute("DELETE FROM report_yf_fahrer_monthly")
                 rows_deleted += int(cur.rowcount or 0)
                 for rec in yf_fahrer_rows:
@@ -1976,7 +2335,7 @@ def run_etl(database_url: str, xlsm_path: Path) -> dict[str, int]:
                     WHERE id = %s
                     """,
                     (
-                        len(trucks) + len(drivers) + len(fahrer_weekly_rows) + len(einnahmen_rows) + len(einnahmen_firm_rows) + len(bonus_rows) + len(diesel_rows) + len(yf_fahrer_rows) + len(yf_lkw_rows) + len(repair_rows),
+                        len(trucks) + len(drivers) + len(fahrer_weekly_rows) + len(einnahmen_rows) + len(einnahmen_firm_rows) + len(bonus_rows) + len(diesel_rows) + len(lkw_fuel_rows) + len(lkw_revenue_rows) + len(yf_fahrer_rows) + len(yf_lkw_rows) + len(repair_rows),
                         rows_inserted,
                         rows_updated,
                         rows_deleted,
@@ -1990,6 +2349,8 @@ def run_etl(database_url: str, xlsm_path: Path) -> dict[str, int]:
                                 "einnahmen_firms": len(einnahmen_firm_rows),
                                 "bonus_rows": len(bonus_rows),
                                 "diesel_months": len(diesel_rows),
+                                "lkw_fuel_rows": len(lkw_fuel_rows),
+                                "lkw_revenue_rows": len(lkw_revenue_rows),
                                 "yf_fahrer_rows": len(yf_fahrer_rows),
                                 "yf_lkw_rows": len(yf_lkw_rows),
                                 "repair_rows": len(repair_rows),
@@ -2011,6 +2372,8 @@ def run_etl(database_url: str, xlsm_path: Path) -> dict[str, int]:
                 "einnahmen_firms": len(einnahmen_firm_rows),
                 "bonus_rows": len(bonus_rows),
                 "diesel_months": len(diesel_rows),
+                "lkw_fuel_rows": len(lkw_fuel_rows),
+                "lkw_revenue_rows": len(lkw_revenue_rows),
                 "yf_fahrer_rows": len(yf_fahrer_rows),
                 "yf_lkw_rows": len(yf_lkw_rows),
                 "repair_rows": len(repair_rows),
@@ -2060,6 +2423,8 @@ def main() -> int:
         f"einnahmen_firms={result['einnahmen_firms']} "
         f"bonus_rows={result['bonus_rows']} "
         f"diesel_months={result['diesel_months']} "
+        f"lkw_fuel_rows={result['lkw_fuel_rows']} "
+        f"lkw_revenue_rows={result['lkw_revenue_rows']} "
         f"yf_fahrer_rows={result['yf_fahrer_rows']} "
         f"yf_lkw_rows={result['yf_lkw_rows']} "
         f"repair_rows={result['repair_rows']}"

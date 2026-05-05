@@ -953,6 +953,10 @@ SELECT
   COALESCE(NULLIF(t.raw_payload->>'Baujahr', ''), NULLIF(t.raw_payload->>'Year', '')) AS baujahr,
   COALESCE(NULLIF(c.name, ''), NULLIF(t.raw_payload->>'Firma', ''), NULLIF(t.raw_payload->>'Company', '')) AS firma,
   COALESCE(NULLIF(t.raw_payload->>'Eigentum', ''), NULLIF(t.raw_payload->>'Ownership', '')) AS eigentum,
+  COALESCE(NULLIF(t.raw_payload->>'Zulassungen', ''), NULLIF(t.raw_payload->>'Permits', '')) AS zulassungen,
+  COALESCE(NULLIF(t.raw_payload->>'220v', ''), NULLIF(t.raw_payload->>'220V', '')) AS v_220,
+  COALESCE(NULLIF(t.raw_payload->>'ADR', ''), '') AS adr,
+  COALESCE(NULLIF(t.raw_payload->>'Drucker', ''), NULLIF(t.raw_payload->>'Printer', '')) AS drucker,
   COALESCE(NULLIF(t.status, ''), NULLIF(t.raw_payload->>'Status', '')) AS status,
   COALESCE(to_char(t.status_since, 'DD/MM/YYYY'), NULLIF(t.raw_payload->>'Datum verkauft', ''), NULLIF(t.raw_payload->>'Sale Date', '')) AS datum_verkauft,
   COALESCE(NULLIF(t.raw_payload->>'Telefonnummer', ''), NULLIF(t.raw_payload->>'Phone Number', ''), NULLIF(t.raw_payload->>'Phone', '')) AS telefonnummer,
@@ -973,6 +977,8 @@ LEFT JOIN companies c ON c.id = t.company_id
 WHERE (
   $1::text = ''
   OR lower(t.external_id) = lower($1::text)
+  OR lower(COALESCE(t.plate_number, '')) = lower($1::text)
+  OR lower(COALESCE(t.raw_payload->>'LKW-Nummer', '')) = lower($1::text)
 )
 ORDER BY t.external_id;
 `;
@@ -1031,6 +1037,37 @@ SELECT
 FROM report_repair_records
 WHERE lower(truck_number) = lower($1::text)
 ORDER BY report_year, report_month, iso_week, invoice_date NULLS LAST, source_row;
+`;
+
+const LKW_FUEL_MONTHLY_SQL = `
+SELECT
+  source,
+  product_name,
+  report_year,
+  report_month,
+  (report_year::text || '/' || lpad(report_month::text, 2, '0')) AS period,
+  COUNT(*)::int AS records_count,
+  COALESCE(SUM(quantity_liters), 0)::numeric AS quantity_liters,
+  COALESCE(SUM(total_net), 0)::numeric AS total_net
+FROM report_lkw_fuel_transactions
+WHERE lower(lkw_number) = lower($1::text)
+  AND product_name IN ('Diesel', 'AdBlue')
+GROUP BY source, product_name, report_year, report_month
+ORDER BY report_year, report_month, product_name, source;
+`;
+
+const LKW_REVENUE_MONTHLY_SQL = `
+SELECT
+  source,
+  report_year,
+  report_month,
+  (report_year::text || '/' || lpad(report_month::text, 2, '0')) AS period,
+  COUNT(*)::int AS records_count,
+  COALESCE(SUM(revenue_amount), 0)::numeric AS revenue_amount
+FROM report_lkw_revenue_records
+WHERE lower(lkw_number) = lower($1::text)
+GROUP BY source, report_year, report_month
+ORDER BY report_year, report_month, source;
 `;
 
 const DIESEL_LKW_CARD_SQL = `
@@ -6539,6 +6576,293 @@ async function buildLkwMasterPdfWithPdfLib({ userId, rows, title }) {
   return pdfDoc.save();
 }
 
+function buildLkwFuelYearRows(fuelRows = [], truck = {}) {
+  const byKey = new Map();
+  for (const row of fuelRows || []) {
+    const year = toIntSafe(row?.report_year, 0);
+    const product = safeText(row?.product_name, "");
+    if (!year || !product) continue;
+    const key = `${year}:${product}`;
+    if (!byKey.has(key)) byKey.set(key, { report_year: year, product_name: product, quantity_liters: 0, total_net: 0 });
+    const item = byKey.get(key);
+    item.quantity_liters += toNumberSafe(row?.quantity_liters, 0);
+    item.total_net += toNumberSafe(row?.total_net, 0);
+  }
+  return Array.from(byKey.values())
+    .sort((a, b) => (a.report_year - b.report_year) || a.product_name.localeCompare(b.product_name))
+    .map((row) => {
+      const km = toNumberSafe(truck?.[`km_${row.report_year}`], 0);
+      const avg = km > 0 ? (row.quantity_liters / km) * 100 : 0;
+      return {
+        ...row,
+        km_year: km,
+        avg_l_100km: avg,
+      };
+    });
+}
+
+async function buildLkwSinglePdfWithPdfLib({ userId, truck, repairRows, fuelRows, revenueRows }) {
+  const pdfDoc = await PDFDocument.create();
+  const font = await pdfDoc.embedFont(StandardFonts.Helvetica);
+  const boldFont = await pdfDoc.embedFont(StandardFonts.HelveticaBold);
+
+  const pageSize = [842, 595];
+  const margin = 28;
+  const textColor = rgb(0.08, 0.13, 0.22);
+  const mutedColor = rgb(0.34, 0.4, 0.5);
+  const accentColor = rgb(0.14, 0.38, 0.68);
+  const headerBg = rgb(0.88, 0.93, 0.98);
+  const cardBg = rgb(0.97, 0.985, 1);
+  const tableHeadBg = rgb(0.12, 0.32, 0.52);
+  const tableHeadText = rgb(1, 1, 1);
+  const borderColor = rgb(0.72, 0.79, 0.88);
+  const oddBg = rgb(0.965, 0.98, 1);
+
+  const lkwId = safeText(truck?.lkw_id, "-");
+  const lkwNumber = safeText(truck?.lkw_nummer, "-");
+  const repairSummary = buildRepairSingleSummaries(repairRows || []);
+  const fuelYearRows = buildLkwFuelYearRows(fuelRows || [], truck || {});
+  const totalFuelLiters = (fuelRows || []).reduce((sum, row) => sum + toNumberSafe(row?.quantity_liters, 0), 0);
+  const totalFuelNet = (fuelRows || []).reduce((sum, row) => sum + toNumberSafe(row?.total_net, 0), 0);
+  const totalRevenue = (revenueRows || []).reduce((sum, row) => sum + toNumberSafe(row?.revenue_amount, 0), 0);
+
+  let page = pdfDoc.addPage(pageSize);
+  let y = page.getHeight() - margin;
+
+  const drawText = (text, x, yy, size, usedFont = font, color = textColor, maxWidth = null) => {
+    const value = maxWidth ? fitTextToWidth(usedFont, safeText(text, ""), size, maxWidth) : safeText(text, "");
+    page.drawText(value, { x, y: yy, size, font: usedFont, color });
+  };
+
+  const centerText = (text, x, yy, width, size, usedFont = font, color = textColor) => {
+    const value = fitTextToWidth(usedFont, safeText(text, ""), size, Math.max(10, width - 8));
+    const w = measureTextWidth(usedFont, value, size);
+    page.drawText(value, { x: x + Math.max(4, (width - w) / 2), y: yy, size, font: usedFont, color });
+  };
+
+  const drawHeader = () => {
+    page.drawRectangle({
+      x: margin,
+      y: y - 78,
+      width: page.getWidth() - margin * 2,
+      height: 78,
+      color: headerBg,
+      borderColor,
+      borderWidth: 1,
+    });
+    drawText("LKW Karte", margin + 18, y - 26, 20, boldFont, accentColor);
+    drawText(`${lkwId} - ${lkwNumber}`, margin + 18, y - 50, 15, boldFont, textColor, 360);
+    drawText(`Firma: ${safeText(truck?.firma, "-")}`, margin + 430, y - 26, 10, boldFont, textColor, 250);
+    drawText(`Status: ${safeText(truck?.status, "-")}`, margin + 430, y - 43, 10, font, mutedColor, 250);
+    drawText(formatReportGeneratedLabel(userId), margin + 430, y - 60, 8, font, mutedColor, 320);
+    y -= 96;
+  };
+
+  const ensureSpace = (needed) => {
+    if (y - needed >= margin) return;
+    page = pdfDoc.addPage(pageSize);
+    y = page.getHeight() - margin;
+  };
+
+  const drawMetricCards = () => {
+    const cards = [
+      ["Repair total", formatMoney(repairSummary.total), `${repairSummary.invoiceCount} invoices`],
+      ["Diesel + AdBlue", `${formatMoneyInt(totalFuelLiters)} L`, `${formatMoney(totalFuelNet)} Euro`],
+      ["Revenue", `${formatMoney(totalRevenue)} Euro`, "Carlo + Contado"],
+      ["KM 2025", `${formatMoneyInt(truck?.km_2025)} km`, ""],
+      ["KM 2026", `${formatMoneyInt(truck?.km_2026)} km`, ""],
+      ["Maintenance", `${formatMoney(truck?.wartung_total)} Euro`, "Sheet LKW"],
+    ];
+    const gap = 8;
+    const width = (page.getWidth() - margin * 2 - gap * (cards.length - 1)) / cards.length;
+    const cardHeight = 72;
+    cards.forEach((card, idx) => {
+      const x = margin + idx * (width + gap);
+      page.drawRectangle({ x, y: y - cardHeight, width, height: cardHeight, color: cardBg, borderColor, borderWidth: 1 });
+      centerText(card[1], x, y - 24, width, 10.5, boldFont, accentColor);
+      if (card[2]) centerText(card[2], x, y - 38, width, 6.8, font, mutedColor);
+      centerText(card[0], x, y - 61, width, 7.2, font, mutedColor);
+    });
+    y -= 88;
+  };
+
+  const drawSectionTitle = (title) => {
+    const titleBandHeight = 22;
+    const titleTopGap = 8;
+    ensureSpace(titleBandHeight + titleTopGap);
+    y -= titleTopGap;
+    drawText(title, margin, y - ((titleBandHeight - 11) / 2) - 1, 11, boldFont, textColor);
+    y -= titleBandHeight;
+  };
+
+  const drawKeyValueGrid = (title, items, columns = 4) => {
+    drawSectionTitle(title);
+    const colGap = 8;
+    const rowH = 30;
+    const colW = (page.getWidth() - margin * 2 - colGap * (columns - 1)) / columns;
+    for (let idx = 0; idx < items.length; idx += 1) {
+      if (idx % columns === 0) ensureSpace(rowH + 6);
+      const col = idx % columns;
+      const x = margin + col * (colW + colGap);
+      const item = items[idx];
+      page.drawRectangle({ x, y: y - rowH + 2, width: colW, height: rowH, color: cardBg, borderColor, borderWidth: 0.7 });
+      centerText(item.label, x, y - 10, colW, 7, boldFont, mutedColor);
+      centerText(item.value || "-", x, y - 24, colW, 8, font, textColor);
+      if (col === columns - 1 || idx === items.length - 1) y -= rowH + 6;
+    }
+    y -= 2;
+  };
+
+  const drawTable = (title, columns, rows, opts = {}) => {
+    const rowH = opts.rowHeight || 16;
+    const textSize = opts.textSize || 8;
+    const tableW = columns.reduce((sum, col) => sum + col.width, 0);
+    const tableX = margin;
+    const drawHeaderRow = () => {
+      page.drawRectangle({ x: tableX, y: y - rowH + 2, width: tableW, height: rowH, color: tableHeadBg });
+      let x = tableX;
+      for (const col of columns) {
+        centerText(col.label, x, y - 10, col.width, textSize, boldFont, tableHeadText);
+        x += col.width;
+      }
+      y -= rowH;
+    };
+    drawSectionTitle(title);
+    drawHeaderRow();
+    if (!rows || rows.length === 0) {
+      ensureSpace(rowH + 4);
+      page.drawRectangle({ x: tableX, y: y - rowH + 2, width: tableW, height: rowH, color: oddBg, borderColor, borderWidth: 0.5 });
+      centerText("Keine Daten", tableX, y - 10, tableW, textSize, font, mutedColor);
+      y -= rowH + 8;
+      return;
+    }
+    rows.forEach((row, idx) => {
+      const beforeY = y;
+      ensureSpace(rowH + 4);
+      if ((idx > 0 && y > page.getHeight() - margin - 20) || y > beforeY) drawHeaderRow();
+      page.drawRectangle({
+        x: tableX,
+        y: y - rowH + 2,
+        width: tableW,
+        height: rowH,
+        color: idx % 2 ? oddBg : rgb(1, 1, 1),
+        borderColor,
+        borderWidth: 0.45,
+      });
+      let x = tableX;
+      for (const col of columns) {
+        const raw = opts.formatValue ? opts.formatValue(row, col.key) : safeText(row?.[col.key], "");
+        centerText(raw, x, y - 10, col.width, textSize, font, textColor);
+        x += col.width;
+      }
+      y -= rowH;
+    });
+    y -= 10;
+  };
+
+  drawHeader();
+  drawMetricCards();
+
+  drawKeyValueGrid("Stammdaten A-V", [
+    { label: "LKW-ID", value: truck?.lkw_id },
+    { label: "LKW-Nummer", value: truck?.lkw_nummer },
+    { label: "Marke/Modell", value: truck?.marke_modell },
+    { label: "LKW-Typ", value: truck?.lkw_typ },
+    { label: "Baujahr", value: truck?.baujahr },
+    { label: "Firma", value: truck?.firma },
+    { label: "Eigentum", value: truck?.eigentum },
+    { label: "Zulassungen", value: truck?.zulassungen },
+    { label: "220V", value: truck?.v_220 },
+    { label: "ADR", value: truck?.adr },
+    { label: "Drucker", value: truck?.drucker },
+    { label: "Status", value: truck?.status },
+    { label: "Datum verkauft", value: truck?.datum_verkauft },
+    { label: "Telefonnummer", value: truck?.telefonnummer },
+    { label: "DKV Card", value: truck?.dkv_card },
+    { label: "Shell Card", value: truck?.shell_card },
+    { label: "Tankpool Card", value: truck?.tankpool_card },
+    { label: "KM 2025", value: `${formatMoneyInt(truck?.km_2025)} km` },
+    { label: "KM 2026", value: `${formatMoneyInt(truck?.km_2026)} km` },
+    { label: "Naechste TUEV", value: truck?.naechste_tuev },
+    { label: "Versicherung bis", value: truck?.versicherung_bis },
+    { label: "Wartung gesamt", value: formatMoney(truck?.wartung_total) },
+  ], 4);
+
+  drawTable(
+    "Repair: Kosten nach Jahr und Monat",
+    [
+      { key: "period", label: "Jahr/Monat", width: 110 },
+      { key: "records_count", label: "Zeilen", width: 70 },
+      { key: "total_price", label: "Kosten", width: 110 },
+    ],
+    repairSummary.monthRows,
+    { formatValue: (row, key) => key === "total_price" ? formatMoney(row?.[key]) : safeText(row?.[key], "") },
+  );
+
+  drawTable(
+    "Repair: Details nach Tagen",
+    [
+      { key: "invoice_date", label: "Datum", width: 70 },
+      { key: "period", label: "Periode", width: 72 },
+      { key: "invoice", label: "Invoice", width: 92 },
+      { key: "repair_name", label: "Work", width: 188 },
+      { key: "seller", label: "Seller", width: 150 },
+      { key: "kategorie", label: "Kategorie", width: 76 },
+      { key: "total_price", label: "Kosten", width: 86 },
+    ],
+    (repairRows || []).map((row) => ({ ...row, period: `${safeText(row?.report_year, "")}/${pad2(toIntSafe(row?.report_month, 0))}` })),
+    { textSize: 7.4, rowHeight: 16, formatValue: (row, key) => key === "total_price" ? formatMoney(row?.[key]) : safeText(row?.[key], "") },
+  );
+
+  drawTable(
+    "Staack und Shell: Diesel / AdBlue pro Monat",
+    [
+      { key: "period", label: "Periode", width: 72 },
+      { key: "source", label: "Quelle", width: 66 },
+      { key: "product_name", label: "Produkt", width: 74 },
+      { key: "records_count", label: "Zeilen", width: 54 },
+      { key: "quantity_liters", label: "Liter", width: 92 },
+      { key: "total_net", label: "Netto", width: 92 },
+    ],
+    fuelRows || [],
+    { formatValue: (row, key) => key === "quantity_liters" ? `${formatMoney(row?.[key])} L` : (key === "total_net" ? formatMoney(row?.[key]) : safeText(row?.[key], "")) },
+  );
+
+  drawTable(
+    "Durchschnittsverbrauch nach Jahr",
+    [
+      { key: "report_year", label: "Jahr", width: 64 },
+      { key: "product_name", label: "Produkt", width: 82 },
+      { key: "quantity_liters", label: "Liter gesamt", width: 110 },
+      { key: "km_year", label: "KM", width: 92 },
+      { key: "avg_l_100km", label: "Ø L/100 km", width: 110 },
+      { key: "total_net", label: "Netto", width: 92 },
+    ],
+    fuelYearRows,
+    { formatValue: (row, key) => {
+      if (key === "quantity_liters") return `${formatMoney(row?.[key])} L`;
+      if (key === "km_year") return row?.[key] ? `${formatMoneyInt(row?.[key])} km` : "-";
+      if (key === "avg_l_100km") return row?.km_year ? `${toNumberSafe(row?.[key], 0).toFixed(1)} L/100 km` : "-";
+      if (key === "total_net") return formatMoney(row?.[key]);
+      return safeText(row?.[key], "");
+    } },
+  );
+
+  drawTable(
+    "Carlo und Contado: Umsatz pro Monat",
+    [
+      { key: "period", label: "Periode", width: 78 },
+      { key: "source", label: "Quelle", width: 78 },
+      { key: "records_count", label: "Zeilen", width: 64 },
+      { key: "revenue_amount", label: "Betrag", width: 110 },
+    ],
+    revenueRows || [],
+    { formatValue: (row, key) => key === "revenue_amount" ? formatMoney(row?.[key]) : safeText(row?.[key], "") },
+  );
+
+  return pdfDoc.save();
+}
+
 function buildRepairSingleSummaries(rows = []) {
   const byMonth = new Map();
   const byWeek = new Map();
@@ -8819,6 +9143,9 @@ async function handleGenerateWithBody(body, env, enforceRateLimit = true) {
     }
   } else if (valid.reportType === "lkw_single" || valid.reportType === "lkw_all") {
     let rows;
+    let repairRows = [];
+    let fuelRows = [];
+    let revenueRows = [];
     const filterLkwId = valid.reportType === "lkw_single" ? safeText(valid.lkwId, "").trim() : "";
     try {
       const result = await queryNeon(
@@ -8827,6 +9154,17 @@ async function handleGenerateWithBody(body, env, enforceRateLimit = true) {
         [filterLkwId],
       );
       rows = result.rows || [];
+      if (valid.reportType === "lkw_single" && rows.length) {
+        const lkwNumber = safeText(rows[0]?.lkw_nummer || filterLkwId, "").trim();
+        const [repairResult, fuelResult, revenueResult] = await Promise.all([
+          queryNeon(dbConnectionString, LKW_REPAIR_SINGLE_DETAIL_SQL, [lkwNumber]),
+          queryNeon(dbConnectionString, LKW_FUEL_MONTHLY_SQL, [lkwNumber]),
+          queryNeon(dbConnectionString, LKW_REVENUE_MONTHLY_SQL, [lkwNumber]),
+        ]);
+        repairRows = repairResult.rows || [];
+        fuelRows = fuelResult.rows || [];
+        revenueRows = revenueResult.rows || [];
+      }
     } catch (err) {
       return json(
         {
@@ -8847,11 +9185,21 @@ async function handleGenerateWithBody(body, env, enforceRateLimit = true) {
       ? `lkw_single:${filterLkwId}`
       : `lkw_all:${formatUtcDateStamp(new Date())}`;
     try {
-      pdfBytes = await buildLkwMasterPdfWithPdfLib({
-        userId: reportUserLabel,
-        rows,
-        title: valid.reportType === "lkw_single" ? `LKW ${filterLkwId}` : "LKW All",
-      });
+      if (valid.reportType === "lkw_single" && rows.length) {
+        pdfBytes = await buildLkwSinglePdfWithPdfLib({
+          userId: reportUserLabel,
+          truck: rows[0],
+          repairRows,
+          fuelRows,
+          revenueRows,
+        });
+      } else {
+        pdfBytes = await buildLkwMasterPdfWithPdfLib({
+          userId: reportUserLabel,
+          rows,
+          title: valid.reportType === "lkw_single" ? `LKW ${filterLkwId}` : "LKW All",
+        });
+      }
     } catch (err) {
       pdfEngine = "legacy-fallback";
       const lines = [];
