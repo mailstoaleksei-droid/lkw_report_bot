@@ -109,8 +109,8 @@
     - modern card-style report aligned with `Fahrerkarte`
     - source master data: sheet `LKW`, columns `A-V`
     - includes Repair full-period total, breakdown by year/month, and day-level detail for the selected truck number
-    - includes Staack + Shell Diesel/AdBlue monthly liters and net amounts
-    - includes combined yearly Diesel/AdBlue average consumption from Staack + Shell (`liters / yearly KM * 100`)
+    - includes separate Staack + Shell Diesel monthly liters/net amounts and yearly average consumption (`liters / yearly KM * 100`)
+    - includes separate Staack + Shell AdBlue monthly liters/net amounts and yearly average consumption (`liters / yearly KM * 100`)
     - includes Carlo + Contado monthly revenue for the selected truck number
     - ETL tables added: `report_lkw_fuel_transactions`, `report_lkw_revenue_records`
   - `Alle LKW` PDF

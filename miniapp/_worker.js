@@ -6621,9 +6621,14 @@ async function buildLkwSinglePdfWithPdfLib({ userId, truck, repairRows, fuelRows
   const lkwId = safeText(truck?.lkw_id, "-");
   const lkwNumber = safeText(truck?.lkw_nummer, "-");
   const repairSummary = buildRepairSingleSummaries(repairRows || []);
-  const fuelYearRows = buildLkwFuelYearRows(fuelRows || [], truck || {});
-  const totalFuelLiters = (fuelRows || []).reduce((sum, row) => sum + toNumberSafe(row?.quantity_liters, 0), 0);
-  const totalFuelNet = (fuelRows || []).reduce((sum, row) => sum + toNumberSafe(row?.total_net, 0), 0);
+  const dieselFuelRows = (fuelRows || []).filter((row) => safeText(row?.product_name, "").toLowerCase() === "diesel");
+  const adBlueFuelRows = (fuelRows || []).filter((row) => safeText(row?.product_name, "").toLowerCase() === "adblue");
+  const dieselYearRows = buildLkwFuelYearRows(dieselFuelRows, truck || {});
+  const adBlueYearRows = buildLkwFuelYearRows(adBlueFuelRows, truck || {});
+  const totalDieselLiters = dieselFuelRows.reduce((sum, row) => sum + toNumberSafe(row?.quantity_liters, 0), 0);
+  const totalDieselNet = dieselFuelRows.reduce((sum, row) => sum + toNumberSafe(row?.total_net, 0), 0);
+  const totalAdBlueLiters = adBlueFuelRows.reduce((sum, row) => sum + toNumberSafe(row?.quantity_liters, 0), 0);
+  const totalAdBlueNet = adBlueFuelRows.reduce((sum, row) => sum + toNumberSafe(row?.total_net, 0), 0);
   const totalRevenue = (revenueRows || []).reduce((sum, row) => sum + toNumberSafe(row?.revenue_amount, 0), 0);
 
   let page = pdfDoc.addPage(pageSize);
@@ -6667,9 +6672,9 @@ async function buildLkwSinglePdfWithPdfLib({ userId, truck, repairRows, fuelRows
   const drawMetricCards = () => {
     const cards = [
       ["Repair total", formatMoney(repairSummary.total), `${repairSummary.invoiceCount} invoices`],
-      ["Diesel + AdBlue", `${formatMoneyInt(totalFuelLiters)} L`, `${formatMoney(totalFuelNet)} Euro`],
+      ["Diesel", `${formatMoneyInt(totalDieselLiters)} L`, `${formatMoney(totalDieselNet)} Euro`],
+      ["AdBlue", `${formatMoneyInt(totalAdBlueLiters)} L`, `${formatMoney(totalAdBlueNet)} Euro`],
       ["Revenue", `${formatMoney(totalRevenue)} Euro`, "Carlo + Contado"],
-      ["KM 2025", `${formatMoneyInt(truck?.km_2025)} km`, ""],
       ["KM 2026", `${formatMoneyInt(truck?.km_2026)} km`, ""],
       ["Maintenance", `${formatMoney(truck?.wartung_total)} Euro`, "Sheet LKW"],
     ];
@@ -6815,30 +6820,60 @@ async function buildLkwSinglePdfWithPdfLib({ userId, truck, repairRows, fuelRows
   );
 
   drawTable(
-    "Staack und Shell: Diesel / AdBlue pro Monat",
+    "Diesel: Staack und Shell pro Monat",
     [
       { key: "period", label: "Periode", width: 72 },
       { key: "source", label: "Quelle", width: 66 },
-      { key: "product_name", label: "Produkt", width: 74 },
       { key: "records_count", label: "Zeilen", width: 54 },
       { key: "quantity_liters", label: "Liter", width: 92 },
       { key: "total_net", label: "Netto", width: 92 },
     ],
-    fuelRows || [],
+    dieselFuelRows,
     { formatValue: (row, key) => key === "quantity_liters" ? `${formatMoney(row?.[key])} L` : (key === "total_net" ? formatMoney(row?.[key]) : safeText(row?.[key], "")) },
   );
 
   drawTable(
-    "Durchschnittsverbrauch nach Jahr",
+    "Diesel: Durchschnittsverbrauch nach Jahr",
     [
       { key: "report_year", label: "Jahr", width: 64 },
-      { key: "product_name", label: "Produkt", width: 82 },
       { key: "quantity_liters", label: "Liter gesamt", width: 110 },
       { key: "km_year", label: "KM", width: 92 },
       { key: "avg_l_100km", label: "Ø L/100 km", width: 110 },
       { key: "total_net", label: "Netto", width: 92 },
     ],
-    fuelYearRows,
+    dieselYearRows,
+    { formatValue: (row, key) => {
+      if (key === "quantity_liters") return `${formatMoney(row?.[key])} L`;
+      if (key === "km_year") return row?.[key] ? `${formatMoneyInt(row?.[key])} km` : "-";
+      if (key === "avg_l_100km") return row?.km_year ? `${toNumberSafe(row?.[key], 0).toFixed(1)} L/100 km` : "-";
+      if (key === "total_net") return formatMoney(row?.[key]);
+      return safeText(row?.[key], "");
+    } },
+  );
+
+  drawTable(
+    "AdBlue: Staack und Shell pro Monat",
+    [
+      { key: "period", label: "Periode", width: 72 },
+      { key: "source", label: "Quelle", width: 66 },
+      { key: "records_count", label: "Zeilen", width: 54 },
+      { key: "quantity_liters", label: "Liter", width: 92 },
+      { key: "total_net", label: "Netto", width: 92 },
+    ],
+    adBlueFuelRows,
+    { formatValue: (row, key) => key === "quantity_liters" ? `${formatMoney(row?.[key])} L` : (key === "total_net" ? formatMoney(row?.[key]) : safeText(row?.[key], "")) },
+  );
+
+  drawTable(
+    "AdBlue: Durchschnittsverbrauch nach Jahr",
+    [
+      { key: "report_year", label: "Jahr", width: 64 },
+      { key: "quantity_liters", label: "Liter gesamt", width: 110 },
+      { key: "km_year", label: "KM", width: 92 },
+      { key: "avg_l_100km", label: "Ø L/100 km", width: 110 },
+      { key: "total_net", label: "Netto", width: 92 },
+    ],
+    adBlueYearRows,
     { formatValue: (row, key) => {
       if (key === "quantity_liters") return `${formatMoney(row?.[key])} L`;
       if (key === "km_year") return row?.[key] ? `${formatMoneyInt(row?.[key])} km` : "-";
