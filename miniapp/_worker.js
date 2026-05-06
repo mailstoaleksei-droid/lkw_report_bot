@@ -6629,6 +6629,66 @@ async function buildLkwSinglePdfWithPdfLib({ userId, truck, repairRows, fuelRows
   const tableHeadText = rgb(1, 1, 1);
   const borderColor = rgb(0.72, 0.79, 0.88);
   const oddBg = rgb(0.965, 0.98, 1);
+  const themes = {
+    master: {
+      accent: accentColor,
+      head: tableHeadBg,
+      bg: cardBg,
+      row: oddBg,
+      track: rgb(0.91, 0.94, 0.98),
+      border: borderColor,
+    },
+    repair: {
+      accent: rgb(0.72, 0.25, 0.17),
+      head: rgb(0.54, 0.18, 0.14),
+      bg: rgb(1, 0.965, 0.945),
+      row: rgb(1, 0.978, 0.965),
+      track: rgb(0.965, 0.885, 0.855),
+      border: rgb(0.88, 0.69, 0.63),
+    },
+    diesel: {
+      accent: rgb(0.72, 0.48, 0.12),
+      head: rgb(0.57, 0.37, 0.08),
+      bg: rgb(1, 0.975, 0.92),
+      row: rgb(1, 0.985, 0.945),
+      track: rgb(0.965, 0.91, 0.78),
+      border: rgb(0.88, 0.75, 0.48),
+    },
+    adblue: {
+      accent: rgb(0.05, 0.48, 0.62),
+      head: rgb(0.04, 0.34, 0.45),
+      bg: rgb(0.935, 0.985, 0.995),
+      row: rgb(0.955, 0.99, 0.998),
+      track: rgb(0.82, 0.925, 0.955),
+      border: rgb(0.58, 0.78, 0.84),
+    },
+    revenue: {
+      accent: rgb(0.16, 0.50, 0.28),
+      head: rgb(0.10, 0.36, 0.20),
+      bg: rgb(0.94, 0.985, 0.955),
+      row: rgb(0.965, 0.995, 0.975),
+      track: rgb(0.82, 0.93, 0.86),
+      border: rgb(0.62, 0.80, 0.67),
+    },
+    mileage: {
+      accent: rgb(0.25, 0.35, 0.62),
+      head: rgb(0.18, 0.25, 0.48),
+      bg: rgb(0.95, 0.965, 1),
+      row: rgb(0.965, 0.975, 1),
+      track: rgb(0.88, 0.90, 0.97),
+      border: rgb(0.68, 0.73, 0.88),
+    },
+  };
+
+  const themeForTitle = (title) => {
+    const normalized = safeText(title, "").toLowerCase();
+    if (normalized.startsWith("repair")) return themes.repair;
+    if (normalized.startsWith("diesel")) return themes.diesel;
+    if (normalized.startsWith("adblue")) return themes.adblue;
+    if (normalized.startsWith("carlo") || normalized.includes("umsatz")) return themes.revenue;
+    if (normalized.includes("km")) return themes.mileage;
+    return themes.master;
+  };
 
   const lkwId = safeText(truck?.lkw_id, "-");
   const lkwNumber = safeText(truck?.lkw_nummer, "-");
@@ -6686,38 +6746,40 @@ async function buildLkwSinglePdfWithPdfLib({ userId, truck, repairRows, fuelRows
 
   const drawMetricCards = () => {
     const cards = [
-      ["Repair total", formatMoney(repairSummary.total), `${repairSummary.invoiceCount} invoices`],
-      ["Diesel", `${formatMoneyInt(totalDieselLiters)} L`, `${formatMoney(totalDieselNet)} Euro`],
-      ["AdBlue", `${formatMoneyInt(totalAdBlueLiters)} L`, `${formatMoney(totalAdBlueNet)} Euro`],
-      ["Revenue", `${formatMoney(totalRevenue)} Euro`, "Carlo + Contado"],
-      ["Gesamt KM", totalMileageKm > 0 ? `${formatMoneyInt(totalMileageKm)} km` : "-", totalMileageDate ? `YF ${totalMileageDate}` : "YF"],
-      ["KM 2025", `${formatMoneyInt(truck?.km_2025)} km`, ""],
-      ["KM 2026", `${formatMoneyInt(truck?.km_2026)} km`, ""],
+      { label: "Repair total", value: formatMoney(repairSummary.total), meta: `${repairSummary.invoiceCount} invoices`, theme: themes.repair },
+      { label: "Diesel", value: `${formatMoneyInt(totalDieselLiters)} L`, meta: `${formatMoney(totalDieselNet)} Euro`, theme: themes.diesel },
+      { label: "AdBlue", value: `${formatMoneyInt(totalAdBlueLiters)} L`, meta: `${formatMoney(totalAdBlueNet)} Euro`, theme: themes.adblue },
+      { label: "Revenue", value: `${formatMoney(totalRevenue)} Euro`, meta: "Carlo + Contado", theme: themes.revenue },
+      { label: "Gesamt KM", value: totalMileageKm > 0 ? `${formatMoneyInt(totalMileageKm)} km` : "-", meta: totalMileageDate ? `YF ${totalMileageDate}` : "YF", theme: themes.mileage },
+      { label: "KM 2025", value: `${formatMoneyInt(truck?.km_2025)} km`, meta: "", theme: themes.mileage },
+      { label: "KM 2026", value: `${formatMoneyInt(truck?.km_2026)} km`, meta: "", theme: themes.mileage },
     ];
     const gap = 8;
     const width = (page.getWidth() - margin * 2 - gap * (cards.length - 1)) / cards.length;
     const cardHeight = 72;
     cards.forEach((card, idx) => {
       const x = margin + idx * (width + gap);
-      page.drawRectangle({ x, y: y - cardHeight, width, height: cardHeight, color: cardBg, borderColor, borderWidth: 1 });
-      centerText(card[1], x, y - 24, width, 10.5, boldFont, accentColor);
-      if (card[2]) centerText(card[2], x, y - 38, width, 6.8, font, mutedColor);
-      centerText(card[0], x, y - 61, width, 7.2, font, mutedColor);
+      const theme = card.theme || themes.master;
+      page.drawRectangle({ x, y: y - cardHeight, width, height: cardHeight, color: theme.bg, borderColor: theme.border, borderWidth: 1 });
+      page.drawRectangle({ x, y: y - cardHeight, width: 3, height: cardHeight, color: theme.accent });
+      centerText(card.value, x, y - 24, width, 10.5, boldFont, theme.accent);
+      if (card.meta) centerText(card.meta, x, y - 38, width, 6.8, font, mutedColor);
+      centerText(card.label, x, y - 61, width, 7.2, font, mutedColor);
     });
     y -= 88;
   };
 
-  const drawSectionTitle = (title) => {
+  const drawSectionTitle = (title, theme = themeForTitle(title)) => {
     const titleBandHeight = 22;
     const titleTopGap = 8;
     ensureSpace(titleBandHeight + titleTopGap);
     y -= titleTopGap;
-    drawText(title, margin, y - ((titleBandHeight - 11) / 2) - 1, 11, boldFont, textColor);
+    drawText(title, margin, y - ((titleBandHeight - 11) / 2) - 1, 11, boldFont, theme.accent || textColor);
     y -= titleBandHeight;
   };
 
-  const drawKeyValueGrid = (title, items, columns = 4) => {
-    drawSectionTitle(title);
+  const drawKeyValueGrid = (title, items, columns = 4, theme = themeForTitle(title)) => {
+    drawSectionTitle(title, theme);
     const colGap = 8;
     const rowH = 30;
     const colW = (page.getWidth() - margin * 2 - colGap * (columns - 1)) / columns;
@@ -6726,7 +6788,7 @@ async function buildLkwSinglePdfWithPdfLib({ userId, truck, repairRows, fuelRows
       const col = idx % columns;
       const x = margin + col * (colW + colGap);
       const item = items[idx];
-      page.drawRectangle({ x, y: y - rowH + 2, width: colW, height: rowH, color: cardBg, borderColor, borderWidth: 0.7 });
+      page.drawRectangle({ x, y: y - rowH + 2, width: colW, height: rowH, color: theme.bg, borderColor: theme.border, borderWidth: 0.7 });
       centerText(item.label, x, y - 10, colW, 7, boldFont, mutedColor);
       centerText(item.value || "-", x, y - 24, colW, 8, font, textColor);
       if (col === columns - 1 || idx === items.length - 1) y -= rowH + 6;
@@ -6737,10 +6799,11 @@ async function buildLkwSinglePdfWithPdfLib({ userId, truck, repairRows, fuelRows
   const drawTable = (title, columns, rows, opts = {}) => {
     const rowH = opts.rowHeight || 16;
     const textSize = opts.textSize || 8;
+    const theme = opts.theme || themeForTitle(title);
     const tableW = columns.reduce((sum, col) => sum + col.width, 0);
     const tableX = margin;
     const drawHeaderRow = () => {
-      page.drawRectangle({ x: tableX, y: y - rowH + 2, width: tableW, height: rowH, color: tableHeadBg });
+      page.drawRectangle({ x: tableX, y: y - rowH + 2, width: tableW, height: rowH, color: theme.head });
       let x = tableX;
       for (const col of columns) {
         centerText(col.label, x, y - 10, col.width, textSize, boldFont, tableHeadText);
@@ -6748,11 +6811,11 @@ async function buildLkwSinglePdfWithPdfLib({ userId, truck, repairRows, fuelRows
       }
       y -= rowH;
     };
-    drawSectionTitle(title);
+    drawSectionTitle(title, theme);
     drawHeaderRow();
     if (!rows || rows.length === 0) {
       ensureSpace(rowH + 4);
-      page.drawRectangle({ x: tableX, y: y - rowH + 2, width: tableW, height: rowH, color: oddBg, borderColor, borderWidth: 0.5 });
+      page.drawRectangle({ x: tableX, y: y - rowH + 2, width: tableW, height: rowH, color: theme.row, borderColor: theme.border, borderWidth: 0.5 });
       centerText("Keine Daten", tableX, y - 10, tableW, textSize, font, mutedColor);
       y -= rowH + 8;
       return;
@@ -6766,8 +6829,8 @@ async function buildLkwSinglePdfWithPdfLib({ userId, truck, repairRows, fuelRows
         y: y - rowH + 2,
         width: tableW,
         height: rowH,
-        color: idx % 2 ? oddBg : rgb(1, 1, 1),
-        borderColor,
+        color: idx % 2 ? theme.row : rgb(1, 1, 1),
+        borderColor: theme.border,
         borderWidth: 0.45,
       });
       let x = tableX;
@@ -6782,7 +6845,8 @@ async function buildLkwSinglePdfWithPdfLib({ userId, truck, repairRows, fuelRows
   };
 
   const drawRepairVisualTable = (title, rows, periodLabel) => {
-    drawSectionTitle(title);
+    const theme = themeForTitle(title);
+    drawSectionTitle(title, theme);
     const dataRows = rows || [];
     const rowH = 22;
     const textSize = 8;
@@ -6795,7 +6859,7 @@ async function buildLkwSinglePdfWithPdfLib({ userId, truck, repairRows, fuelRows
     const maxAmount = Math.max(1, ...dataRows.map((row) => toNumberSafe(row?.total_price, 0)));
 
     const drawHeaderRow = () => {
-      page.drawRectangle({ x: tableX, y: y - rowH + 2, width: tableW, height: rowH, color: tableHeadBg });
+      page.drawRectangle({ x: tableX, y: y - rowH + 2, width: tableW, height: rowH, color: theme.head });
       centerText(periodLabel, tableX, y - 13, periodW, textSize, boldFont, tableHeadText);
       centerText("Zeilen", tableX + periodW, y - 13, rowsW, textSize, boldFont, tableHeadText);
       centerText("Kosten", tableX + periodW + rowsW, y - 13, amountW, textSize, boldFont, tableHeadText);
@@ -6805,7 +6869,7 @@ async function buildLkwSinglePdfWithPdfLib({ userId, truck, repairRows, fuelRows
 
     drawHeaderRow();
     if (!dataRows.length) {
-      page.drawRectangle({ x: tableX, y: y - rowH + 2, width: tableW, height: rowH, color: oddBg, borderColor, borderWidth: 0.5 });
+      page.drawRectangle({ x: tableX, y: y - rowH + 2, width: tableW, height: rowH, color: theme.row, borderColor: theme.border, borderWidth: 0.5 });
       centerText("Keine Daten", tableX, y - 13, tableW, textSize, font, mutedColor);
       y -= rowH + 8;
       return;
@@ -6819,8 +6883,8 @@ async function buildLkwSinglePdfWithPdfLib({ userId, truck, repairRows, fuelRows
       }
       const amount = toNumberSafe(row?.total_price, 0);
       const pct = Math.max(0, Math.min(1, amount / maxAmount));
-      const fill = idx % 2 ? oddBg : rgb(1, 1, 1);
-      page.drawRectangle({ x: tableX, y: y - rowH + 2, width: tableW, height: rowH, color: fill, borderColor, borderWidth: 0.45 });
+      const fill = idx % 2 ? theme.row : rgb(1, 1, 1);
+      page.drawRectangle({ x: tableX, y: y - rowH + 2, width: tableW, height: rowH, color: fill, borderColor: theme.border, borderWidth: 0.45 });
       centerText(row?.period, tableX, y - 13, periodW, textSize, font, textColor);
       centerText(row?.records_count, tableX + periodW, y - 13, rowsW, textSize, font, textColor);
       centerText(formatMoney(amount), tableX + periodW + rowsW, y - 13, amountW, textSize, boldFont, textColor);
@@ -6828,15 +6892,16 @@ async function buildLkwSinglePdfWithPdfLib({ userId, truck, repairRows, fuelRows
       const barX = tableX + periodW + rowsW + amountW + 12;
       const barY = y - 15;
       const maxBarW = barW - 74;
-      page.drawRectangle({ x: barX, y: barY, width: maxBarW, height: 7, color: rgb(0.91, 0.94, 0.98) });
-      page.drawRectangle({ x: barX, y: barY, width: Math.max(2, maxBarW * pct), height: 7, color: accentColor });
+      page.drawRectangle({ x: barX, y: barY, width: maxBarW, height: 7, color: theme.track });
+      page.drawRectangle({ x: barX, y: barY, width: Math.max(2, maxBarW * pct), height: 7, color: theme.accent });
       y -= rowH;
     });
     y -= 10;
   };
 
   const drawRepairMonthChart = (title, rows) => {
-    drawSectionTitle(title);
+    const theme = themeForTitle(title);
+    drawSectionTitle(title, theme);
     const monthRows = rows || [];
     const byYear = new Map();
     for (const row of monthRows) {
@@ -6866,7 +6931,7 @@ async function buildLkwSinglePdfWithPdfLib({ userId, truck, repairRows, fuelRows
     const maxBarH = 26;
 
     if (!years.length) {
-      page.drawRectangle({ x: margin, y: y - 22, width: chartW, height: 20, color: oddBg, borderColor, borderWidth: 0.5 });
+      page.drawRectangle({ x: margin, y: y - 22, width: chartW, height: 20, color: theme.row, borderColor: theme.border, borderWidth: 0.5 });
       centerText("Keine Daten", margin, y - 14, chartW, 8, font, mutedColor);
       y -= 30;
       return;
@@ -6875,8 +6940,8 @@ async function buildLkwSinglePdfWithPdfLib({ userId, truck, repairRows, fuelRows
     for (const year of years) {
       ensureSpace(rowH + 8);
       const topY = y;
-      page.drawRectangle({ x: margin, y: topY - rowH + 4, width: chartW, height: rowH, color: cardBg, borderColor, borderWidth: 0.7 });
-      drawText(String(year), margin + 10, topY - 26, 10, boldFont, textColor, yearW - 12);
+      page.drawRectangle({ x: margin, y: topY - rowH + 4, width: chartW, height: rowH, color: theme.bg, borderColor: theme.border, borderWidth: 0.7 });
+      drawText(String(year), margin + 10, topY - 26, 10, boldFont, theme.accent, yearW - 12);
       const months = byYear.get(year);
       let x = margin + yearW;
       for (let idx = 0; idx < 12; idx += 1) {
@@ -6886,9 +6951,9 @@ async function buildLkwSinglePdfWithPdfLib({ userId, truck, repairRows, fuelRows
         const barX = x + 4;
         const barBaseY = topY - 34;
         centerText(monthLabels[idx], x, topY - 14, monthW, 6.4, font, mutedColor);
-        page.drawRectangle({ x: barX, y: barBaseY, width: monthW - 8, height: maxBarH, color: rgb(0.91, 0.94, 0.98) });
+        page.drawRectangle({ x: barX, y: barBaseY, width: monthW - 8, height: maxBarH, color: theme.track });
         if (barH > 0) {
-          page.drawRectangle({ x: barX, y: barBaseY, width: monthW - 8, height: barH, color: accentColor });
+          page.drawRectangle({ x: barX, y: barBaseY, width: monthW - 8, height: barH, color: theme.accent });
         }
         centerText(amount ? formatMoneyCompact(amount) : "-", x, topY - 53, monthW, 6.2, font, amount ? textColor : mutedColor);
         x += monthW + gap;
