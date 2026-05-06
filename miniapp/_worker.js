@@ -6858,10 +6858,9 @@ async function buildLkwSinglePdfWithPdfLib({ userId, truck, repairRows, fuelRows
     const rowH = 22;
     const textSize = 8;
     const periodW = 82;
-    const rowsW = 54;
     const amountW = 96;
-    const barW = 430;
-    const tableW = periodW + rowsW + amountW + barW;
+    const barW = 484;
+    const tableW = periodW + amountW + barW;
     const tableX = margin;
     const maxAmount = Math.max(1, ...dataRows.map((row) => toNumberSafe(row?.total_price, 0)));
     ensureSpace(30 + rowH * 2 + 8);
@@ -6870,9 +6869,8 @@ async function buildLkwSinglePdfWithPdfLib({ userId, truck, repairRows, fuelRows
     const drawHeaderRow = () => {
       page.drawRectangle({ x: tableX, y: y - rowH + 2, width: tableW, height: rowH, color: theme.head });
       centerText(periodLabel, tableX, y - 13, periodW, textSize, boldFont, tableHeadText);
-      centerText("Zeilen", tableX + periodW, y - 13, rowsW, textSize, boldFont, tableHeadText);
-      centerText("Kosten", tableX + periodW + rowsW, y - 13, amountW, textSize, boldFont, tableHeadText);
-      centerText("Verteilung", tableX + periodW + rowsW + amountW, y - 13, barW, textSize, boldFont, tableHeadText);
+      centerText("Kosten", tableX + periodW, y - 13, amountW, textSize, boldFont, tableHeadText);
+      centerText("Verteilung", tableX + periodW + amountW, y - 13, barW, textSize, boldFont, tableHeadText);
       y -= rowH;
     };
 
@@ -6895,10 +6893,9 @@ async function buildLkwSinglePdfWithPdfLib({ userId, truck, repairRows, fuelRows
       const fill = idx % 2 ? theme.row : rgb(1, 1, 1);
       page.drawRectangle({ x: tableX, y: y - rowH + 2, width: tableW, height: rowH, color: fill, borderColor: theme.border, borderWidth: 0.45 });
       centerText(row?.period, tableX, y - 13, periodW, textSize, font, textColor);
-      centerText(row?.records_count, tableX + periodW, y - 13, rowsW, textSize, font, textColor);
-      centerText(formatMoney(amount), tableX + periodW + rowsW, y - 13, amountW, textSize, boldFont, textColor);
+      centerText(formatMoney(amount), tableX + periodW, y - 13, amountW, textSize, boldFont, textColor);
 
-      const barX = tableX + periodW + rowsW + amountW + 12;
+      const barX = tableX + periodW + amountW + 12;
       const barY = y - 15;
       const maxBarW = barW - 74;
       page.drawRectangle({ x: barX, y: barY, width: maxBarW, height: 7, color: theme.track });
@@ -7009,7 +7006,6 @@ async function buildLkwSinglePdfWithPdfLib({ userId, truck, repairRows, fuelRows
     [
       { key: "period", label: "Periode", width: 68 },
       { key: "source", label: "Quelle", width: 62 },
-      { key: "records_count", label: "Zeilen", width: 48 },
       { key: "quantity_liters", label: "Liter", width: 90 },
       { key: "total_net", label: "Netto", width: 86 },
       { key: "avg_net_per_liter", label: "Avg Euro/L", width: 78 },
@@ -7049,7 +7045,6 @@ async function buildLkwSinglePdfWithPdfLib({ userId, truck, repairRows, fuelRows
     [
       { key: "period", label: "Periode", width: 68 },
       { key: "source", label: "Quelle", width: 62 },
-      { key: "records_count", label: "Zeilen", width: 48 },
       { key: "quantity_liters", label: "Liter", width: 90 },
       { key: "total_net", label: "Netto", width: 86 },
       { key: "avg_net_per_liter", label: "Avg Euro/L", width: 78 },
@@ -7089,7 +7084,6 @@ async function buildLkwSinglePdfWithPdfLib({ userId, truck, repairRows, fuelRows
     [
       { key: "period", label: "Periode", width: 78 },
       { key: "source", label: "Quelle", width: 78 },
-      { key: "records_count", label: "Zeilen", width: 64 },
       { key: "revenue_amount", label: "Betrag", width: 110 },
     ],
     revenueRows || [],
