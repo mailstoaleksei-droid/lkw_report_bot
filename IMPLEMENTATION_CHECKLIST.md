@@ -111,7 +111,7 @@
     - supports current `LKW` headers: `HU`, `SP`, `57B`, `Gesamtkosten für die Wartung`
     - includes Repair full-period total, separate yearly and monthly visual cost summaries, and day-level detail for the selected truck number
     - uses separate visual color themes for Repair, Diesel, AdBlue, Revenue and mileage blocks
-    - empty LKW status is rendered as `activ`
+    - empty LKW status is rendered as `aktiv`
     - includes separate Staack + Shell Diesel monthly liters/net amounts and yearly average consumption (`liters / yearly KM * 100`)
     - includes separate Staack + Shell AdBlue monthly liters/net amounts and yearly average consumption (`liters / yearly KM * 100`)
     - includes Carlo + Contado monthly revenue for the selected truck number

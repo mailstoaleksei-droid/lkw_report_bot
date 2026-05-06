@@ -957,7 +957,7 @@ SELECT
   COALESCE(NULLIF(t.raw_payload->>'220v', ''), NULLIF(t.raw_payload->>'220V', '')) AS v_220,
   COALESCE(NULLIF(t.raw_payload->>'ADR', ''), '') AS adr,
   COALESCE(NULLIF(t.raw_payload->>'Drucker', ''), NULLIF(t.raw_payload->>'Printer', '')) AS drucker,
-  COALESCE(NULLIF(t.status, ''), NULLIF(t.raw_payload->>'Status', ''), 'activ') AS status,
+  COALESCE(NULLIF(t.status, ''), NULLIF(t.raw_payload->>'Status', ''), 'aktiv') AS status,
   COALESCE(to_char(t.status_since, 'DD/MM/YYYY'), NULLIF(t.raw_payload->>'Datum verkauft', ''), NULLIF(t.raw_payload->>'Sale Date', '')) AS datum_verkauft,
   COALESCE(NULLIF(t.raw_payload->>'Telefonnummer', ''), NULLIF(t.raw_payload->>'Phone Number', ''), NULLIF(t.raw_payload->>'Phone', '')) AS telefonnummer,
   COALESCE(NULLIF(t.raw_payload->>'DKV Card', ''), NULLIF(t.raw_payload->>'DKV', '')) AS dkv_card,
@@ -6692,7 +6692,7 @@ async function buildLkwSinglePdfWithPdfLib({ userId, truck, repairRows, fuelRows
 
   const lkwId = safeText(truck?.lkw_id, "-");
   const lkwNumber = safeText(truck?.lkw_nummer, "-");
-  const truckStatus = safeText(truck?.status, "").trim() || "activ";
+  const truckStatus = safeText(truck?.status, "").trim() || "aktiv";
   const repairSummary = buildRepairSingleSummaries(repairRows || []);
   const dieselFuelRows = (fuelRows || []).filter((row) => safeText(row?.product_name, "").toLowerCase() === "diesel");
   const adBlueFuelRows = (fuelRows || []).filter((row) => safeText(row?.product_name, "").toLowerCase() === "adblue");
