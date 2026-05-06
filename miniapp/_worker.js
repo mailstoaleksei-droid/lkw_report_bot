@@ -957,7 +957,7 @@ SELECT
   COALESCE(NULLIF(t.raw_payload->>'220v', ''), NULLIF(t.raw_payload->>'220V', '')) AS v_220,
   COALESCE(NULLIF(t.raw_payload->>'ADR', ''), '') AS adr,
   COALESCE(NULLIF(t.raw_payload->>'Drucker', ''), NULLIF(t.raw_payload->>'Printer', '')) AS drucker,
-  COALESCE(NULLIF(t.status, ''), NULLIF(t.raw_payload->>'Status', '')) AS status,
+  COALESCE(NULLIF(t.status, ''), NULLIF(t.raw_payload->>'Status', ''), 'activ') AS status,
   COALESCE(to_char(t.status_since, 'DD/MM/YYYY'), NULLIF(t.raw_payload->>'Datum verkauft', ''), NULLIF(t.raw_payload->>'Sale Date', '')) AS datum_verkauft,
   COALESCE(NULLIF(t.raw_payload->>'Telefonnummer', ''), NULLIF(t.raw_payload->>'Phone Number', ''), NULLIF(t.raw_payload->>'Phone', '')) AS telefonnummer,
   COALESCE(NULLIF(t.raw_payload->>'DKV Card', ''), NULLIF(t.raw_payload->>'DKV', '')) AS dkv_card,
@@ -965,8 +965,9 @@ SELECT
   COALESCE(NULLIF(t.raw_payload->>'Tankpool Card', ''), NULLIF(t.raw_payload->>'Tankpool', '')) AS tankpool_card,
   COALESCE(NULLIF(t.raw_payload->>'KM\n2025', ''), NULLIF(t.raw_payload->>'KM 2025', ''), NULLIF(t.raw_payload->>'KM2025', '')) AS km_2025,
   COALESCE(NULLIF(t.raw_payload->>'KM\n2026', ''), NULLIF(t.raw_payload->>'KM 2026', ''), NULLIF(t.raw_payload->>'KM2026', '')) AS km_2026,
-  COALESCE(NULLIF(t.raw_payload->>'Nächste TÜV', ''), NULLIF(t.raw_payload->>'Naechste TUEV', ''), NULLIF(t.raw_payload->>'Nest TÜV', '')) AS naechste_tuev,
-  COALESCE(NULLIF(t.raw_payload->>'Versicherung bis', ''), NULLIF(t.raw_payload->>'Insurance', '')) AS versicherung_bis,
+  COALESCE(NULLIF(t.raw_payload->>'HU', ''), NULLIF(t.raw_payload->>'Nächste TÜV', ''), NULLIF(t.raw_payload->>'Naechste TUEV', ''), NULLIF(t.raw_payload->>'Nest TÜV', '')) AS hu,
+  COALESCE(NULLIF(t.raw_payload->>'SP', ''), NULLIF(t.raw_payload->>'Versicherung bis', ''), NULLIF(t.raw_payload->>'Insurance', '')) AS sp,
+  COALESCE(NULLIF(t.raw_payload->>'57B', ''), '') AS b_57,
   COALESCE(NULLIF(t.raw_payload->>'Gesamtkosten für die Wartung', ''), NULLIF(t.raw_payload->>'Gesamtkosten fur die Wartung', ''), NULLIF(t.raw_payload->>'Total Costs', '')) AS wartung_total,
   COALESCE(NULLIF(t.raw_payload->>'2023', ''), '0') AS cost_2023,
   COALESCE(NULLIF(t.raw_payload->>'2024', ''), '0') AS cost_2024,
@@ -6620,6 +6621,7 @@ async function buildLkwSinglePdfWithPdfLib({ userId, truck, repairRows, fuelRows
 
   const lkwId = safeText(truck?.lkw_id, "-");
   const lkwNumber = safeText(truck?.lkw_nummer, "-");
+  const truckStatus = safeText(truck?.status, "").trim() || "activ";
   const repairSummary = buildRepairSingleSummaries(repairRows || []);
   const dieselFuelRows = (fuelRows || []).filter((row) => safeText(row?.product_name, "").toLowerCase() === "diesel");
   const adBlueFuelRows = (fuelRows || []).filter((row) => safeText(row?.product_name, "").toLowerCase() === "adblue");
@@ -6658,7 +6660,7 @@ async function buildLkwSinglePdfWithPdfLib({ userId, truck, repairRows, fuelRows
     drawText("LKW Karte", margin + 18, y - 26, 20, boldFont, accentColor);
     drawText(`${lkwId} - ${lkwNumber}`, margin + 18, y - 50, 15, boldFont, textColor, 360);
     drawText(`Firma: ${safeText(truck?.firma, "-")}`, margin + 430, y - 26, 10, boldFont, textColor, 250);
-    drawText(`Status: ${safeText(truck?.status, "-")}`, margin + 430, y - 43, 10, font, mutedColor, 250);
+    drawText(`Status: ${truckStatus}`, margin + 430, y - 43, 10, font, mutedColor, 250);
     drawText(formatReportGeneratedLabel(userId), margin + 430, y - 60, 8, font, mutedColor, 320);
     y -= 96;
   };
@@ -6814,16 +6816,77 @@ async function buildLkwSinglePdfWithPdfLib({ userId, truck, repairRows, fuelRows
       const maxBarW = barW - 74;
       page.drawRectangle({ x: barX, y: barY, width: maxBarW, height: 7, color: rgb(0.91, 0.94, 0.98) });
       page.drawRectangle({ x: barX, y: barY, width: Math.max(2, maxBarW * pct), height: 7, color: accentColor });
-      drawText(`${Math.round(pct * 100)}%`, barX + maxBarW + 10, y - 15, 7, font, mutedColor, 48);
       y -= rowH;
     });
     y -= 10;
   };
 
+  const drawRepairMonthChart = (title, rows) => {
+    drawSectionTitle(title);
+    const monthRows = rows || [];
+    const byYear = new Map();
+    for (const row of monthRows) {
+      const year = toIntSafe(row?.report_year, 0);
+      const month = toIntSafe(row?.report_month, 0);
+      if (!year || month < 1 || month > 12) continue;
+      if (!byYear.has(year)) byYear.set(year, Array.from({ length: 12 }, (_, idx) => ({
+        month: idx + 1,
+        amount: 0,
+        records_count: 0,
+      })));
+      const item = byYear.get(year)[month - 1];
+      item.amount += toNumberSafe(row?.total_price, 0);
+      item.records_count += toIntSafe(row?.records_count, 0);
+    }
+    const years = Array.from(byYear.keys()).sort((a, b) => a - b);
+    const maxAmount = Math.max(
+      1,
+      ...Array.from(byYear.values()).flat().map((item) => item.amount),
+    );
+    const monthLabels = ["Jan", "Feb", "Mar", "Apr", "Mai", "Jun", "Jul", "Aug", "Sep", "Okt", "Nov", "Dez"];
+    const chartW = page.getWidth() - margin * 2;
+    const yearW = 42;
+    const gap = 5;
+    const monthW = (chartW - yearW - gap * 11) / 12;
+    const rowH = 62;
+    const maxBarH = 26;
+
+    if (!years.length) {
+      page.drawRectangle({ x: margin, y: y - 22, width: chartW, height: 20, color: oddBg, borderColor, borderWidth: 0.5 });
+      centerText("Keine Daten", margin, y - 14, chartW, 8, font, mutedColor);
+      y -= 30;
+      return;
+    }
+
+    for (const year of years) {
+      ensureSpace(rowH + 8);
+      const topY = y;
+      page.drawRectangle({ x: margin, y: topY - rowH + 4, width: chartW, height: rowH, color: cardBg, borderColor, borderWidth: 0.7 });
+      drawText(String(year), margin + 10, topY - 26, 10, boldFont, textColor, yearW - 12);
+      const months = byYear.get(year);
+      let x = margin + yearW;
+      for (let idx = 0; idx < 12; idx += 1) {
+        const item = months[idx];
+        const amount = toNumberSafe(item.amount, 0);
+        const barH = amount > 0 ? Math.max(2, (amount / maxAmount) * maxBarH) : 0;
+        const barX = x + 4;
+        const barBaseY = topY - 34;
+        centerText(monthLabels[idx], x, topY - 14, monthW, 6.4, font, mutedColor);
+        page.drawRectangle({ x: barX, y: barBaseY, width: monthW - 8, height: maxBarH, color: rgb(0.91, 0.94, 0.98) });
+        if (barH > 0) {
+          page.drawRectangle({ x: barX, y: barBaseY, width: monthW - 8, height: barH, color: accentColor });
+        }
+        centerText(amount ? formatMoneyCompact(amount) : "-", x, topY - 53, monthW, 6.2, font, amount ? textColor : mutedColor);
+        x += monthW + gap;
+      }
+      y -= rowH + 8;
+    }
+  };
+
   drawHeader();
   drawMetricCards();
 
-  drawKeyValueGrid("Stammdaten A-V", [
+  drawKeyValueGrid("Stammdaten A-W", [
     { label: "LKW-ID", value: truck?.lkw_id },
     { label: "LKW-Nummer", value: truck?.lkw_nummer },
     { label: "Marke/Modell", value: truck?.marke_modell },
@@ -6835,7 +6898,7 @@ async function buildLkwSinglePdfWithPdfLib({ userId, truck, repairRows, fuelRows
     { label: "220V", value: truck?.v_220 },
     { label: "ADR", value: truck?.adr },
     { label: "Drucker", value: truck?.drucker },
-    { label: "Status", value: truck?.status },
+    { label: "Status", value: truckStatus },
     { label: "Datum verkauft", value: truck?.datum_verkauft },
     { label: "Telefonnummer", value: truck?.telefonnummer },
     { label: "DKV Card", value: truck?.dkv_card },
@@ -6843,28 +6906,14 @@ async function buildLkwSinglePdfWithPdfLib({ userId, truck, repairRows, fuelRows
     { label: "Tankpool Card", value: truck?.tankpool_card },
     { label: "KM 2025", value: `${formatMoneyInt(truck?.km_2025)} km` },
     { label: "KM 2026", value: `${formatMoneyInt(truck?.km_2026)} km` },
-    { label: "Naechste TUEV", value: truck?.naechste_tuev },
-    { label: "Versicherung bis", value: truck?.versicherung_bis },
-    { label: "Wartung gesamt", value: formatMoney(truck?.wartung_total) },
+    { label: "HU", value: truck?.hu },
+    { label: "SP", value: truck?.sp },
+    { label: "57B", value: truck?.b_57 },
+    { label: "Repair LKW", value: formatMoney(truck?.wartung_total) },
   ], 4);
 
   drawRepairVisualTable("Repair: Kosten nach Jahr", repairSummary.yearRows, "Jahr");
-  drawRepairVisualTable("Repair: Kosten nach Monat", repairSummary.monthRows, "Monat");
-
-  drawTable(
-    "Repair: Details nach Tagen",
-    [
-      { key: "invoice_date", label: "Datum", width: 70 },
-      { key: "period", label: "Periode", width: 72 },
-      { key: "invoice", label: "Invoice", width: 92 },
-      { key: "repair_name", label: "Work", width: 188 },
-      { key: "seller", label: "Seller", width: 150 },
-      { key: "kategorie", label: "Kategorie", width: 76 },
-      { key: "total_price", label: "Kosten", width: 86 },
-    ],
-    (repairRows || []).map((row) => ({ ...row, period: `${safeText(row?.report_year, "")}/${pad2(toIntSafe(row?.report_month, 0))}` })),
-    { textSize: 7.4, rowHeight: 16, formatValue: (row, key) => key === "total_price" ? formatMoney(row?.[key]) : safeText(row?.[key], "") },
-  );
+  drawRepairMonthChart("Repair: Kosten nach Monat", repairSummary.monthRows);
 
   drawTable(
     "Diesel: Staack und Shell pro Monat",
@@ -6940,6 +6989,21 @@ async function buildLkwSinglePdfWithPdfLib({ userId, truck, repairRows, fuelRows
     ],
     revenueRows || [],
     { formatValue: (row, key) => key === "revenue_amount" ? formatMoney(row?.[key]) : safeText(row?.[key], "") },
+  );
+
+  drawTable(
+    "Repair: Details nach Tagen",
+    [
+      { key: "invoice_date", label: "Datum", width: 70 },
+      { key: "period", label: "Periode", width: 72 },
+      { key: "invoice", label: "Invoice", width: 92 },
+      { key: "repair_name", label: "Work", width: 188 },
+      { key: "seller", label: "Seller", width: 150 },
+      { key: "kategorie", label: "Kategorie", width: 76 },
+      { key: "total_price", label: "Kosten", width: 86 },
+    ],
+    (repairRows || []).map((row) => ({ ...row, period: `${safeText(row?.report_year, "")}/${pad2(toIntSafe(row?.report_month, 0))}` })),
+    { textSize: 7.4, rowHeight: 16, formatValue: (row, key) => key === "total_price" ? formatMoney(row?.[key]) : safeText(row?.[key], "") },
   );
 
   return pdfDoc.save();
