@@ -6811,6 +6811,7 @@ async function buildLkwSinglePdfWithPdfLib({ userId, truck, repairRows, fuelRows
       }
       y -= rowH;
     };
+    ensureSpace(30 + rowH * 2 + 8);
     drawSectionTitle(title, theme);
     drawHeaderRow();
     if (!rows || rows.length === 0) {
@@ -6846,7 +6847,6 @@ async function buildLkwSinglePdfWithPdfLib({ userId, truck, repairRows, fuelRows
 
   const drawRepairVisualTable = (title, rows, periodLabel) => {
     const theme = themeForTitle(title);
-    drawSectionTitle(title, theme);
     const dataRows = rows || [];
     const rowH = 22;
     const textSize = 8;
@@ -6857,6 +6857,8 @@ async function buildLkwSinglePdfWithPdfLib({ userId, truck, repairRows, fuelRows
     const tableW = periodW + rowsW + amountW + barW;
     const tableX = margin;
     const maxAmount = Math.max(1, ...dataRows.map((row) => toNumberSafe(row?.total_price, 0)));
+    ensureSpace(30 + rowH * 2 + 8);
+    drawSectionTitle(title, theme);
 
     const drawHeaderRow = () => {
       page.drawRectangle({ x: tableX, y: y - rowH + 2, width: tableW, height: rowH, color: theme.head });
@@ -6901,7 +6903,6 @@ async function buildLkwSinglePdfWithPdfLib({ userId, truck, repairRows, fuelRows
 
   const drawRepairMonthChart = (title, rows) => {
     const theme = themeForTitle(title);
-    drawSectionTitle(title, theme);
     const monthRows = rows || [];
     const byYear = new Map();
     for (const row of monthRows) {
@@ -6929,6 +6930,8 @@ async function buildLkwSinglePdfWithPdfLib({ userId, truck, repairRows, fuelRows
     const monthW = (chartW - yearW - gap * 11) / 12;
     const rowH = 62;
     const maxBarH = 26;
+    ensureSpace(30 + rowH + 8);
+    drawSectionTitle(title, theme);
 
     if (!years.length) {
       page.drawRectangle({ x: margin, y: y - 22, width: chartW, height: 20, color: theme.row, borderColor: theme.border, borderWidth: 0.5 });
