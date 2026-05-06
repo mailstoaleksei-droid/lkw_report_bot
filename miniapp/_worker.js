@@ -7100,14 +7100,13 @@ async function buildLkwSinglePdfWithPdfLib({ userId, truck, repairRows, fuelRows
     "Repair: Details nach Tagen",
     [
       { key: "invoice_date", label: "Datum", width: 70 },
-      { key: "period", label: "Periode", width: 72 },
-      { key: "invoice", label: "Invoice", width: 92 },
-      { key: "repair_name", label: "Work", width: 188 },
+      { key: "invoice", label: "Invoice", width: 96 },
+      { key: "repair_name", label: "Work", width: 178 },
       { key: "seller", label: "Seller", width: 150 },
-      { key: "kategorie", label: "Kategorie", width: 76 },
+      { key: "buyer", label: "Buyer", width: 154 },
       { key: "total_price", label: "Kosten", width: 86 },
     ],
-    (repairRows || []).map((row) => ({ ...row, period: `${safeText(row?.report_year, "")}/${pad2(toIntSafe(row?.report_month, 0))}` })),
+    repairRows || [],
     { textSize: 7.4, rowHeight: 16, formatValue: (row, key) => key === "total_price" ? formatMoney(row?.[key]) : safeText(row?.[key], "") },
   );
 
