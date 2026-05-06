@@ -1071,6 +1071,17 @@ GROUP BY source, report_year, report_month
 ORDER BY report_year, report_month, source;
 `;
 
+const LKW_TOTAL_MILEAGE_SQL = `
+SELECT
+  COALESCE(km_end, 0)::numeric AS total_km,
+  to_char(report_date, 'DD/MM/YYYY') AS mileage_date
+FROM report_yf_lkw_daily
+WHERE lower(replace(trim(lkw_nummer), ' ', '')) = lower(replace(trim($1::text), ' ', ''))
+  AND COALESCE(km_end, 0) > 0
+ORDER BY report_date DESC, source_row DESC
+LIMIT 1;
+`;
+
 const DIESEL_LKW_CARD_SQL = `
 SELECT
   t.external_id AS lkw_id,
@@ -6602,7 +6613,7 @@ function buildLkwFuelYearRows(fuelRows = [], truck = {}) {
     });
 }
 
-async function buildLkwSinglePdfWithPdfLib({ userId, truck, repairRows, fuelRows, revenueRows }) {
+async function buildLkwSinglePdfWithPdfLib({ userId, truck, repairRows, fuelRows, revenueRows, mileageRow }) {
   const pdfDoc = await PDFDocument.create();
   const font = await pdfDoc.embedFont(StandardFonts.Helvetica);
   const boldFont = await pdfDoc.embedFont(StandardFonts.HelveticaBold);
@@ -6632,6 +6643,8 @@ async function buildLkwSinglePdfWithPdfLib({ userId, truck, repairRows, fuelRows
   const totalAdBlueLiters = adBlueFuelRows.reduce((sum, row) => sum + toNumberSafe(row?.quantity_liters, 0), 0);
   const totalAdBlueNet = adBlueFuelRows.reduce((sum, row) => sum + toNumberSafe(row?.total_net, 0), 0);
   const totalRevenue = (revenueRows || []).reduce((sum, row) => sum + toNumberSafe(row?.revenue_amount, 0), 0);
+  const totalMileageKm = toNumberSafe(mileageRow?.total_km, 0);
+  const totalMileageDate = safeText(mileageRow?.mileage_date, "").trim();
 
   let page = pdfDoc.addPage(pageSize);
   let y = page.getHeight() - margin;
@@ -6677,6 +6690,7 @@ async function buildLkwSinglePdfWithPdfLib({ userId, truck, repairRows, fuelRows
       ["Diesel", `${formatMoneyInt(totalDieselLiters)} L`, `${formatMoney(totalDieselNet)} Euro`],
       ["AdBlue", `${formatMoneyInt(totalAdBlueLiters)} L`, `${formatMoney(totalAdBlueNet)} Euro`],
       ["Revenue", `${formatMoney(totalRevenue)} Euro`, "Carlo + Contado"],
+      ["Gesamt KM", totalMileageKm > 0 ? `${formatMoneyInt(totalMileageKm)} km` : "-", totalMileageDate ? `YF ${totalMileageDate}` : "YF"],
       ["KM 2025", `${formatMoneyInt(truck?.km_2025)} km`, ""],
       ["KM 2026", `${formatMoneyInt(truck?.km_2026)} km`, ""],
     ];
@@ -9301,6 +9315,7 @@ async function handleGenerateWithBody(body, env, enforceRateLimit = true) {
     let repairRows = [];
     let fuelRows = [];
     let revenueRows = [];
+    let mileageRow = null;
     const filterLkwId = valid.reportType === "lkw_single" ? safeText(valid.lkwId, "").trim() : "";
     try {
       const result = await queryNeon(
@@ -9311,14 +9326,16 @@ async function handleGenerateWithBody(body, env, enforceRateLimit = true) {
       rows = result.rows || [];
       if (valid.reportType === "lkw_single" && rows.length) {
         const lkwNumber = safeText(rows[0]?.lkw_nummer || filterLkwId, "").trim();
-        const [repairResult, fuelResult, revenueResult] = await Promise.all([
+        const [repairResult, fuelResult, revenueResult, mileageResult] = await Promise.all([
           queryNeon(dbConnectionString, LKW_REPAIR_SINGLE_DETAIL_SQL, [lkwNumber]),
           queryNeon(dbConnectionString, LKW_FUEL_MONTHLY_SQL, [lkwNumber]),
           queryNeon(dbConnectionString, LKW_REVENUE_MONTHLY_SQL, [lkwNumber]),
+          queryNeon(dbConnectionString, LKW_TOTAL_MILEAGE_SQL, [lkwNumber]),
         ]);
         repairRows = repairResult.rows || [];
         fuelRows = fuelResult.rows || [];
         revenueRows = revenueResult.rows || [];
+        mileageRow = (mileageResult.rows || [])[0] || null;
       }
     } catch (err) {
       return json(
@@ -9347,6 +9364,7 @@ async function handleGenerateWithBody(body, env, enforceRateLimit = true) {
           repairRows,
           fuelRows,
           revenueRows,
+          mileageRow,
         });
       } else {
         pdfBytes = await buildLkwMasterPdfWithPdfLib({

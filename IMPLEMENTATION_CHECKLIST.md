@@ -114,6 +114,7 @@
     - includes separate Staack + Shell Diesel monthly liters/net amounts and yearly average consumption (`liters / yearly KM * 100`)
     - includes separate Staack + Shell AdBlue monthly liters/net amounts and yearly average consumption (`liters / yearly KM * 100`)
     - includes Carlo + Contado monthly revenue for the selected truck number
+    - includes total mileage KPI from `YF`: latest `Kilometerstand Ende` by `Datum` for the selected LKW
     - ETL tables added: `report_lkw_fuel_transactions`, `report_lkw_revenue_records`
   - `Alle LKW` PDF
   - `Repair All LKW` PDF:
