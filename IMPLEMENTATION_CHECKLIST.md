@@ -156,6 +156,7 @@
     - visual style aligned with `LKW Karte`: themed KPI cards and colored sections for master data, document validity, vacation/sick status, work performance, and bonus
     - empty/zero optional master fields are hidden from the card grids
     - vacation/sick span table includes calendar day count for each continuous period
+    - vacation/sick KPI cards and span day counts are calculated from weekly status rows clipped to the report year
   - report 3: `Container / Planen`
     - list of active drivers filtered by type from sheet `Fahrer`
   - report 4: `Firma`

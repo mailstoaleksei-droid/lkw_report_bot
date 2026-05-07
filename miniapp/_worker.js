@@ -7852,6 +7852,8 @@ async function buildFahrerCardPdfWithPdfLib({ userId, reportYear, driver, weekly
   const sickDaysYtd = statusRangeEndTs >= yearStartTs
     ? countFahrerStatusDaysInRange(weeklyRows, "K", yearStartTs, statusRangeEndTs)
     : 0;
+  const vacationDaysYear = countFahrerStatusDaysInRange(weeklyRows, "U", yearStartTs, yearEndTs);
+  const sickDaysYear = countFahrerStatusDaysInRange(weeklyRows, "K", yearStartTs, yearEndTs);
 
   let page = pdfDoc.addPage(pageSize);
   let y = page.getHeight() - margin;
@@ -7899,7 +7901,7 @@ async function buildFahrerCardPdfWithPdfLib({ userId, reportYear, driver, weekly
       {
         label: `Urlaub ${effectiveYear}`,
         lines: [
-          { text: formatTagCount(driver?.urlaub_gesamt), size: metricPrimarySize, font: boldFont, color: themes.vacation.accent },
+          { text: formatTagCount(vacationDaysYear), size: metricPrimarySize, font: boldFont, color: themes.vacation.accent },
           { text: "", size: metricSecondarySize, font, color: mutedColor },
         ],
         theme: themes.vacation,
@@ -7907,7 +7909,7 @@ async function buildFahrerCardPdfWithPdfLib({ userId, reportYear, driver, weekly
       {
         label: `Krankheit ${effectiveYear}`,
         lines: [
-          { text: formatTagCount(driver?.krankheitstage), size: metricPrimarySize, font: boldFont, color: themes.sick.accent },
+          { text: formatTagCount(sickDaysYear), size: metricPrimarySize, font: boldFont, color: themes.sick.accent },
           { text: "", size: metricSecondarySize, font, color: mutedColor },
         ],
         theme: themes.sick,
@@ -8082,8 +8084,22 @@ async function buildFahrerCardPdfWithPdfLib({ userId, reportYear, driver, weekly
   ], 4, themes.documents);
 
   const spanRows = [
-    ...vacationSpans.map((row) => ({ type: "Urlaub", weeks: row.weeks_label, from: row.from_label, to: row.to_label, days: formatTagCount(row.days_count), _theme: themes.vacation })),
-    ...sickSpans.map((row) => ({ type: "Krank", weeks: row.weeks_label, from: row.from_label, to: row.to_label, days: formatTagCount(row.days_count), _theme: themes.sick })),
+    ...vacationSpans.map((row) => ({
+      type: "Urlaub",
+      weeks: row.weeks_label,
+      from: row.from_label,
+      to: row.to_label,
+      days: formatTagCount(countOverlapDays(parseDdMmYyyy(row.from_label), parseDdMmYyyy(row.to_label), yearStartTs, yearEndTs)),
+      _theme: themes.vacation,
+    })),
+    ...sickSpans.map((row) => ({
+      type: "Krank",
+      weeks: row.weeks_label,
+      from: row.from_label,
+      to: row.to_label,
+      days: formatTagCount(countOverlapDays(parseDdMmYyyy(row.from_label), parseDdMmYyyy(row.to_label), yearStartTs, yearEndTs)),
+      _theme: themes.sick,
+    })),
   ];
   drawTable(
     "Urlaub und Krankheit nach Wochen",
