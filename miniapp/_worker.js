@@ -7429,6 +7429,12 @@ function normalizeFahrerWeekCode(value) {
 }
 
 function buildFahrerWeekSpans(rows, targetCode) {
+  const countSpanDays = (fromLabel, toLabel) => {
+    const fromTs = parseDdMmYyyy(fromLabel);
+    const toTs = parseDdMmYyyy(toLabel);
+    return countOverlapDays(fromTs, toTs, fromTs, toTs);
+  };
+
   const grouped = new Map();
   for (const row of rows || []) {
     const code = normalizeFahrerWeekCode(row?.week_code);
@@ -7457,13 +7463,16 @@ function buildFahrerWeekSpans(rows, targetCode) {
         && item.iso_week === prev.iso_week + 1;
       if (!start || !contiguous) {
         if (start && prev) {
+          const fromLabel = start.week_start;
+          const toLabel = prev.week_end;
           spans.push({
             fahrer_id: start.fahrer_id,
             fahrer_name: start.fahrer_name,
             company_name: start.company_name,
             weeks_label: start.iso_week === prev.iso_week ? `W${pad2(start.iso_week)}` : `W${pad2(start.iso_week)}-${pad2(prev.iso_week)}`,
-            from_label: start.week_start,
-            to_label: prev.week_end,
+            from_label: fromLabel,
+            to_label: toLabel,
+            days_count: countSpanDays(fromLabel, toLabel),
           });
         }
         start = item;
@@ -7471,13 +7480,16 @@ function buildFahrerWeekSpans(rows, targetCode) {
       prev = item;
     }
     if (start && prev) {
+      const fromLabel = start.week_start;
+      const toLabel = prev.week_end;
       spans.push({
         fahrer_id: start.fahrer_id,
         fahrer_name: start.fahrer_name,
         company_name: start.company_name,
         weeks_label: start.iso_week === prev.iso_week ? `W${pad2(start.iso_week)}` : `W${pad2(start.iso_week)}-${pad2(prev.iso_week)}`,
-        from_label: start.week_start,
-        to_label: prev.week_end,
+        from_label: fromLabel,
+        to_label: toLabel,
+        days_count: countSpanDays(fromLabel, toLabel),
       });
     }
   }
@@ -8070,16 +8082,17 @@ async function buildFahrerCardPdfWithPdfLib({ userId, reportYear, driver, weekly
   ], 4, themes.documents);
 
   const spanRows = [
-    ...vacationSpans.map((row) => ({ type: "Urlaub", weeks: row.weeks_label, from: row.from_label, to: row.to_label, _theme: themes.vacation })),
-    ...sickSpans.map((row) => ({ type: "Krank", weeks: row.weeks_label, from: row.from_label, to: row.to_label, _theme: themes.sick })),
+    ...vacationSpans.map((row) => ({ type: "Urlaub", weeks: row.weeks_label, from: row.from_label, to: row.to_label, days: formatTagCount(row.days_count), _theme: themes.vacation })),
+    ...sickSpans.map((row) => ({ type: "Krank", weeks: row.weeks_label, from: row.from_label, to: row.to_label, days: formatTagCount(row.days_count), _theme: themes.sick })),
   ];
   drawTable(
     "Urlaub und Krankheit nach Wochen",
     [
-      { key: "type", label: "Typ", width: 120 },
-      { key: "weeks", label: "Wochen", width: 140 },
-      { key: "from", label: "Von", width: 120 },
-      { key: "to", label: "Bis", width: 120 },
+      { key: "type", label: "Typ", width: 110 },
+      { key: "weeks", label: "Wochen", width: 130 },
+      { key: "from", label: "Von", width: 110 },
+      { key: "to", label: "Bis", width: 110 },
+      { key: "days", label: "Tage", width: 90 },
     ],
     spanRows,
     { theme: themes.vacation },

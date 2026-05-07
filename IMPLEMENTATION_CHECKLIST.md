@@ -155,6 +155,7 @@
     - monthly performance table limited to the report year and rebuilt from `BonusDynamik` columns `KM`, `CT`, `Final`, `Days`
     - visual style aligned with `LKW Karte`: themed KPI cards and colored sections for master data, document validity, vacation/sick status, work performance, and bonus
     - empty/zero optional master fields are hidden from the card grids
+    - vacation/sick span table includes calendar day count for each continuous period
   - report 3: `Container / Planen`
     - list of active drivers filtered by type from sheet `Fahrer`
   - report 4: `Firma`
