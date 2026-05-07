@@ -2131,6 +2131,7 @@
         invalidYearWeek: "Invalid year/week",
         genericError: "Error",
         networkError: "Network error",
+        reportTimeout: "Report generation timed out. ETL may be running; try again in 1-2 minutes.",
         pdfNotAvailable: "PDF is not available",
         failedLoadLkwList: "Failed to load LKW list",
         failedLoadDriverList: "Failed to load driver list",
@@ -2262,6 +2263,7 @@
         invalidYearWeek: "Ungültiges Jahr/Woche",
         genericError: "Fehler",
         networkError: "Netzwerkfehler",
+        reportTimeout: "Bericht dauert zu lange. ETL laeuft moeglicherweise; bitte in 1-2 Minuten erneut versuchen.",
         pdfNotAvailable: "PDF ist nicht verfügbar",
         failedLoadLkwList: "LKW-Liste konnte nicht geladen werden",
         failedLoadDriverList: "Fahrerliste konnte nicht geladen werden",
@@ -2393,6 +2395,7 @@
         invalidYearWeek: "Некорректный год/неделя",
         genericError: "Ошибка",
         networkError: "Ошибка сети",
+        reportTimeout: "Отчет формируется слишком долго. Возможно, идет ETL; попробуйте еще раз через 1-2 минуты.",
         pdfNotAvailable: "PDF недоступен",
         failedLoadLkwList: "Не удалось загрузить список LKW",
         failedLoadDriverList: "Не удалось загрузить список водителей",
@@ -2414,6 +2417,7 @@
     let latestPdfOpenUrl = "";
     let latestPdfSaveUrl = "";
     let cachedMeta = null;
+    let reportGenerateInFlight = false;
     const META_CACHE_KEY = "lkw_report_meta_cache_v1";
     const LOOKUP_CACHE_PREFIX = "lkw_report_lookup_cache_v1:";
 
@@ -3275,11 +3279,23 @@
 
     async function sendReportGenerate(reportType, payload) {
       haptic("impact");
-      
-      const btn = $("btnPrimary");
-      const originalText = btn.textContent;
-      btn.disabled = true;
-      btn.innerHTML = `<span class="loading"><span class="spinner"></span>${L("sending")}</span>`;
+
+      if (reportGenerateInFlight) {
+        showToast(L("sending"), 1400);
+        return false;
+      }
+
+      const active = document.activeElement;
+      const btn = active && active.tagName === "BUTTON" ? active : $("btnPrimary");
+      const originalText = btn ? btn.textContent : "";
+      reportGenerateInFlight = true;
+      if (btn) {
+        btn.disabled = true;
+        btn.innerHTML = `<span class="loading"><span class="spinner"></span>${L("sending")}</span>`;
+      }
+
+      const controller = typeof AbortController === "function" ? new AbortController() : null;
+      const timer = controller ? setTimeout(() => controller.abort(), 120000) : null;
 
       try {
         clearPdfUrl();
@@ -3287,6 +3303,7 @@
         const resp = await fetch("/api/generate", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
+          ...(controller ? { signal: controller.signal } : {}),
           body: JSON.stringify({
             initData: ctx.initData || "",
             report_type: reportType,
@@ -3325,11 +3342,15 @@
         return false;
       } catch (err) {
         haptic("error");
-        showToast(err?.message || L("networkError"));
+        showToast(err?.name === "AbortError" ? L("reportTimeout") : (err?.message || L("networkError")));
         return false;
       } finally {
-        btn.disabled = false;
-        btn.textContent = originalText;
+        reportGenerateInFlight = false;
+        if (timer) clearTimeout(timer);
+        if (btn) {
+          btn.disabled = false;
+          btn.textContent = originalText;
+        }
       }
     }
 
