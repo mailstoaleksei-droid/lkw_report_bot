@@ -10755,6 +10755,75 @@ async function buildMetaWithAccess(request, env) {
   }
 }
 
+async function handleLookup(request, env) {
+  const url = new URL(request.url);
+  const kind = String(url.searchParams.get("kind") || "").trim();
+  const dbConnectionString = getDbConnectionString(env);
+  if (!dbConnectionString) {
+    return json({ ok: false, error: "Database is not configured" }, 500, {
+      "Cache-Control": "no-store",
+    });
+  }
+
+  try {
+    if (kind === "lkw_vehicles") {
+      const result = await queryNeon(
+        dbConnectionString,
+        `
+          SELECT
+            external_id AS lkw_id,
+            COALESCE(NULLIF(plate_number, ''), NULLIF(raw_payload->>'LKW-Nummer', ''), NULLIF(raw_payload->>'Number', '')) AS lkw_nummer
+          FROM trucks
+          ORDER BY external_id
+        `,
+        [],
+      );
+      const items = (result.rows || []).map((row) => ({
+        lkw_id: safeText(row.lkw_id, ""),
+        lkw_nummer: safeText(row.lkw_nummer, ""),
+        label: [safeText(row.lkw_id, ""), safeText(row.lkw_nummer, "")].filter(Boolean).join(" - "),
+      })).filter((row) => row.lkw_id);
+      return json({ ok: true, kind, items }, 200, { "Cache-Control": "no-store" });
+    }
+
+    if (kind === "fahrer_drivers") {
+      const result = await queryNeon(
+        dbConnectionString,
+        `
+          SELECT
+            external_id AS fahrer_id,
+            full_name AS fahrername
+          FROM drivers
+          WHERE COALESCE(external_id, '') <> ''
+            AND COALESCE(full_name, '') <> ''
+          ORDER BY external_id
+        `,
+        [],
+      );
+      const items = (result.rows || []).map((row) => ({
+        fahrer_id: safeText(row.fahrer_id, ""),
+        fahrername: safeText(row.fahrername, ""),
+        label: [safeText(row.fahrer_id, ""), safeText(row.fahrername, "")].filter(Boolean).join(" - "),
+      })).filter((row) => row.fahrer_id);
+      return json({ ok: true, kind, items }, 200, { "Cache-Control": "no-store" });
+    }
+
+    return json({ ok: false, error: "Unknown lookup kind" }, 400, {
+      "Cache-Control": "no-store",
+    });
+  } catch (err) {
+    return json(
+      {
+        ok: false,
+        error: "Failed to load lookup",
+        details: String(err?.message || err || "unknown error"),
+      },
+      500,
+      { "Cache-Control": "no-store" },
+    );
+  }
+}
+
 export default {
   async fetch(request, env) {
     const url = new URL(request.url);
@@ -10770,6 +10839,10 @@ export default {
       return json(payload, 200, {
         "Cache-Control": "no-store",
       });
+    }
+
+    if (request.method === "GET" && url.pathname === "/api/lookup") {
+      return handleLookup(request, env);
     }
 
     if (request.method === "POST" && url.pathname === "/api/generate") {

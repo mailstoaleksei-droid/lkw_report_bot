@@ -2415,6 +2415,7 @@
     let latestPdfSaveUrl = "";
     let cachedMeta = null;
     const META_CACHE_KEY = "lkw_report_meta_cache_v1";
+    const LOOKUP_CACHE_PREFIX = "lkw_report_lookup_cache_v1:";
 
     // === UTILS ===
     const $ = (id) => document.getElementById(id);
@@ -2495,6 +2496,26 @@
         localStorage.setItem(META_CACHE_KEY, JSON.stringify({
           saved_at: new Date().toISOString(),
           data,
+        }));
+      } catch {}
+    }
+
+    function readCachedLookup(kind) {
+      try {
+        const parsed = JSON.parse(localStorage.getItem(`${LOOKUP_CACHE_PREFIX}${kind}`) || "null");
+        if (Array.isArray(parsed?.items)) return parsed.items;
+      } catch {}
+      const meta = readCachedMeta();
+      const fromMeta = meta?.lookups?.[kind];
+      return Array.isArray(fromMeta) ? fromMeta : null;
+    }
+
+    function writeCachedLookup(kind, items) {
+      if (!kind || !Array.isArray(items)) return;
+      try {
+        localStorage.setItem(`${LOOKUP_CACHE_PREFIX}${kind}`, JSON.stringify({
+          saved_at: new Date().toISOString(),
+          items,
         }));
       } catch {}
     }
@@ -2930,6 +2951,34 @@
       }
     }
 
+    async function fetchLookupServer(kind, { timeoutMs = 1800, allowCache = true } = {}) {
+      const ctx = getTgContext();
+      const lookupUrl = new URL("/api/lookup", window.location.origin);
+      lookupUrl.searchParams.set("kind", kind);
+      if (ctx.initData) lookupUrl.searchParams.set("initData", ctx.initData);
+      const controller = typeof AbortController === "function" ? new AbortController() : null;
+      const timer = controller ? setTimeout(() => controller.abort(), timeoutMs) : null;
+      try {
+        const resp = await fetch(lookupUrl.toString(), {
+          cache: "no-store",
+          headers: { "Accept": "application/json" },
+          ...(controller ? { signal: controller.signal } : {}),
+        });
+        const data = await resp.json().catch(() => null);
+        if (!resp.ok || !data || !Array.isArray(data.items)) {
+          throw new Error(data?.error || "Failed to load lookup");
+        }
+        writeCachedLookup(kind, data.items);
+        return data.items;
+      } catch (err) {
+        const fallback = allowCache ? readCachedLookup(kind) : null;
+        if (fallback) return fallback;
+        throw err;
+      } finally {
+        if (timer) clearTimeout(timer);
+      }
+    }
+
     async function populateLkwVehicleSelect(selectId) {
       const select = $(selectId);
       if (!select) return;
@@ -2948,8 +2997,7 @@
       const list = $(listId);
       if (!list) return;
       try {
-        const meta = await fetchMetaServer();
-        const items = Array.isArray(meta?.lookups?.lkw_vehicles) ? meta.lookups.lkw_vehicles : [];
+        const items = await fetchLookupServer("lkw_vehicles");
         list.innerHTML = items.map((item) => {
           const id = String(item.lkw_id || "");
           const number = String(item.lkw_nummer || "");
@@ -3016,12 +3064,15 @@
       const list = $(listId);
       if (!list) return;
       try {
-        const meta = await fetchMetaServer();
-        const items = Array.isArray(meta?.lookups?.fahrer_drivers) ? meta.lookups.fahrer_drivers : [];
+        const items = await fetchLookupServer("fahrer_drivers");
         list.innerHTML = items.map((item) => {
-          const value = String(item.fahrer_id || "");
+          const id = String(item.fahrer_id || "");
+          const name = String(item.fahrername || "");
           const label = item.label || [item.fahrer_id, item.fahrername].filter(Boolean).join(" - ");
-          return `<option value="${escapeHtml(value)}" label="${escapeHtml(label)}"></option>`;
+          return [
+            id ? `<option value="${escapeHtml(id)}" label="${escapeHtml(label)}"></option>` : "",
+            name ? `<option value="${escapeHtml(name)}" label="${escapeHtml(label)}"></option>` : "",
+          ].join("");
         }).join("");
       } catch {
         list.innerHTML = "";
@@ -3853,7 +3904,6 @@
         `);
         setNote("");
         hideSheetFooter();
-        await populateLkwVehicleDatalist("lkwSingleVehicleOptions");
         $("lkwSingleRun").onclick = async () => {
           const lkwId = String($("lkwSingleVehicle")?.value || "").trim();
           if (!lkwId) {
@@ -3863,6 +3913,7 @@
           }
           await sendReportGenerate("lkw_single", { lkw_id: lkwId });
         };
+        populateLkwVehicleDatalist("lkwSingleVehicleOptions");
       };
 
       const renderAll = () => {
@@ -4026,7 +4077,6 @@
         `);
         setNote("");
         hideSheetFooter();
-        await populateFahrerDriverDatalist("fahrerCardDriverOptions");
         $("fahrerCardRun").onclick = async () => {
           const driverQuery = String($("fahrerCardDriverQuery")?.value || "").trim();
           if (!driverQuery) {
@@ -4035,6 +4085,7 @@
           }
           await sendReportGenerate("fahrer_card", { driver_query: driverQuery });
         };
+        populateFahrerDriverDatalist("fahrerCardDriverOptions");
       };
 
       const renderDriverType = () => {
