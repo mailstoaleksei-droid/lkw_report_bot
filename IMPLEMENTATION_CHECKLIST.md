@@ -110,10 +110,12 @@
     - source master data: sheet `LKW`, columns `A-W`
     - supports current `LKW` headers: `HU`, `SP`, `57B`, `Gesamtkosten für die Wartung`
     - includes Repair full-period total, separate yearly and monthly visual cost summaries, and day-level detail for the selected truck number
+    - `Repair: Details nach Tagen` columns: `Datum`, `Invoice`, `Work`, `Seller`, `Buyer`, `Kosten`
+    - service counter columns named `Zeilen` are hidden from the report tables
     - uses separate visual color themes for Repair, Diesel, AdBlue, Revenue and mileage blocks
     - empty LKW status is rendered as `aktiv`
-    - includes separate Staack + Shell Diesel monthly liters/net amounts, average net cost per liter, and yearly average consumption (`liters / yearly KM * 100`)
-    - includes separate Staack + Shell AdBlue monthly liters/net amounts, average net cost per liter, and yearly average consumption (`liters / yearly KM * 100`)
+    - includes separate Staack + Shell Diesel monthly liters/net amounts, ASCII `Avg Euro/L` average net cost per liter, and yearly average consumption (`liters / yearly KM * 100`)
+    - includes separate Staack + Shell AdBlue monthly liters/net amounts, ASCII `Avg Euro/L` average net cost per liter, and yearly average consumption (`liters / yearly KM * 100`)
     - includes Carlo + Contado monthly revenue for the selected truck number
     - includes total mileage KPI from `YF`: latest `Kilometerstand Ende` by `Datum` for the selected LKW
     - ETL tables added: `report_lkw_fuel_transactions`, `report_lkw_revenue_records`
@@ -143,7 +145,7 @@
   - dismissed drivers are excluded from weekly summary from the dismissal week
   - report 2: `Fahrerkarte` / `Карточка водителя`
   - select one driver by `Fahrer-ID` or `Fahrername` from a searchable list
-  - PDF includes centered driver card fields from sheet `Fahrer` columns `A-W`, vacation/sick totals and weekly spans, monthly Yellow Fox mileage by LKW, and monthly bonus values
+  - PDF includes centered driver card fields from sheet `Fahrer` columns `A-W`, including `H` = `Eintrittsdatum des Fahrers` and `N` = `Fahrerkarte gültig bis`, vacation/sick totals and weekly spans, monthly Yellow Fox mileage by LKW, and monthly bonus values
   - `Fahrerkarte` visual and metric updates:
     - generated label normalized to ASCII-safe format for default PDF font
     - KPI cards unified by font sizes and spacing
@@ -151,6 +153,8 @@
     - work time uses `Days` from `BonusDynamik`
     - containers use `CT` from `BonusDynamik`
     - monthly performance table limited to the report year and rebuilt from `BonusDynamik` columns `KM`, `CT`, `Final`, `Days`
+    - visual style aligned with `LKW Karte`: themed KPI cards and colored sections for master data, document validity, vacation/sick status, work performance, and bonus
+    - empty/zero optional master fields are hidden from the card grids
   - report 3: `Container / Planen`
     - list of active drivers filtered by type from sheet `Fahrer`
   - report 4: `Firma`

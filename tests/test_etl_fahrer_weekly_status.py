@@ -2,7 +2,7 @@ from datetime import date
 
 from openpyxl import Workbook
 
-from etl_xlsm_to_postgres import extract_fahrer_weekly_statuses
+from etl_xlsm_to_postgres import extract_drivers, extract_fahrer_weekly_statuses
 
 
 def _build_fahrer_sheet():
@@ -72,6 +72,60 @@ def _build_fahrer_sheet():
     return wb
 
 
+def _build_fahrer_sheet_with_current_card_dates():
+    wb = Workbook()
+    ws = wb.active
+    ws.title = "Fahrer"
+
+    headers = [
+        "Fahrer-ID",
+        "Fahrername",
+        "Firma",
+        "Telefonnummer",
+        "Führerschein",
+        "LKW-Typ",
+        "Arbeitsplan",
+        "Eintrittsdatum\ndes Fahrers",
+        "Status",
+        "Datum entlassen",
+        "Pass gültig bis",
+        "95 Code\nrosa Papier bis",
+        "Art der Wohnungen bis",
+        "Fahrerkarte\ngültig bis",
+    ]
+    sub_headers = [
+        "ID",
+        "Name",
+        "Company",
+        "Phone",
+        "License",
+        "Type",
+        "Schedule",
+        "Driver start\ndate",
+        "Active/Fired",
+        "Date",
+        "Passport valid",
+        "95 code",
+        "Type of residence",
+        "Driver card valid until",
+    ]
+    for idx, value in enumerate(headers, start=1):
+        ws.cell(row=2, column=idx, value=value)
+    for idx, value in enumerate(sub_headers, start=1):
+        ws.cell(row=3, column=idx, value=value)
+
+    ws["A4"] = "F001"
+    ws["B4"] = "Driver One"
+    ws["C4"] = "Groo"
+    ws["D4"] = "+491111"
+    ws["F4"] = "Container"
+    ws["G4"] = "3M/3M"
+    ws["H4"] = date(2026, 1, 1)
+    ws["N4"] = date(2033, 3, 4)
+
+    return wb
+
+
 def test_extract_fahrer_weekly_statuses_parses_all_driver_weeks():
     wb = _build_fahrer_sheet()
 
@@ -108,3 +162,14 @@ def test_extract_fahrer_weekly_statuses_marks_dismissed_driver_inactive_from_wee
     assert week2.is_active_in_week is True
     assert week3.week_start == date(2026, 1, 12)
     assert week3.is_active_in_week is False
+
+
+def test_extract_drivers_preserves_current_fahrer_card_date_columns():
+    wb = _build_fahrer_sheet_with_current_card_dates()
+
+    rows = extract_drivers(wb)
+
+    assert len(rows) == 1
+    payload = rows[0].raw_payload
+    assert payload["Eintrittsdatum\ndes Fahrers"] == "2026-01-01"
+    assert payload["Fahrerkarte\ngültig bis"] == "2033-03-04"

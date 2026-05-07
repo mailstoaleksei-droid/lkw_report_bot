@@ -1334,7 +1334,8 @@ SELECT
   COALESCE(NULLIF(d.raw_payload->>'Pass gültig bis', ''), NULLIF(d.raw_payload->>'Pass gueltig bis', '')) AS pass_gueltig_bis,
   COALESCE(NULLIF(d.raw_payload->>'95 Code\nrosa Papier bis', ''), NULLIF(d.raw_payload->>'95 Code rosa Papier bis', '')) AS code_95_bis,
   COALESCE(NULLIF(d.raw_payload->>'Art der Wohnungen bis', ''), NULLIF(d.raw_payload->>'Type of residence', '')) AS wohnungen_bis,
-  COALESCE(NULLIF(d.raw_payload->>'Eintrittsdatum', ''), NULLIF(d.raw_payload->>'Entry Date', '')) AS eintrittsdatum,
+  COALESCE(NULLIF(d.raw_payload->>'Fahrerkarte\ngültig bis', ''), NULLIF(d.raw_payload->>'Fahrerkarte gültig bis', ''), NULLIF(d.raw_payload->>'Fahrerkarte gueltig bis', ''), NULLIF(d.raw_payload->>'Driver card valid until', '')) AS fahrerkarte_gueltig_bis,
+  COALESCE(NULLIF(d.raw_payload->>'Eintrittsdatum\ndes Fahrers', ''), NULLIF(d.raw_payload->>'Eintrittsdatum des Fahrers', ''), NULLIF(d.raw_payload->>'Driver start\ndate', ''), NULLIF(d.raw_payload->>'Driver start date', ''), NULLIF(d.raw_payload->>'Eintrittsdatum', ''), NULLIF(d.raw_payload->>'Entry Date', '')) AS eintrittsdatum,
   COALESCE(NULLIF(d.raw_payload->>'Gesundheitsbuch\nbis', ''), NULLIF(d.raw_payload->>'Gesundheitsbuch bis', ''), NULLIF(d.raw_payload->>'Health book', '')) AS gesundheitsbuch_bis,
   COALESCE(NULLIF(d.raw_payload->>'ESDK\nVersicherung bis', ''), NULLIF(d.raw_payload->>'ESDK Versicherung bis', ''), NULLIF(d.raw_payload->>'ESDK / insurance up to', '')) AS esdk_bis,
   COALESCE(NULLIF(d.raw_payload->>'A1 Formular gültig bis', ''), NULLIF(d.raw_payload->>'A1 Form valid until', '')) AS a1_bis,
@@ -7743,6 +7744,72 @@ async function buildFahrerCardPdfWithPdfLib({ userId, reportYear, driver, weekly
   const tableHeadText = rgb(1, 1, 1);
   const borderColor = rgb(0.72, 0.79, 0.88);
   const oddBg = rgb(0.965, 0.98, 1);
+  const themes = {
+    master: {
+      accent: accentColor,
+      head: tableHeadBg,
+      bg: cardBg,
+      row: oddBg,
+      border: borderColor,
+    },
+    documents: {
+      accent: rgb(0.18, 0.45, 0.62),
+      head: rgb(0.10, 0.34, 0.50),
+      bg: rgb(0.94, 0.985, 0.995),
+      row: rgb(0.965, 0.992, 0.998),
+      border: rgb(0.58, 0.78, 0.84),
+    },
+    vacation: {
+      accent: rgb(0.78, 0.45, 0.12),
+      head: rgb(0.60, 0.32, 0.07),
+      bg: rgb(1, 0.975, 0.92),
+      row: rgb(1, 0.985, 0.945),
+      border: rgb(0.88, 0.75, 0.48),
+    },
+    sick: {
+      accent: rgb(0.68, 0.22, 0.22),
+      head: rgb(0.52, 0.14, 0.16),
+      bg: rgb(1, 0.95, 0.95),
+      row: rgb(1, 0.972, 0.972),
+      border: rgb(0.88, 0.62, 0.62),
+    },
+    work: {
+      accent: rgb(0.25, 0.35, 0.62),
+      head: rgb(0.18, 0.25, 0.48),
+      bg: rgb(0.95, 0.965, 1),
+      row: rgb(0.965, 0.975, 1),
+      border: rgb(0.68, 0.73, 0.88),
+    },
+    bonus: {
+      accent: rgb(0.16, 0.50, 0.28),
+      head: rgb(0.10, 0.36, 0.20),
+      bg: rgb(0.94, 0.985, 0.955),
+      row: rgb(0.965, 0.995, 0.975),
+      border: rgb(0.62, 0.80, 0.67),
+    },
+  };
+
+  const themeForTitle = (title) => {
+    const normalized = safeText(title, "").toLowerCase();
+    if (normalized.includes("dokument") || normalized.includes("gueltig") || normalized.includes("gültig")) return themes.documents;
+    if (normalized.includes("urlaub")) return themes.vacation;
+    if (normalized.includes("krank")) return themes.sick;
+    if (normalized.includes("bonus")) return themes.bonus;
+    if (normalized.includes("leistung") || normalized.includes("km") || normalized.includes("work")) return themes.work;
+    return themes.master;
+  };
+
+  const formatFahrerCardValue = (value, kind = "text") => {
+    const raw = String(value ?? "").trim();
+    if (!raw) return "";
+    if (kind === "numberish") {
+      const normalized = raw.replace(/\s+/g, "").replace(",", ".");
+      const n = Number(normalized);
+      if (Number.isFinite(n) && Math.abs(n) < 0.0000001) return "";
+    }
+    if (raw === "0" || raw === "0.0" || raw === "0.00") return "";
+    return raw;
+  };
 
   const effectiveYear = toIntSafe(reportYear, new Date().getUTCFullYear());
   const vacationSpans = buildFahrerWeekSpans(weeklyRows, "U");
@@ -7820,44 +7887,50 @@ async function buildFahrerCardPdfWithPdfLib({ userId, reportYear, driver, weekly
       {
         label: `Urlaub ${effectiveYear}`,
         lines: [
-          { text: formatTagCount(driver?.urlaub_gesamt), size: metricPrimarySize, font: boldFont, color: accentColor },
+          { text: formatTagCount(driver?.urlaub_gesamt), size: metricPrimarySize, font: boldFont, color: themes.vacation.accent },
           { text: "", size: metricSecondarySize, font, color: mutedColor },
         ],
+        theme: themes.vacation,
       },
       {
         label: `Krankheit ${effectiveYear}`,
         lines: [
-          { text: formatTagCount(driver?.krankheitstage), size: metricPrimarySize, font: boldFont, color: accentColor },
+          { text: formatTagCount(driver?.krankheitstage), size: metricPrimarySize, font: boldFont, color: themes.sick.accent },
           { text: "", size: metricSecondarySize, font, color: mutedColor },
         ],
+        theme: themes.sick,
       },
       {
         label: `KM ${effectiveYear}`,
         lines: [
-          { text: `${formatMoneyInt(totalKm)} km`, size: metricPrimarySize, font: boldFont, color: accentColor },
+          { text: `${formatMoneyInt(totalKm)} km`, size: metricPrimarySize, font: boldFont, color: themes.work.accent },
           { text: `Avg ${formatMoneyInt(avgKmPerMonth)} km/Monat`, size: metricSecondarySize, font, color: mutedColor },
         ],
+        theme: themes.work,
       },
       {
         label: `Container ${effectiveYear}`,
         lines: [
-          { text: `${formatMoneyInt(totalCt)} CT`, size: metricPrimarySize, font: boldFont, color: accentColor },
+          { text: `${formatMoneyInt(totalCt)} CT`, size: metricPrimarySize, font: boldFont, color: themes.work.accent },
           { text: `Avg ${formatMoneyInt(avgCtPerMonth)} CT/Monat`, size: metricSecondarySize, font, color: mutedColor },
         ],
+        theme: themes.work,
       },
       {
         label: `Bonus ${effectiveYear}`,
         lines: [
-          { text: `${formatMoneyInt(totalBonus)} Euro`, size: metricPrimarySize, font: boldFont, color: accentColor },
+          { text: `${formatMoneyInt(totalBonus)} Euro`, size: metricPrimarySize, font: boldFont, color: themes.bonus.accent },
           { text: "", size: metricSecondarySize, font, color: mutedColor },
         ],
+        theme: themes.bonus,
       },
       {
         label: `Work time ${effectiveYear}`,
         lines: [
-          { text: `${formatTagCount(workedDaysYtd)} gearbeitet`, size: metricPrimarySize, font: boldFont, color: accentColor },
+          { text: `${formatTagCount(workedDaysYtd)} gearbeitet`, size: metricPrimarySize, font: boldFont, color: themes.master.accent },
           { text: `${formatTagCount(vacationDaysYtd)} Urlaub | ${formatTagCount(sickDaysYtd)} krank`, size: metricSecondarySize, font, color: mutedColor },
         ],
+        theme: themes.master,
       },
     ];
     const gap = 8;
@@ -7865,7 +7938,9 @@ async function buildFahrerCardPdfWithPdfLib({ userId, reportYear, driver, weekly
     const cardHeight = 72;
     cards.forEach((card, idx) => {
       const x = margin + idx * (width + gap);
-      page.drawRectangle({ x, y: y - cardHeight, width, height: cardHeight, color: cardBg, borderColor, borderWidth: 1 });
+      const theme = card.theme || themes.master;
+      page.drawRectangle({ x, y: y - cardHeight, width, height: cardHeight, color: theme.bg, borderColor: theme.border, borderWidth: 1 });
+      page.drawRectangle({ x, y: y - cardHeight, width: 3, height: cardHeight, color: theme.accent });
       const lines = Array.isArray(card.lines) && card.lines.length ? card.lines : [{ text: safeText(card.value, ""), size: metricPrimarySize, font: boldFont, color: accentColor }];
       let lineY = y - 20;
       for (const line of lines) {
@@ -7877,30 +7952,36 @@ async function buildFahrerCardPdfWithPdfLib({ userId, reportYear, driver, weekly
     y -= 88;
   };
 
-  const drawSectionTitle = (title) => {
+  const drawSectionTitle = (title, theme = themeForTitle(title)) => {
     const titleBandHeight = 22;
     const titleTopGap = 8;
     ensureSpace(titleBandHeight + titleTopGap);
     y -= titleTopGap;
     const textY = y - ((titleBandHeight - 11) / 2) - 1;
-    drawText(title, margin, textY, 11, boldFont, textColor);
+    drawText(title, margin, textY, 11, boldFont, theme.accent || textColor);
     y -= titleBandHeight;
   };
 
-  const drawKeyValueGrid = (title, items, columns = 4) => {
-    drawSectionTitle(title);
+  const drawKeyValueGrid = (title, items, columns = 4, theme = themeForTitle(title)) => {
+    const visibleItems = (items || [])
+      .map((item) => ({ ...item, renderedValue: formatFahrerCardValue(item.value, item.kind || "text") }))
+      .filter((item) => item.required || item.renderedValue);
+    if (!visibleItems.length) return;
+    drawSectionTitle(title, theme);
     const colGap = 8;
     const rowH = 30;
     const colW = (page.getWidth() - margin * 2 - colGap * (columns - 1)) / columns;
-    for (let idx = 0; idx < items.length; idx += 1) {
+    for (let idx = 0; idx < visibleItems.length; idx += 1) {
       if (idx % columns === 0) ensureSpace(rowH + 6);
       const col = idx % columns;
       const x = margin + col * (colW + colGap);
-      const item = items[idx];
-      page.drawRectangle({ x, y: y - rowH + 2, width: colW, height: rowH, color: cardBg, borderColor, borderWidth: 0.7 });
+      const item = visibleItems[idx];
+      const itemTheme = item.theme || theme;
+      page.drawRectangle({ x, y: y - rowH + 2, width: colW, height: rowH, color: itemTheme.bg, borderColor: itemTheme.border, borderWidth: 0.7 });
+      page.drawRectangle({ x, y: y - rowH + 2, width: 2, height: rowH, color: itemTheme.accent });
       centerText(item.label, x, y - 10, colW, 7, boldFont, mutedColor);
-      centerText(item.value || "-", x, y - 24, colW, 8, font, textColor);
-      if (col === columns - 1 || idx === items.length - 1) y -= rowH + 6;
+      centerText(item.renderedValue || "-", x, y - 24, colW, 8, font, textColor);
+      if (col === columns - 1 || idx === visibleItems.length - 1) y -= rowH + 6;
     }
     y -= 2;
   };
@@ -7908,10 +7989,11 @@ async function buildFahrerCardPdfWithPdfLib({ userId, reportYear, driver, weekly
   const drawTable = (title, columns, rows, opts = {}) => {
     const rowH = opts.rowHeight || 16;
     const textSize = opts.textSize || 8;
+    const theme = opts.theme || themeForTitle(title);
     const tableW = columns.reduce((sum, col) => sum + col.width, 0);
     const tableX = margin;
     const drawHeaderRow = () => {
-      page.drawRectangle({ x: tableX, y: y - rowH + 2, width: tableW, height: rowH, color: tableHeadBg });
+      page.drawRectangle({ x: tableX, y: y - rowH + 2, width: tableW, height: rowH, color: theme.head });
       let x = tableX;
       for (const col of columns) {
         centerText(col.label, x, y - 10, col.width, textSize, boldFont, tableHeadText);
@@ -7919,11 +8001,12 @@ async function buildFahrerCardPdfWithPdfLib({ userId, reportYear, driver, weekly
       }
       y -= rowH;
     };
-    drawSectionTitle(title);
+    ensureSpace(30 + rowH * 2 + 8);
+    drawSectionTitle(title, theme);
     drawHeaderRow();
     if (!rows || rows.length === 0) {
       ensureSpace(rowH + 4);
-      page.drawRectangle({ x: tableX, y: y - rowH + 2, width: tableW, height: rowH, color: oddBg, borderColor, borderWidth: 0.5 });
+      page.drawRectangle({ x: tableX, y: y - rowH + 2, width: tableW, height: rowH, color: theme.row, borderColor: theme.border, borderWidth: 0.5 });
       centerText("Keine Daten", tableX, y - 10, tableW, textSize, font, mutedColor);
       y -= rowH + 8;
       return;
@@ -7937,13 +8020,15 @@ async function buildFahrerCardPdfWithPdfLib({ userId, reportYear, driver, weekly
         y: y - rowH + 2,
         width: tableW,
         height: rowH,
-        color: idx % 2 ? oddBg : rgb(1, 1, 1),
-        borderColor,
+        color: row?._theme?.row || (idx % 2 ? theme.row : rgb(1, 1, 1)),
+        borderColor: row?._theme?.border || theme.border,
         borderWidth: 0.45,
       });
       let x = tableX;
       for (const col of columns) {
-        centerText(row[col.key], x, y - 10, col.width, textSize, font, textColor);
+        const raw = opts.formatValue ? opts.formatValue(row, col.key) : row[col.key];
+        const value = formatFahrerCardValue(raw, col.kind || "text") || "-";
+        centerText(value, x, y - 10, col.width, textSize, font, textColor);
         x += col.width;
       }
       y -= rowH;
@@ -7954,20 +8039,24 @@ async function buildFahrerCardPdfWithPdfLib({ userId, reportYear, driver, weekly
   drawHeader();
   drawMetricCards();
 
-  drawKeyValueGrid("Stammdaten A-W", [
-    { label: "Fahrer-ID", value: driver?.fahrer_id },
-    { label: "Fahrername", value: driver?.fahrername },
-    { label: "Firma", value: driver?.firma },
+  drawKeyValueGrid("Stammdaten", [
+    { label: "Fahrer-ID", value: driver?.fahrer_id, required: true },
+    { label: "Fahrername", value: driver?.fahrername, required: true },
+    { label: "Firma", value: driver?.firma, required: true },
     { label: "Telefonnummer", value: driver?.telefonnummer },
     { label: "Fuehrerschein", value: driver?.fuehrerschein },
     { label: "LKW-Typ", value: driver?.lkw_typ },
     { label: "Arbeitsplan", value: driver?.arbeitsplan },
+    { label: "Eintritt Fahrer", value: driver?.eintrittsdatum },
     { label: "Status entlassen", value: driver?.status_entlassen },
     { label: "Datum entlassen", value: driver?.datum_entlassen },
+  ], 4, themes.master);
+
+  drawKeyValueGrid("Dokumente und gueltig bis", [
     { label: "Pass gueltig bis", value: driver?.pass_gueltig_bis },
     { label: "95 Code bis", value: driver?.code_95_bis },
     { label: "Wohnungen bis", value: driver?.wohnungen_bis },
-    { label: "Eintrittsdatum", value: driver?.eintrittsdatum },
+    { label: "Fahrerkarte bis", value: driver?.fahrerkarte_gueltig_bis },
     { label: "Gesundheitsbuch bis", value: driver?.gesundheitsbuch_bis },
     { label: "ESDK bis", value: driver?.esdk_bis },
     { label: "A1 Formular bis", value: driver?.a1_bis },
@@ -7978,11 +8067,11 @@ async function buildFahrerCardPdfWithPdfLib({ userId, reportYear, driver, weekly
     { label: "ADR-Schein", value: driver?.adr_schein },
     { label: "ADR gueltig bis", value: driver?.adr_bis },
     { label: "FS gueltig bis", value: driver?.fs_bis },
-  ], 4);
+  ], 4, themes.documents);
 
   const spanRows = [
-    ...vacationSpans.map((row) => ({ type: "Urlaub", weeks: row.weeks_label, from: row.from_label, to: row.to_label })),
-    ...sickSpans.map((row) => ({ type: "Krank", weeks: row.weeks_label, from: row.from_label, to: row.to_label })),
+    ...vacationSpans.map((row) => ({ type: "Urlaub", weeks: row.weeks_label, from: row.from_label, to: row.to_label, _theme: themes.vacation })),
+    ...sickSpans.map((row) => ({ type: "Krank", weeks: row.weeks_label, from: row.from_label, to: row.to_label, _theme: themes.sick })),
   ];
   drawTable(
     "Urlaub und Krankheit nach Wochen",
@@ -7993,6 +8082,7 @@ async function buildFahrerCardPdfWithPdfLib({ userId, reportYear, driver, weekly
       { key: "to", label: "Bis", width: 120 },
     ],
     spanRows,
+    { theme: themes.vacation },
   );
 
   const monthlyTableRows = yearMonthlyRows.map((row) => ({
@@ -8016,7 +8106,15 @@ async function buildFahrerCardPdfWithPdfLib({ userId, reportYear, driver, weekly
       { key: "bonus", label: "Bonus", width: 90 },
     ],
     monthlyTableRows,
-    { textSize: 7.5, rowHeight: 17 },
+    {
+      textSize: 7.5,
+      rowHeight: 17,
+      theme: themes.work,
+      formatValue: (row, key) => {
+        if (key === "bonus") return formatMoneyInt(row?.[key]);
+        return row?.[key];
+      },
+    },
   );
 
   return pdfDoc.save();
@@ -9753,8 +9851,8 @@ async function handleGenerateWithBody(body, env, enforceRateLimit = true) {
     } catch (err) {
       pdfEngine = "legacy-fallback";
       const lines = [];
-      lines.push("Fahrer-ID | Fahrername | Firma | Telefonnummer | LKW-Typ | Arbeitsplan | Urlaub gesamt | Krankheitstage");
-      lines.push("-".repeat(160));
+      lines.push("Fahrer-ID | Fahrername | Firma | Telefonnummer | LKW-Typ | Arbeitsplan | Fahrerkarte bis | Eintritt Fahrer | Urlaub gesamt | Krankheitstage");
+      lines.push("-".repeat(210));
       lines.push([
         safeText(driver?.fahrer_id, ""),
         safeText(driver?.fahrername, ""),
@@ -9762,6 +9860,8 @@ async function handleGenerateWithBody(body, env, enforceRateLimit = true) {
         safeText(driver?.telefonnummer, ""),
         safeText(driver?.lkw_typ, ""),
         safeText(driver?.arbeitsplan, ""),
+        safeText(driver?.fahrerkarte_gueltig_bis, ""),
+        safeText(driver?.eintrittsdatum, ""),
         safeText(driver?.urlaub_gesamt, "0"),
         safeText(driver?.krankheitstage, "0"),
       ].join(" | "));
