@@ -181,8 +181,8 @@ def _weekday_schedule_enabled(now_local: datetime) -> bool:
 
 
 def _max_allowed_age_seconds() -> int:
-    interval_min = _env_int("ETL_EXPECTED_INTERVAL_MIN", 60, minimum=1)
-    grace_min = _env_int("ETL_EXPECTED_GRACE_MIN", 30, minimum=0)
+    interval_min = _env_int("ETL_EXPECTED_INTERVAL_MIN", 120, minimum=1)
+    grace_min = _env_int("ETL_EXPECTED_GRACE_MIN", 45, minimum=0)
     return (interval_min + grace_min) * 60
 
 
@@ -269,7 +269,7 @@ def _stale_key(stale_sources: list[dict]) -> str:
 def _alert_message(stale_sources: list[dict], now_local: datetime) -> str:
     lines = [
         "ETL schedule alert",
-        "Rule: weekdays, every hour, 07:00-18:00 Europe/Berlin",
+        "Rule: weekdays, every 2 hours, 07:30-17:30 Europe/Berlin",
         f"Checked at: {now_local.isoformat()}",
     ]
     for item in stale_sources:

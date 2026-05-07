@@ -15,19 +15,24 @@ if not exist "%TASK_CMD%" (
 )
 
 echo Creating ETL freshness monitor task: %TASK_NAME%
-echo Schedule: weekdays fixed checks after hourly ETL runs
+echo Schedule: weekdays fixed checks after 2-hour ETL runs
 echo Task command: %TASK_CMD_SHORT%
 
 call :create_fixed_monitor "%TASK_NAME%" "08:45"
 if errorlevel 1 exit /b 1
 
-for %%H in (09 10 11 12 13 14 15 16 17) do (
+for %%H in (10 12 14 16) do (
     call :create_fixed_monitor "%TASK_PREFIX%%%H" "%%H:45"
     if errorlevel 1 exit /b 1
 )
 
 call :create_fixed_monitor "%TASK_PREFIX%18" "18:30"
 if errorlevel 1 exit /b 1
+
+echo Disabling old hourly freshness monitor tasks:
+for %%H in (09 11 13 15 17) do (
+    schtasks /Change /TN "%TASK_PREFIX%%%H" /DISABLE >nul 2>&1
+)
 
 echo OK: ETL freshness monitor task created.
 powershell -NoProfile -ExecutionPolicy Bypass -File "%~dp0set_etl_task_settings.ps1" -TaskName "%TASK_NAME%"

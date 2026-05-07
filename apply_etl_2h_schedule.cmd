@@ -9,20 +9,14 @@ if not defined TASK_CMD_SHORT set "TASK_CMD_SHORT=%TASK_CMD%"
 
 set "TASK_DAY=LKW_Report_Bot_ETL_DayHourly"
 set "TASK_HOUR_PREFIX=LKW_Report_Bot_ETL_Hourly_"
-set "TASK_NIGHT=LKW_Report_Bot_ETL_Night3h"
-set "TASK_WATCH=LKW_Report_Bot_ETL_OnSourceChange"
 
 if not exist "%TASK_CMD%" (
     echo FAILED: Task command not found: %TASK_CMD%
     exit /b 1
 )
 
-echo Installing ETL schedules:
-echo   1^) Weekdays: fixed 2-hour tasks 07:30-17:30
-echo   2^) Night periodic ETL: disabled
-echo Task command: %TASK_CMD_SHORT%
+echo Applying ETL schedule: weekdays every 2 hours at :30
 
-echo Creating fixed day ETL tasks:
 call :create_fixed_task "%TASK_DAY%" "07:30"
 if errorlevel 1 exit /b 1
 
@@ -31,44 +25,15 @@ for %%H in (09 11 13 15 17) do (
     if errorlevel 1 exit /b 1
 )
 
-echo Disabling old hourly ETL tasks:
 for %%H in (08 10 12 14 16 18) do (
     schtasks /Change /TN "%TASK_HOUR_PREFIX%%%H" /DISABLE >nul 2>&1
 )
 
-echo Disabling night task if it exists: %TASK_NIGHT%
-schtasks /Change /TN "%TASK_NIGHT%" /DISABLE >nul 2>&1
-if errorlevel 1 (
-    echo INFO: Night ETL task not found or could not be changed.
-) else (
-    echo OK: Night ETL task disabled.
-)
-
-echo Disabling source-change ETL task for strict hourly schedule: %TASK_WATCH%
-schtasks /Change /TN "%TASK_WATCH%" /DISABLE >nul 2>&1
-if errorlevel 1 (
-    echo INFO: Source-change ETL task not found or could not be changed.
-) else (
-    echo OK: Source-change ETL task disabled.
-)
-
-echo Applying resilient task settings: allow battery starts, start when available, wake to run
-powershell -NoProfile -ExecutionPolicy Bypass -File "%~dp0set_etl_task_settings.ps1" -TaskName "%TASK_DAY%"
-if errorlevel 1 (
-    echo WARN: Could not apply resilient task settings. Run this script as administrator if needed.
-)
-
-echo OK: ETL day task created.
-echo ---
+echo OK: ETL 2-hour schedule applied without running ETL now.
 schtasks /Query /TN "%TASK_DAY%" /FO LIST /V
 
-echo Running ETL once now...
-cmd /c "%TASK_CMD%"
-set "RC=%errorlevel%"
-echo ETL one-shot exit code: %RC%
-
 endlocal
-exit /b %RC%
+exit /b 0
 
 :create_fixed_task
 set "TASK_NAME=%~1"
