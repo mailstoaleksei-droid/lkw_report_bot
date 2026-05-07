@@ -1090,7 +1090,11 @@ SELECT
   COALESCE(NULLIF(t.raw_payload->>'Shell Card', ''), NULLIF(t.raw_payload->>'Shell', ''), '0') AS shell_card,
   COALESCE(NULLIF(t.raw_payload->>'Tankpool Card', ''), NULLIF(t.raw_payload->>'Tankpool', ''), '0') AS tankpool_card
 FROM trucks t
-WHERE lower(t.external_id) = lower($1::text)
+WHERE (
+  lower(t.external_id) = lower($1::text)
+  OR lower(COALESCE(t.plate_number, '')) = lower($1::text)
+  OR lower(COALESCE(t.raw_payload->>'LKW-Nummer', '')) = lower($1::text)
+)
 ORDER BY t.external_id
 LIMIT 1;
 `;
@@ -5428,6 +5432,36 @@ function parseDdMmYyyy(value) {
   return Number.isFinite(ts) ? ts : null;
 }
 
+function parseDatePartsFlexible(value) {
+  const raw = safeText(value, "").trim();
+  if (!raw) return null;
+  let m = /^(\d{2})[./-](\d{2})[./-](\d{4})/.exec(raw);
+  if (m) {
+    const day = toIntSafe(m[1], 0);
+    const month = toIntSafe(m[2], 0);
+    const year = toIntSafe(m[3], 0);
+    if (year > 1900 && month >= 1 && month <= 12 && day >= 1 && day <= 31) return { year, month, day };
+  }
+  m = /^(\d{4})[./-](\d{2})[./-](\d{2})/.exec(raw);
+  if (m) {
+    const year = toIntSafe(m[1], 0);
+    const month = toIntSafe(m[2], 0);
+    const day = toIntSafe(m[3], 0);
+    if (year > 1900 && month >= 1 && month <= 12 && day >= 1 && day <= 31) return { year, month, day };
+  }
+  return null;
+}
+
+function calculateFullAgeYears(value, todayParts = getBerlinDateParts()) {
+  const birth = parseDatePartsFlexible(value);
+  if (!birth) return "";
+  let age = todayParts.year - birth.year;
+  if (todayParts.month < birth.month || (todayParts.month === birth.month && todayParts.day < birth.day)) {
+    age -= 1;
+  }
+  return age >= 0 && age < 120 ? String(age) : "";
+}
+
 const DAY_MS = 24 * 60 * 60 * 1000;
 
 function getBerlinDateParts(date = new Date()) {
@@ -7827,6 +7861,7 @@ async function buildFahrerCardPdfWithPdfLib({ userId, reportYear, driver, weekly
   const vacationSpans = buildFahrerWeekSpans(weeklyRows, "U");
   const sickSpans = buildFahrerWeekSpans(weeklyRows, "K");
   const berlinTodayParts = getBerlinDateParts();
+  const driverAgeYears = calculateFullAgeYears(driver?.geburtsdatum, berlinTodayParts);
   const currentBerlinYear = berlinTodayParts.year;
   const currentBerlinMonth = berlinTodayParts.month;
   const monthsCovered = effectiveYear < currentBerlinYear ? 12 : (effectiveYear === currentBerlinYear ? currentBerlinMonth : 0);
@@ -7881,6 +7916,7 @@ async function buildFahrerCardPdfWithPdfLib({ userId, reportYear, driver, weekly
     });
     drawText("Fahrerkarte", margin + 18, y - 26, 20, boldFont, accentColor);
     drawText(`${safeText(driver?.fahrer_id, "")} - ${safeText(driver?.fahrername, "")}`, margin + 18, y - 50, 15, boldFont, textColor, 360);
+    if (driverAgeYears) drawText(`Alter: ${driverAgeYears} Jahre`, margin + 18, y - 66, 9, font, mutedColor, 260);
     drawText(`Firma: ${safeText(driver?.firma, "-")}`, margin + 430, y - 26, 10, boldFont, textColor, 250);
     drawText(`Arbeitsplan: ${safeText(driver?.arbeitsplan, "-")}`, margin + 430, y - 43, 10, font, mutedColor, 250);
     drawText(formatReportGeneratedLabel(userId), margin + 430, y - 60, 8, font, mutedColor, 320);
@@ -8062,6 +8098,7 @@ async function buildFahrerCardPdfWithPdfLib({ userId, reportYear, driver, weekly
     { label: "LKW-Typ", value: driver?.lkw_typ },
     { label: "Arbeitsplan", value: driver?.arbeitsplan },
     { label: "Eintritt Fahrer", value: driver?.eintrittsdatum },
+    { label: "Alter", value: driverAgeYears ? `${driverAgeYears} Jahre` : "" },
     { label: "Status entlassen", value: driver?.status_entlassen },
     { label: "Datum entlassen", value: driver?.datum_entlassen },
   ], 4, themes.master);
@@ -8224,7 +8261,7 @@ async function validateTelegramInitData(initDataRaw, env) {
     return { ok: false, error: "Invalid initData hash" };
   }
 
-  const maxAge = Math.max(60, toInt(env.INIT_DATA_MAX_AGE_SEC, 300));
+  const maxAge = Math.max(300, toInt(env.INIT_DATA_MAX_AGE_SEC, 86400));
   const authDate = Number.parseInt(parsed.params.get("auth_date") || "", 10);
   if (Number.isFinite(authDate) && authDate > 0) {
     const age = Math.floor(Date.now() / 1000) - authDate;
@@ -10805,6 +10842,85 @@ async function handleLookup(request, env) {
         fahrername: safeText(row.fahrername, ""),
         label: [safeText(row.fahrer_id, ""), safeText(row.fahrername, "")].filter(Boolean).join(" - "),
       })).filter((row) => row.fahrer_id);
+      return json({ ok: true, kind, items }, 200, { "Cache-Control": "no-store" });
+    }
+
+    if (kind === "fahrer_firms") {
+      const result = await queryNeon(
+        dbConnectionString,
+        `
+          SELECT DISTINCT
+            COALESCE(NULLIF(c.name, ''), NULLIF(d.raw_payload->>'Firma', ''), NULLIF(d.raw_payload->>'Company', '')) AS firma
+          FROM drivers d
+          LEFT JOIN companies c ON c.id = d.company_id
+          WHERE COALESCE(d.is_active, true)
+            AND COALESCE(NULLIF(c.name, ''), NULLIF(d.raw_payload->>'Firma', ''), NULLIF(d.raw_payload->>'Company', ''), '') <> ''
+          ORDER BY firma
+        `,
+        [],
+      );
+      const items = (result.rows || []).map((row) => safeText(row.firma, "")).filter(Boolean);
+      return json({ ok: true, kind, items }, 200, { "Cache-Control": "no-store" });
+    }
+
+    if (kind === "yf_drivers") {
+      const result = await queryNeon(
+        dbConnectionString,
+        `
+          SELECT DISTINCT fahrer_name
+          FROM report_yf_fahrer_monthly
+          WHERE COALESCE(fahrer_name, '') <> ''
+          ORDER BY fahrer_name
+        `,
+        [],
+      );
+      const items = (result.rows || []).map((row) => safeText(row.fahrer_name, "")).filter(Boolean);
+      return json({ ok: true, kind, items }, 200, { "Cache-Control": "no-store" });
+    }
+
+    if (kind === "yf_lkw_numbers") {
+      const result = await queryNeon(
+        dbConnectionString,
+        `
+          SELECT DISTINCT lkw_nummer
+          FROM report_yf_lkw_daily
+          WHERE COALESCE(lkw_nummer, '') <> ''
+          ORDER BY lkw_nummer
+        `,
+        [],
+      );
+      const items = (result.rows || []).map((row) => safeText(row.lkw_nummer, "")).filter(Boolean);
+      return json({ ok: true, kind, items }, 200, { "Cache-Control": "no-store" });
+    }
+
+    if (kind === "sim_contado_lkw_numbers" || kind === "sim_vodafone_lkw_numbers") {
+      const tableName = kind === "sim_contado_lkw_numbers" ? "report_sim_contado" : "report_sim_vodafone";
+      const result = await queryNeon(
+        dbConnectionString,
+        `
+          SELECT DISTINCT lkw_number
+          FROM ${tableName}
+          WHERE COALESCE(lkw_number, '') <> ''
+          ORDER BY lkw_number
+        `,
+        [],
+      );
+      const items = (result.rows || []).map((row) => safeText(row.lkw_number, "")).filter(Boolean);
+      return json({ ok: true, kind, items }, 200, { "Cache-Control": "no-store" });
+    }
+
+    if (kind === "repair_lkw_numbers") {
+      const result = await queryNeon(
+        dbConnectionString,
+        `
+          SELECT DISTINCT truck_number
+          FROM report_repair_records
+          WHERE COALESCE(truck_number, '') <> ''
+          ORDER BY truck_number
+        `,
+        [],
+      );
+      const items = (result.rows || []).map((row) => safeText(row.truck_number, "")).filter(Boolean);
       return json({ ok: true, kind, items }, 200, { "Cache-Control": "no-store" });
     }
 

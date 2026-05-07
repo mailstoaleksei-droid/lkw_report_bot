@@ -3079,6 +3079,20 @@
       }
     }
 
+    async function populateStringDatalist(listId, lookupKey) {
+      const list = $(listId);
+      if (!list) return;
+      try {
+        const items = await fetchLookupServer(lookupKey);
+        list.innerHTML = items.map((item) => {
+          const value = String(item || "").trim();
+          return value ? `<option value="${escapeHtml(value)}"></option>` : "";
+        }).join("");
+      } catch {
+        list.innerHTML = "";
+      }
+    }
+
     async function populateFahrerFirmSelect(selectId) {
       const select = $(selectId);
       if (!select) return;
@@ -3963,7 +3977,8 @@
         setForm(`
           <div class="field">
             <label>LKW</label>
-            <select id="lkwRepairVehicle"><option value="">${L("loadingHistory")}</option></select>
+            <input id="lkwRepairVehicle" list="lkwRepairVehicleOptions" type="text" placeholder="${L("choose")}" autocomplete="off" />
+            <datalist id="lkwRepairVehicleOptions"></datalist>
             <div class="note">The PDF includes total costs, breakdown by months and years, breakdown by weeks, and invoice-level details.</div>
             <div class="note-actions">
               <button type="button" class="btn btn-primary" id="lkwRepairSingleRun">${L("generate")}</button>
@@ -3972,7 +3987,6 @@
         `);
         setNote("");
         hideSheetFooter();
-        await populateRepairLkwSelect("lkwRepairVehicle");
         $("lkwRepairSingleRun").onclick = async () => {
           const lkwNumber = String($("lkwRepairVehicle")?.value || "").trim();
           if (!lkwNumber) {
@@ -3982,6 +3996,7 @@
           }
           await sendReportGenerate("lkw_repair_single", { lkw_number: lkwNumber });
         };
+        populateStringDatalist("lkwRepairVehicleOptions", "repair_lkw_numbers");
       };
 
       renderMenu();
@@ -4125,7 +4140,8 @@
         setForm(`
           <div class="field">
             <label>Firma</label>
-            <select id="fahrerFirmaValue"><option value="">${L("loadingHistory")}</option></select>
+            <input id="fahrerFirmaValue" list="fahrerFirmaOptions" type="text" placeholder="${L("choose")}" autocomplete="off" />
+            <datalist id="fahrerFirmaOptions"></datalist>
             <div class="note">Generate a list of active drivers for the selected Firma. The report includes total drivers.</div>
             <div class="note-actions">
               <button type="button" class="btn btn-primary" id="fahrerFirmaRun">${L("generate")}</button>
@@ -4134,7 +4150,6 @@
         `);
         setNote("");
         hideSheetFooter();
-        await populateFahrerFirmSelect("fahrerFirmaValue");
         $("fahrerFirmaRun").onclick = async () => {
           const firmaName = String($("fahrerFirmaValue")?.value || "").trim();
           if (!firmaName) {
@@ -4143,6 +4158,7 @@
           }
           await sendReportGenerate("fahrer_firma", { firma_name: firmaName });
         };
+        populateStringDatalist("fahrerFirmaOptions", "fahrer_firms");
       };
 
       const renderContadoPassword = async () => {
@@ -4152,7 +4168,8 @@
         setForm(`
           <div class="field">
             <label>LKW Nummer</label>
-            <select id="fahrerContadoLkw"><option value="">${L("loadingHistory")}</option></select>
+            <input id="fahrerContadoLkw" list="fahrerContadoLkwOptions" type="text" placeholder="${L("choose")}" autocomplete="off" />
+            <datalist id="fahrerContadoLkwOptions"></datalist>
             <div class="note">The report shows truck number, name and password from sheet Contado.</div>
             <div class="note-actions">
               <button type="button" class="btn btn-primary" id="fahrerContadoRun">${L("generate")}</button>
@@ -4161,7 +4178,6 @@
         `);
         setNote("");
         hideSheetFooter();
-        await populateSimLkwSelect("fahrerContadoLkw", "sim_contado_lkw_numbers", L("choose"));
         $("fahrerContadoRun").onclick = async () => {
           const lkwNumber = String($("fahrerContadoLkw")?.value || "").trim();
           if (!lkwNumber) {
@@ -4170,6 +4186,7 @@
           }
           await sendReportGenerate("fahrer_password_contado", { lkw_number: lkwNumber });
         };
+        populateStringDatalist("fahrerContadoLkwOptions", "sim_contado_lkw_numbers");
       };
 
       const renderVodafone = async () => {
@@ -4179,7 +4196,8 @@
         setForm(`
           <div class="field">
             <label>LKW Kennzeichen</label>
-            <select id="fahrerVodafoneLkw"><option value="">${L("loadingHistory")}</option></select>
+            <input id="fahrerVodafoneLkw" list="fahrerVodafoneLkwOptions" type="text" placeholder="${L("choose")}" autocomplete="off" />
+            <datalist id="fahrerVodafoneLkwOptions"></datalist>
             <div class="note">The report shows truck number, PIN and PUK from sheet Vodafone&O2 SIM-Karten Neu.</div>
             <div class="note-actions">
               <button type="button" class="btn btn-primary" id="fahrerVodafoneRun">${L("generate")}</button>
@@ -4188,7 +4206,6 @@
         `);
         setNote("");
         hideSheetFooter();
-        await populateSimLkwSelect("fahrerVodafoneLkw", "sim_vodafone_lkw_numbers", L("choose"));
         $("fahrerVodafoneRun").onclick = async () => {
           const lkwNumber = String($("fahrerVodafoneLkw")?.value || "").trim();
           if (!lkwNumber) {
@@ -4197,6 +4214,7 @@
           }
           await sendReportGenerate("fahrer_vodafone", { lkw_number: lkwNumber });
         };
+        populateStringDatalist("fahrerVodafoneLkwOptions", "sim_vodafone_lkw_numbers");
       };
 
       renderMenu();
@@ -4245,7 +4263,8 @@
             <select id="yfDriverMonth">${buildMonthOptions()}</select>
             <div class="field" style="margin-top:12px; margin-bottom:0; padding:10px 10px 8px;">
               <label>${L("driver")}</label>
-              <select id="yfDriverName"><option value="">${L("loadingHistory")}</option></select>
+              <input id="yfDriverName" list="yfDriverNameOptions" type="text" placeholder="${L("choose")}" autocomplete="off" />
+              <datalist id="yfDriverNameOptions"></datalist>
             </div>
             <div class="note">${L("hintYfDriverMonth")}</div>
             <div class="note-actions">
@@ -4258,7 +4277,6 @@
 
         const now = new Date();
         if ($("yfDriverMonth")) $("yfDriverMonth").value = String(now.getMonth() + 1);
-        await populateYfDriverSelect("yfDriverName");
 
         $("yfDriverRun").onclick = async () => {
           const month = Number($("yfDriverMonth")?.value);
@@ -4270,6 +4288,7 @@
           }
           await sendReportGenerate("yf_driver_month", { month, driver_query: driverQuery });
         };
+        populateStringDatalist("yfDriverNameOptions", "yf_drivers");
       };
 
       const renderYfLkwWeek = async () => {
@@ -4286,7 +4305,8 @@
             </div>
             <div class="field" style="margin-top:12px; margin-bottom:0; padding:10px 10px 8px;">
               <label>${L("vehicle")}</label>
-              <select id="yfLkwVehicle"><option value="">${L("loadingHistory")}</option></select>
+              <input id="yfLkwVehicle" list="yfLkwVehicleOptions" type="text" placeholder="${L("choose")}" autocomplete="off" />
+              <datalist id="yfLkwVehicleOptions"></datalist>
             </div>
             <div class="note">${L("hintYfLkwWeek")}</div>
             <div class="note-actions">
@@ -4300,7 +4320,6 @@
         const now = new Date();
         if ($("yfLkwYear")) $("yfLkwYear").value = String(now.getFullYear());
         if ($("yfLkwWeek")) $("yfLkwWeek").value = String(getISOWeek(now));
-        await populateYfLkwSelect("yfLkwVehicle");
 
         $("yfLkwRun").onclick = async () => {
           const year = Number($("yfLkwYear")?.value);
@@ -4313,6 +4332,7 @@
           }
           await sendReportGenerate("yf_lkw_week", { year, week, lkw_id: lkwId });
         };
+        populateStringDatalist("yfLkwVehicleOptions", "yf_lkw_numbers");
       };
 
       const renderYfLkwMonth = async () => {
@@ -4322,7 +4342,8 @@
         setForm(`
           <div class="field">
             <label>LKW / Monat</label>
-            <select id="yfLkwMonthVehicle"><option value="">${L("loadingHistory")}</option></select>
+            <input id="yfLkwMonthVehicle" list="yfLkwMonthVehicleOptions" type="text" placeholder="${L("choose")}" autocomplete="off" />
+            <datalist id="yfLkwMonthVehicleOptions"></datalist>
             <div class="field" style="margin-top:12px; margin-bottom:0; padding:10px 10px 8px;">
               <label>${L("month")}</label>
               <select id="yfLkwMonthMonth">${buildMonthOptions()}</select>
@@ -4343,7 +4364,6 @@
         const now = new Date();
         if ($("yfLkwMonthMonth")) $("yfLkwMonthMonth").value = String(now.getMonth() + 1);
         if ($("yfLkwMonthYear")) $("yfLkwMonthYear").value = String(now.getFullYear());
-        await populateYfLkwSelect("yfLkwMonthVehicle");
 
         $("yfLkwMonthRun").onclick = async () => {
           const year = Number($("yfLkwMonthYear")?.value);
@@ -4361,6 +4381,7 @@
           }
           await sendReportGenerate("yf_lkw_month", { year, month, lkw_id: lkwId });
         };
+        populateStringDatalist("yfLkwMonthVehicleOptions", "yf_lkw_numbers");
       };
 
       renderYfMenu();
@@ -4488,7 +4509,8 @@
         setForm(`
           <div class="field">
             <label>LKW Karte</label>
-            <select id="dieselCardVehicle"><option value="">${L("loadingHistory")}</option></select>
+            <input id="dieselCardVehicle" list="dieselCardVehicleOptions" type="text" placeholder="${L("choose")}" autocomplete="off" />
+            <datalist id="dieselCardVehicleOptions"></datalist>
             <div class="note">${L("hintDieselCard")}</div>
             <div class="note-actions">
               <button type="button" class="btn btn-primary" id="dieselCardRun">${L("generate")}</button>
@@ -4497,7 +4519,6 @@
         `);
         setNote("");
         hideSheetFooter();
-        await populateLkwVehicleSelect("dieselCardVehicle");
         $("dieselCardRun").onclick = async () => {
           const lkwId = String($("dieselCardVehicle")?.value || "").trim();
           if (!lkwId) {
@@ -4507,6 +4528,7 @@
           }
           await sendReportGenerate("diesel_lkw_card", { lkw_id: lkwId });
         };
+        populateLkwVehicleDatalist("dieselCardVehicleOptions");
       };
 
       renderMenu();
@@ -4643,7 +4665,8 @@
             </div>
             <div class="field" style="margin-top:12px; margin-bottom:0; padding:10px 10px 8px;">
               <label>Firma</label>
-              <select id="bonusFirmaMonthFirma"><option value="">${L("loadingHistory")}</option></select>
+              <input id="bonusFirmaMonthFirma" list="bonusFirmaMonthFirmaOptions" type="text" placeholder="${L("choose")}" autocomplete="off" />
+              <datalist id="bonusFirmaMonthFirmaOptions"></datalist>
             </div>
             <div class="note">Generate the list of drivers for the selected Firma and month. The report includes total bonus sum.</div>
             <div class="note-actions">
@@ -4656,7 +4679,6 @@
         const now = new Date();
         if ($("bonusFirmaMonthYear")) $("bonusFirmaMonthYear").value = String(now.getFullYear());
         if ($("bonusFirmaMonthMonth")) $("bonusFirmaMonthMonth").value = String(now.getMonth() + 1);
-        await populateFahrerFirmSelect("bonusFirmaMonthFirma");
         $("bonusFirmaMonthRun").onclick = async () => {
           const year = Number($("bonusFirmaMonthYear")?.value);
           const month = Number($("bonusFirmaMonthMonth")?.value);
@@ -4672,6 +4694,7 @@
             firma_name: firmaName,
           });
         };
+        populateStringDatalist("bonusFirmaMonthFirmaOptions", "fahrer_firms");
       };
 
       renderMenu();
