@@ -201,12 +201,25 @@ def run_etl(database_url: str, source_path: Path) -> dict[str, int]:
             with conn.cursor() as cur:
                 _ensure_contado_table(cur)
                 _ensure_vodafone_table(cur)
+                cur.execute(
+                    """
+                    CREATE TEMP TABLE tmp_report_sim_contado
+                    (LIKE report_sim_contado INCLUDING DEFAULTS)
+                    ON COMMIT DROP
+                    """
+                )
+                cur.execute(
+                    """
+                    CREATE TEMP TABLE tmp_report_sim_vodafone
+                    (LIKE report_sim_vodafone INCLUDING DEFAULTS)
+                    ON COMMIT DROP
+                    """
+                )
 
-                cur.execute("DELETE FROM report_sim_contado")
                 for row in contado_rows:
                     cur.execute(
                         """
-                        INSERT INTO report_sim_contado (
+                        INSERT INTO tmp_report_sim_contado (
                             lkw_number, sim_name, password, source_row, raw_payload, updated_at
                         )
                         VALUES (%s, %s, %s, %s, %s::jsonb, NOW())
@@ -228,11 +241,10 @@ def run_etl(database_url: str, source_path: Path) -> dict[str, int]:
                         ),
                     )
 
-                cur.execute("DELETE FROM report_sim_vodafone")
                 for row in vodafone_rows:
                     cur.execute(
                         """
-                        INSERT INTO report_sim_vodafone (
+                        INSERT INTO tmp_report_sim_vodafone (
                             lkw_number, pin, puk, source_row, raw_payload, updated_at
                         )
                         VALUES (%s, %s, %s, %s, %s::jsonb, NOW())
@@ -253,6 +265,11 @@ def run_etl(database_url: str, source_path: Path) -> dict[str, int]:
                             ),
                         ),
                     )
+
+                cur.execute("DELETE FROM report_sim_contado")
+                cur.execute("INSERT INTO report_sim_contado SELECT * FROM tmp_report_sim_contado")
+                cur.execute("DELETE FROM report_sim_vodafone")
+                cur.execute("INSERT INTO report_sim_vodafone SELECT * FROM tmp_report_sim_vodafone")
 
                 cur.execute(
                     """

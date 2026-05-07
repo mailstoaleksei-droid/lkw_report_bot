@@ -1799,6 +1799,40 @@ def _ensure_repair_table(cur) -> None:
     )
 
 
+REPORT_REPLACE_TABLES = (
+    "report_fahrer_weekly_status",
+    "report_einnahmen_monthly",
+    "report_einnahmen_firm_monthly",
+    "report_bonus_dynamik_monthly",
+    "report_diesel_monthly",
+    "report_lkw_fuel_transactions",
+    "report_lkw_revenue_records",
+    "report_yf_fahrer_monthly",
+    "report_yf_lkw_daily",
+    "report_repair_records",
+)
+
+
+def _ensure_report_staging_tables(cur) -> None:
+    for table_name in REPORT_REPLACE_TABLES:
+        cur.execute(
+            f"""
+            CREATE TEMP TABLE tmp_{table_name}
+            (LIKE {table_name} INCLUDING DEFAULTS)
+            ON COMMIT DROP
+            """
+        )
+
+
+def _swap_report_staging_tables(cur) -> int:
+    deleted_count = 0
+    for table_name in REPORT_REPLACE_TABLES:
+        cur.execute(f"DELETE FROM {table_name}")
+        deleted_count += int(cur.rowcount or 0)
+        cur.execute(f"INSERT INTO {table_name} SELECT * FROM tmp_{table_name}")
+    return deleted_count
+
+
 def run_etl(database_url: str, xlsm_path: Path) -> dict[str, int]:
     psycopg = _lazy_import_psycopg()
     created_copy = False
@@ -1858,6 +1892,7 @@ def run_etl(database_url: str, xlsm_path: Path) -> dict[str, int]:
                 _ensure_yf_lkw_table(cur)
                 _ensure_fahrer_weekly_status_table(cur)
                 _ensure_repair_table(cur)
+                _ensure_report_staging_tables(cur)
 
                 rows_inserted = 0
                 rows_updated = 0
@@ -1929,12 +1964,10 @@ def run_etl(database_url: str, xlsm_path: Path) -> dict[str, int]:
                     rows_inserted += 1 if inserted else 0
                     rows_updated += 0 if inserted else 1
 
-                cur.execute("DELETE FROM report_fahrer_weekly_status")
-                rows_deleted += int(cur.rowcount or 0)
                 for rec in fahrer_weekly_rows:
                     cur.execute(
                         """
-                        INSERT INTO report_fahrer_weekly_status (
+                        INSERT INTO tmp_report_fahrer_weekly_status (
                             report_year,
                             iso_week,
                             week_start,
@@ -1968,12 +2001,10 @@ def run_etl(database_url: str, xlsm_path: Path) -> dict[str, int]:
                     )
                     rows_inserted += 1
 
-                cur.execute("DELETE FROM report_einnahmen_monthly")
-                rows_deleted += int(cur.rowcount or 0)
                 for rec in einnahmen_rows:
                     cur.execute(
                         """
-                        INSERT INTO report_einnahmen_monthly (
+                        INSERT INTO tmp_report_einnahmen_monthly (
                             month_index,
                             month_name,
                             nahverkehr,
@@ -1995,12 +2026,10 @@ def run_etl(database_url: str, xlsm_path: Path) -> dict[str, int]:
                     )
                     rows_inserted += 1
 
-                cur.execute("DELETE FROM report_einnahmen_firm_monthly")
-                rows_deleted += int(cur.rowcount or 0)
                 for rec in einnahmen_firm_rows:
                     cur.execute(
                         """
-                        INSERT INTO report_einnahmen_firm_monthly (
+                        INSERT INTO tmp_report_einnahmen_firm_monthly (
                             row_index,
                             firm_name,
                             january,
@@ -2044,12 +2073,10 @@ def run_etl(database_url: str, xlsm_path: Path) -> dict[str, int]:
                     )
                     rows_inserted += 1
 
-                cur.execute("DELETE FROM report_bonus_dynamik_monthly")
-                rows_deleted += int(cur.rowcount or 0)
                 for rec in bonus_rows:
                     cur.execute(
                         """
-                        INSERT INTO report_bonus_dynamik_monthly (
+                        INSERT INTO tmp_report_bonus_dynamik_monthly (
                             report_year,
                             report_month,
                             month_start,
@@ -2089,12 +2116,10 @@ def run_etl(database_url: str, xlsm_path: Path) -> dict[str, int]:
                     )
                     rows_inserted += 1
 
-                cur.execute("DELETE FROM report_diesel_monthly")
-                rows_deleted += int(cur.rowcount or 0)
                 for rec in diesel_rows:
                     cur.execute(
                         """
-                        INSERT INTO report_diesel_monthly (
+                        INSERT INTO tmp_report_diesel_monthly (
                             report_year,
                             month_index,
                             month_name,
@@ -2138,12 +2163,10 @@ def run_etl(database_url: str, xlsm_path: Path) -> dict[str, int]:
                     )
                     rows_inserted += 1
 
-                cur.execute("DELETE FROM report_lkw_fuel_transactions")
-                rows_deleted += int(cur.rowcount or 0)
                 for rec in lkw_fuel_rows:
                     cur.execute(
                         """
-                        INSERT INTO report_lkw_fuel_transactions (
+                        INSERT INTO tmp_report_lkw_fuel_transactions (
                             source,
                             source_row,
                             report_year,
@@ -2177,12 +2200,10 @@ def run_etl(database_url: str, xlsm_path: Path) -> dict[str, int]:
                     )
                     rows_inserted += 1
 
-                cur.execute("DELETE FROM report_lkw_revenue_records")
-                rows_deleted += int(cur.rowcount or 0)
                 for rec in lkw_revenue_rows:
                     cur.execute(
                         """
-                        INSERT INTO report_lkw_revenue_records (
+                        INSERT INTO tmp_report_lkw_revenue_records (
                             source,
                             source_row,
                             report_year,
@@ -2208,12 +2229,10 @@ def run_etl(database_url: str, xlsm_path: Path) -> dict[str, int]:
                     )
                     rows_inserted += 1
 
-                cur.execute("DELETE FROM report_yf_fahrer_monthly")
-                rows_deleted += int(cur.rowcount or 0)
                 for rec in yf_fahrer_rows:
                     cur.execute(
                         """
-                        INSERT INTO report_yf_fahrer_monthly (
+                        INSERT INTO tmp_report_yf_fahrer_monthly (
                             month_index,
                             fahrer_name,
                             distanz_km,
@@ -2237,12 +2256,10 @@ def run_etl(database_url: str, xlsm_path: Path) -> dict[str, int]:
                     )
                     rows_inserted += 1
 
-                cur.execute("DELETE FROM report_yf_lkw_daily")
-                rows_deleted += int(cur.rowcount or 0)
                 for rec in yf_lkw_rows:
                     cur.execute(
                         """
-                        INSERT INTO report_yf_lkw_daily (
+                        INSERT INTO tmp_report_yf_lkw_daily (
                             report_year,
                             month_index,
                             month_name,
@@ -2278,12 +2295,10 @@ def run_etl(database_url: str, xlsm_path: Path) -> dict[str, int]:
                     )
                     rows_inserted += 1
 
-                cur.execute("DELETE FROM report_repair_records")
-                rows_deleted += int(cur.rowcount or 0)
                 for rec in repair_rows:
                     cur.execute(
                         """
-                        INSERT INTO report_repair_records (
+                        INSERT INTO tmp_report_repair_records (
                             source_row,
                             report_year,
                             report_month,
@@ -2320,6 +2335,8 @@ def run_etl(database_url: str, xlsm_path: Path) -> dict[str, int]:
                         ),
                     )
                     rows_inserted += 1
+
+                rows_deleted += _swap_report_staging_tables(cur)
 
                 cur.execute(
                     """
