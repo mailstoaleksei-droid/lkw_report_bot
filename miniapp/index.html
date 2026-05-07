@@ -2413,6 +2413,8 @@
     let latestPdfFilename = "";
     let latestPdfOpenUrl = "";
     let latestPdfSaveUrl = "";
+    let cachedMeta = null;
+    const META_CACHE_KEY = "lkw_report_meta_cache_v1";
 
     // === UTILS ===
     const $ = (id) => document.getElementById(id);
@@ -2471,6 +2473,30 @@
       latestPdfFilename = "";
       latestPdfOpenUrl = "";
       latestPdfSaveUrl = "";
+    }
+
+    function readCachedMeta() {
+      if (cachedMeta) return cachedMeta;
+      try {
+        const parsed = JSON.parse(localStorage.getItem(META_CACHE_KEY) || "null");
+        const data = parsed?.data;
+        if (data && typeof data === "object" && data.lookups && typeof data.lookups === "object") {
+          cachedMeta = data;
+          return cachedMeta;
+        }
+      } catch {}
+      return null;
+    }
+
+    function writeCachedMeta(data) {
+      if (!data || typeof data !== "object" || !data.lookups || typeof data.lookups !== "object") return;
+      cachedMeta = data;
+      try {
+        localStorage.setItem(META_CACHE_KEY, JSON.stringify({
+          saved_at: new Date().toISOString(),
+          data,
+        }));
+      } catch {}
     }
 
     function openPdfInNewTab(url, filename) {
@@ -2850,6 +2876,7 @@
 
         const data = await resp.json().catch(() => null);
         if (!data || typeof data !== "object") return { state: "pending" };
+        writeCachedMeta(data);
 
         const accessAllowed = data?.access?.allowed;
         const accessError = String(data?.access?.error || "").trim();
@@ -2876,19 +2903,31 @@
       }
     }
 
-    async function fetchMetaServer() {
+    async function fetchMetaServer({ timeoutMs = 3000, allowCache = true } = {}) {
       const ctx = getTgContext();
       const metaUrl = new URL("/api/meta", window.location.origin);
       if (ctx.initData) metaUrl.searchParams.set("initData", ctx.initData);
-      const resp = await fetch(metaUrl.toString(), {
-        cache: "no-store",
-        headers: { "Accept": "application/json" },
-      });
-      const data = await resp.json().catch(() => null);
-      if (!resp.ok || !data || typeof data !== "object") {
-        throw new Error(data?.error || "Failed to load meta");
+      const controller = typeof AbortController === "function" ? new AbortController() : null;
+      const timer = controller ? setTimeout(() => controller.abort(), timeoutMs) : null;
+      try {
+        const resp = await fetch(metaUrl.toString(), {
+          cache: "no-store",
+          headers: { "Accept": "application/json" },
+          ...(controller ? { signal: controller.signal } : {}),
+        });
+        const data = await resp.json().catch(() => null);
+        if (!resp.ok || !data || typeof data !== "object") {
+          throw new Error(data?.error || "Failed to load meta");
+        }
+        writeCachedMeta(data);
+        return data;
+      } catch (err) {
+        const fallback = allowCache ? readCachedMeta() : null;
+        if (fallback) return { ...fallback, _from_cache: true };
+        throw err;
+      } finally {
+        if (timer) clearTimeout(timer);
       }
-      return data;
     }
 
     async function populateLkwVehicleSelect(selectId) {
@@ -2902,6 +2941,26 @@
         select.innerHTML = opts.join("");
       } catch (err) {
         select.innerHTML = `<option value="">${escapeHtml(err?.message || L("failedLoadLkwList"))}</option>`;
+      }
+    }
+
+    async function populateLkwVehicleDatalist(listId) {
+      const list = $(listId);
+      if (!list) return;
+      try {
+        const meta = await fetchMetaServer();
+        const items = Array.isArray(meta?.lookups?.lkw_vehicles) ? meta.lookups.lkw_vehicles : [];
+        list.innerHTML = items.map((item) => {
+          const id = String(item.lkw_id || "");
+          const number = String(item.lkw_nummer || "");
+          const label = item.label || [id, number].filter(Boolean).join(" - ");
+          return [
+            id ? `<option value="${escapeHtml(id)}" label="${escapeHtml(label)}"></option>` : "",
+            number ? `<option value="${escapeHtml(number)}" label="${escapeHtml(label)}"></option>` : "",
+          ].join("");
+        }).join("");
+      } catch {
+        list.innerHTML = "";
       }
     }
 
@@ -3785,7 +3844,8 @@
         setForm(`
           <div class="field">
             <label>1 LKW</label>
-            <select id="lkwSingleVehicle"><option value="">${L("loadingHistory")}</option></select>
+            <input id="lkwSingleVehicle" list="lkwSingleVehicleOptions" type="text" placeholder="${L("choose")}" autocomplete="off" />
+            <datalist id="lkwSingleVehicleOptions"></datalist>
             <div class="note-actions">
               <button type="button" class="btn btn-primary" id="lkwSingleRun">${L("generate")}</button>
             </div>
@@ -3793,7 +3853,7 @@
         `);
         setNote("");
         hideSheetFooter();
-        await populateLkwVehicleSelect("lkwSingleVehicle");
+        await populateLkwVehicleDatalist("lkwSingleVehicleOptions");
         $("lkwSingleRun").onclick = async () => {
           const lkwId = String($("lkwSingleVehicle")?.value || "").trim();
           if (!lkwId) {
