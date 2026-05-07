@@ -9,9 +9,9 @@ def test_parse_due_month_accepts_month_year_formats():
     assert deadlines.parse_due_month("2026-10") == date(2026, 10, 1)
 
 
-def test_previous_month_start_handles_year_boundary():
-    assert deadlines.previous_month_start(date(2026, 10, 1)) == date(2026, 9, 1)
-    assert deadlines.previous_month_start(date(2026, 1, 1)) == date(2025, 12, 1)
+def test_notification_date_handles_year_boundary():
+    assert deadlines.notification_date_for_due_month(date(2026, 10, 1)) == date(2026, 9, 15)
+    assert deadlines.notification_date_for_due_month(date(2026, 1, 1)) == date(2025, 12, 15)
 
 
 def test_due_for_notification_matches_exact_notify_date():

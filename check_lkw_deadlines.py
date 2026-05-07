@@ -1,8 +1,8 @@
 """
 LKW deadline notifier for HU, SP and 57B.
 
-Reads truck deadline month values from PostgreSQL and sends notifications one
-month before the due month. Designed for Windows Task Scheduler.
+Reads truck deadline month values from PostgreSQL and sends notifications on the
+15th day of the month before the due month. Designed for Windows Task Scheduler.
 """
 
 from __future__ import annotations
@@ -132,13 +132,13 @@ def parse_due_month(value: object) -> date | None:
     return None
 
 
-def previous_month_start(value: date) -> date:
+def notification_date_for_due_month(value: date) -> date:
     year = value.year
     month = value.month - 1
     if month == 0:
         month = 12
         year -= 1
-    return date(year, month, 1)
+    return date(year, month, 15)
 
 
 def _format_month(value: date) -> str:
@@ -242,7 +242,7 @@ def _fetch_deadlines(database_url: str) -> list[LkwDeadline]:
                             lkw_number=str(lkw_number or "").strip(),
                             field_name=field_name,
                             due_month=due_month,
-                            notify_date=previous_month_start(due_month),
+                            notify_date=notification_date_for_due_month(due_month),
                         )
                     )
     return result
