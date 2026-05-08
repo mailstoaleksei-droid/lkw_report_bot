@@ -7336,14 +7336,21 @@ async function buildLkwKmEuroPdfWithPdfLib({ userId, period, year, month, week, 
         x += periodWidth;
       }
       const trendPct = calculateTrendPct(row);
-      const trendFill = !Number.isFinite(trendPct)
-        ? baseFill
-        : (trendPct >= 0 ? rgb(0.90, 0.98, 0.92) : rgb(1, 0.95, 0.95));
-      const trendColor = !Number.isFinite(trendPct)
-        ? mutedColor
-        : (trendPct >= 0 ? rgb(0.10, 0.45, 0.20) : rgb(0.68, 0.16, 0.16));
+      const trendIsPositive = Number.isFinite(trendPct) && trendPct > 0;
+      const trendIsNegative = Number.isFinite(trendPct) && trendPct < 0;
+      const trendFill = trendIsPositive
+        ? rgb(0.90, 0.98, 0.92)
+        : (trendIsNegative ? rgb(1, 0.95, 0.95) : baseFill);
+      const trendColor = trendIsPositive
+        ? rgb(0.10, 0.45, 0.20)
+        : (trendIsNegative ? rgb(0.68, 0.16, 0.16) : mutedColor);
       page.drawRectangle({ x, y: y - rowHeight + 2, width: trendWidth, height: rowHeight, color: trendFill, borderColor: themes.revenue.border, borderWidth: 0.3 });
-      centerText(formatTrendPct(trendPct), x, y - 10, trendWidth, 6.1, boldFont, trendColor);
+      if (trendIsPositive || trendIsNegative) {
+        drawTrendArrow({ page, x: x + 9, y: y - 13, isUp: trendIsPositive, color: trendColor });
+        centerText(formatTrendPct(trendPct), x + 12, y - 10, trendWidth - 12, 6.1, boldFont, trendColor);
+      } else {
+        centerText(formatTrendPct(trendPct), x, y - 10, trendWidth, 6.1, boldFont, trendColor);
+      }
       y -= rowHeight;
     }
     y -= 10;
