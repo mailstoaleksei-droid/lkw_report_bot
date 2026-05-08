@@ -1,6 +1,6 @@
 # LKW Telegram Mini App - Implementation Checklist
 
-> Last updated: 2026-05-01
+> Last updated: 2026-05-08
 > Status legend: [ ] pending | [~] in progress | [x] done
 
 ## 1) Infra and Deploy
@@ -70,6 +70,10 @@
 
 ## 4) Reports Implemented in Mini App
 - [x] `Bericht` (year/week)
+- [x] `Bericht -> LKW - KM - Euro`
+  - periods: whole year, month, ISO week
+  - sources: `LKW`, `YF`, `Carlo`, `Contado`, `Staack`, `Shell`
+  - PDF compares all trucks by revenue, kilometers, diesel liters/cost, average fuel price, consumption, and efficiency ranking
 - [x] `Data/Plan -> Plan` (selected week + 3 weeks)
 - [x] `Data/Plan -> Data` (selected week, 7 days)
 - [x] `Einnahmen` (monthly revenue)

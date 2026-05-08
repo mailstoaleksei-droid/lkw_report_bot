@@ -2076,6 +2076,8 @@
         
         // Sheet headers
         hintContainer: "weekly LKW work schedule report",
+        hintBerichtClassic: "Weekly truck count by company (Container / Planen)",
+        hintLkwKmEuro: "All LKW comparison: revenue, kilometers, fuel consumption and diesel price",
         hintLkw: "current LKW fleet data",
         hintFahrer: "driver reports and weekly vacation/sick summary",
         hintFahrerAll: "All drivers data from sheet Fahrer with vacation and sick weeks summary",
@@ -2208,6 +2210,8 @@
 
         // Sheet headers
         hintContainer: "Bericht zum LKW-Arbeitsplan nach Wochen",
+        hintBerichtClassic: "Woechentliche LKW-Zaehlung pro Firma (Container / Planen)",
+        hintLkwKmEuro: "Vergleich aller LKW: Umsatz, Kilometer, Verbrauch und Dieselpreis",
         hintLkw: "aktuelle Daten zum LKW-Fuhrpark",
         hintFahrer: "Fahrerberichte sowie Wochenuebersicht zu Urlaub und Krankheit",
         hintFahrerAll: "Alle Fahrerdaten aus Blatt Fahrer mit Uebersicht zu Urlaub und Krankheit nach Wochen",
@@ -2340,6 +2344,8 @@
         
         // Sheet headers
         hintContainer: "отчет по графику работы LKW по неделям",
+        hintBerichtClassic: "Еженедельный подсчет LKW по фирмам (Container / Planen)",
+        hintLkwKmEuro: "Сравнение всех LKW: выручка, километры, расход и цена дизеля",
         hintLkw: "актуальные данные по парку LKW",
         hintFahrer: "отчеты по водителям и недельная сводка по отпускам и больничным",
         hintFahrerAll: "Все данные водителей с листа Fahrer и сводка по отпускам и больничным по неделям",
@@ -2589,6 +2595,20 @@
         return buildGenerateDirectUrl(
           "bericht",
           { year: Number(item.iso_year), week: Number(item.iso_week) },
+          initData || "",
+          disposition,
+        );
+      }
+      if (type === "lkw_km_euro") {
+        const params = item?.params || {};
+        return buildGenerateDirectUrl(
+          "lkw_km_euro",
+          {
+            period: String(params.period || "year"),
+            year: Number(params.year || item?.iso_year || 0),
+            month: Number(params.month || 0),
+            week: Number(params.week || item?.iso_week || 0),
+          },
           initData || "",
           disposition,
         );
@@ -3759,44 +3779,146 @@
 
     // === REPORT HANDLERS ===
     function openContainer(backHandler = closeSheet) {
-      setSheetHeader("Bericht", L("hintContainer"), "Bericht");
-      setSheetCloseAction("back", backHandler);
-      setSegments([], "", () => {});
-
-      setForm(`
-        <div class="field">
-          <label>${L("year")}</label>
-          <select id="reportYear">${buildYearOptions(2025, 2030)}</select>
-        </div>
-        <div class="field">
-          <label>${L("week")}</label>
-          <select id="reportWeek">${buildWeekOptions()}</select>
-        </div>
-      `);
-      setNote("");
-
       const now = new Date();
-      const yearEl = $("reportYear");
-      const weekEl = $("reportWeek");
-      if (yearEl) {
-        const currentIsoYear = getISOYear(now);
-        const clampedYear = Math.max(2025, Math.min(2030, currentIsoYear));
-        yearEl.value = String(clampedYear);
-      }
-      if (weekEl) weekEl.value = String(getISOWeek(now));
+      let selectedYear = Math.max(2025, Math.min(2035, getISOYear(now)));
+      let selectedWeek = getISOWeek(now);
+      let selectedMonth = now.getMonth() + 1;
 
-      $("btnPrimary").textContent = L("generate");
-      $("btnPrimary").onclick = async () => {
-        const year = Number($("reportYear").value);
-        const week = Number($("reportWeek").value);
-        if (!Number.isFinite(year) || !Number.isFinite(week) || year < 2025 || year > 2030 || week < 1 || week > 53) {
-          haptic("error");
-          showToast(L("invalidYearWeek"));
-          return;
-        }
-        await sendReportGenerate("bericht", { year, week });
+      const renderMenu = () => {
+        setSheetHeader("Bericht", L("hintContainer"), "PDF");
+        setSheetCloseAction("back", backHandler);
+        setSegments([], "", () => {});
+        setForm(`
+          <div class="field">
+            <div class="note">${L("hintBerichtClassic")}</div>
+            <div class="note-actions">
+              <button type="button" class="btn btn-primary" id="berichtChooseClassic">Bericht</button>
+            </div>
+          </div>
+          <div class="field">
+            <div class="note">${L("hintLkwKmEuro")}</div>
+            <div class="note-actions">
+              <button type="button" class="btn btn-primary" id="berichtChooseLkwKmEuro">LKW - KM - Euro</button>
+            </div>
+          </div>
+        `);
+        setNote("");
+        hideSheetFooter();
+        $("berichtChooseClassic").onclick = () => renderClassic();
+        $("berichtChooseLkwKmEuro").onclick = () => renderLkwKmEuro();
       };
 
+      const renderClassic = () => {
+        setSheetHeader("Bericht", L("hintBerichtClassic"), "PDF");
+        setSheetCloseAction("back", renderMenu);
+        setSegments([], "", () => {});
+        setForm(`
+          <div class="field">
+            <label>${L("year")}</label>
+            <select id="reportYear">${buildYearOptions(2025, 2030)}</select>
+          </div>
+          <div class="field">
+            <label>${L("week")}</label>
+            <select id="reportWeek">${buildWeekOptions()}</select>
+            <div class="note-actions" style="margin-top:12px;">
+              <button type="button" class="btn btn-primary" id="berichtClassicRun">${L("generate")}</button>
+            </div>
+          </div>
+        `);
+        setNote("");
+        hideSheetFooter();
+
+        const yearEl = $("reportYear");
+        const weekEl = $("reportWeek");
+        if (yearEl) yearEl.value = String(Math.max(2025, Math.min(2030, getISOYear(now))));
+        if (weekEl) weekEl.value = String(selectedWeek);
+
+        $("berichtClassicRun").onclick = async () => {
+          const year = Number($("reportYear").value);
+          const week = Number($("reportWeek").value);
+          if (!Number.isFinite(year) || !Number.isFinite(week) || year < 2025 || year > 2030 || week < 1 || week > 53) {
+            haptic("error");
+            showToast(L("invalidYearWeek"));
+            return;
+          }
+          selectedYear = year;
+          selectedWeek = week;
+          await sendReportGenerate("bericht", { year, week });
+        };
+      };
+
+      const renderLkwKmEuro = () => {
+        setSheetHeader("Bericht - LKW - KM - Euro", L("hintLkwKmEuro"), "PDF");
+        setSheetCloseAction("back", renderMenu);
+        setSegments([], "", () => {});
+        setForm(`
+          <div class="field">
+            <label>${L("period")}</label>
+            <select id="lkwKmEuroPeriod">
+              <option value="year">${L("wholeYear")}</option>
+              <option value="month">${L("month")}</option>
+              <option value="week">${L("week")}</option>
+            </select>
+          </div>
+          <div class="field">
+            <label>${L("year")}</label>
+            <select id="lkwKmEuroYear">${buildYearOptions(2025, 2035)}</select>
+          </div>
+          <div class="field" id="lkwKmEuroMonthField">
+            <label>${L("month")}</label>
+            <select id="lkwKmEuroMonth">${buildMonthOptions()}</select>
+          </div>
+          <div class="field" id="lkwKmEuroWeekField">
+            <label>${L("week")}</label>
+            <select id="lkwKmEuroWeek">${buildWeekOptions()}</select>
+          </div>
+          <div class="note-actions">
+            <button type="button" class="btn btn-primary" id="lkwKmEuroRun">${L("generate")}</button>
+          </div>
+        `);
+        setNote("");
+        hideSheetFooter();
+
+        const periodEl = $("lkwKmEuroPeriod");
+        const updatePeriodFields = () => {
+          const period = String(periodEl?.value || "year");
+          if ($("lkwKmEuroMonthField")) $("lkwKmEuroMonthField").style.display = period === "month" ? "" : "none";
+          if ($("lkwKmEuroWeekField")) $("lkwKmEuroWeekField").style.display = period === "week" ? "" : "none";
+        };
+        if ($("lkwKmEuroYear")) $("lkwKmEuroYear").value = String(selectedYear);
+        if ($("lkwKmEuroMonth")) $("lkwKmEuroMonth").value = String(selectedMonth);
+        if ($("lkwKmEuroWeek")) $("lkwKmEuroWeek").value = String(selectedWeek);
+        if (periodEl) periodEl.onchange = updatePeriodFields;
+        updatePeriodFields();
+
+        $("lkwKmEuroRun").onclick = async () => {
+          const period = String($("lkwKmEuroPeriod")?.value || "year");
+          const year = Number($("lkwKmEuroYear")?.value);
+          const month = Number($("lkwKmEuroMonth")?.value);
+          const week = Number($("lkwKmEuroWeek")?.value);
+          if (!Number.isFinite(year) || year < 2025 || year > 2035) {
+            haptic("error");
+            showToast(L("invalidYear"));
+            return;
+          }
+          if (period === "month" && (!Number.isFinite(month) || month < 1 || month > 12)) {
+            haptic("error");
+            showToast(L("invalidYearMonth"));
+            return;
+          }
+          if (period === "week" && (!Number.isFinite(week) || week < 1 || week > 53)) {
+            haptic("error");
+            showToast(L("invalidYearWeek"));
+            return;
+          }
+          selectedYear = year;
+          selectedMonth = month;
+          selectedWeek = week;
+          await sendReportGenerate("lkw_km_euro", { period, year, month, week });
+        };
+      };
+
+      renderMenu();
       openSheet();
     }
 

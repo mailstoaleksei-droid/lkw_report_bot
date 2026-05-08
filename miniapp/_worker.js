@@ -35,6 +35,50 @@ const REPORTS = [
     ],
   },
   {
+    id: "lkw_km_euro",
+    enabled: true,
+    icon: "chart",
+    name: {
+      en: "Bericht (LKW - KM - Euro)",
+      ru: "Отчет (LKW - KM - Euro)",
+      de: "Bericht (LKW - KM - Euro)",
+    },
+    description: {
+      en: "All-truck comparison by revenue, kilometers, fuel consumption and diesel price",
+      ru: "Сравнение всех LKW по выручке, километрам, расходу и цене дизеля",
+      de: "Vergleich aller LKW nach Umsatz, Kilometern, Verbrauch und Dieselpreis",
+    },
+    params: [
+      {
+        id: "period",
+        type: "select",
+        label: { en: "Period", ru: "Период", de: "Zeitraum" },
+        values: ["year", "month", "week"],
+      },
+      {
+        id: "year",
+        type: "year",
+        label: { en: "Year", ru: "Год", de: "Jahr" },
+        min: 2025,
+        max: 2035,
+      },
+      {
+        id: "month",
+        type: "month",
+        label: { en: "Month", ru: "Месяц", de: "Monat" },
+        min: 1,
+        max: 12,
+      },
+      {
+        id: "week",
+        type: "week",
+        label: { en: "Week", ru: "Неделя", de: "Woche" },
+        min: 1,
+        max: 53,
+      },
+    ],
+  },
+  {
     id: "data_plan",
     enabled: true,
     icon: "calendar",
@@ -663,6 +707,110 @@ FROM weeks w
 LEFT JOIN occupied o ON o.iso_year = w.iso_year AND o.iso_week = w.iso_week
 LEFT JOIN soll s ON s.iso_year = w.iso_year AND s.iso_week = w.iso_week
 ORDER BY w.week_start;
+`;
+
+const LKW_KM_EURO_SQL = `
+WITH params AS (
+  SELECT
+    lower(trim($1::text)) AS period_kind,
+    $2::int AS report_year,
+    $3::int AS report_month,
+    $4::int AS iso_week
+),
+truck_base AS (
+  SELECT
+    t.external_id AS lkw_id,
+    COALESCE(NULLIF(t.plate_number, ''), NULLIF(t.raw_payload->>'LKW-Nummer', ''), NULLIF(t.raw_payload->>'Number', ''), t.external_id) AS lkw_nummer,
+    lower(replace(trim(COALESCE(NULLIF(t.plate_number, ''), NULLIF(t.raw_payload->>'LKW-Nummer', ''), NULLIF(t.raw_payload->>'Number', ''), t.external_id)), ' ', '')) AS lkw_norm,
+    COALESCE(NULLIF(t.truck_type, ''), NULLIF(t.raw_payload->>'LKW-Typ', ''), NULLIF(t.raw_payload->>'Type', '')) AS lkw_typ,
+    COALESCE(NULLIF(c.name, ''), NULLIF(t.raw_payload->>'Firma', ''), NULLIF(t.raw_payload->>'Company', '')) AS firma,
+    COALESCE(NULLIF(t.status, ''), NULLIF(t.raw_payload->>'Status', ''), CASE WHEN t.is_active THEN 'aktiv' ELSE 'inaktiv' END) AS status
+  FROM trucks t
+  LEFT JOIN companies c ON c.id = t.company_id
+  WHERE COALESCE(NULLIF(t.external_id, ''), NULLIF(t.plate_number, ''), NULLIF(t.raw_payload->>'LKW-Nummer', '')) IS NOT NULL
+),
+mileage AS (
+  SELECT
+    lower(replace(trim(y.lkw_nummer), ' ', '')) AS lkw_norm,
+    SUM(COALESCE(y.strecke_km, 0))::numeric AS km_total,
+    COUNT(DISTINCT y.report_date)::int AS active_days,
+    MIN(y.report_date) AS first_date,
+    MAX(y.report_date) AS last_date
+  FROM report_yf_lkw_daily y
+  CROSS JOIN params p
+  WHERE y.report_year = p.report_year
+    AND (p.period_kind <> 'month' OR y.month_index = p.report_month)
+    AND (p.period_kind <> 'week' OR y.iso_week = p.iso_week)
+  GROUP BY lower(replace(trim(y.lkw_nummer), ' ', ''))
+),
+revenue AS (
+  SELECT
+    lower(replace(trim(r.lkw_number), ' ', '')) AS lkw_norm,
+    SUM(COALESCE(r.revenue_amount, 0))::numeric AS revenue_total,
+    SUM(COALESCE(r.revenue_amount, 0)) FILTER (WHERE r.source = 'Carlo')::numeric AS revenue_carlo,
+    SUM(COALESCE(r.revenue_amount, 0)) FILTER (WHERE r.source = 'Contado')::numeric AS revenue_contado,
+    COUNT(*)::int AS revenue_records
+  FROM report_lkw_revenue_records r
+  CROSS JOIN params p
+  WHERE r.report_year = p.report_year
+    AND (p.period_kind <> 'month' OR r.report_month = p.report_month)
+    AND (p.period_kind <> 'week' OR r.iso_week = p.iso_week)
+  GROUP BY lower(replace(trim(r.lkw_number), ' ', ''))
+),
+fuel AS (
+  SELECT
+    lower(replace(trim(f.lkw_number), ' ', '')) AS lkw_norm,
+    SUM(COALESCE(f.quantity_liters, 0))::numeric AS diesel_liters,
+    SUM(COALESCE(f.total_net, 0))::numeric AS diesel_cost,
+    SUM(COALESCE(f.quantity_liters, 0)) FILTER (WHERE f.source = 'Staack')::numeric AS staack_liters,
+    SUM(COALESCE(f.total_net, 0)) FILTER (WHERE f.source = 'Staack')::numeric AS staack_cost,
+    SUM(COALESCE(f.quantity_liters, 0)) FILTER (WHERE f.source = 'Shell')::numeric AS shell_liters,
+    SUM(COALESCE(f.total_net, 0)) FILTER (WHERE f.source = 'Shell')::numeric AS shell_cost,
+    COUNT(*)::int AS fuel_events
+  FROM report_lkw_fuel_transactions f
+  CROSS JOIN params p
+  WHERE f.report_year = p.report_year
+    AND f.product_name = 'Diesel'
+    AND f.source IN ('Staack', 'Shell')
+    AND (p.period_kind <> 'month' OR f.report_month = p.report_month)
+    AND (p.period_kind <> 'week' OR f.iso_week = p.iso_week)
+  GROUP BY lower(replace(trim(f.lkw_number), ' ', ''))
+)
+SELECT
+  b.lkw_id,
+  b.lkw_nummer,
+  b.lkw_typ,
+  b.firma,
+  b.status,
+  COALESCE(m.km_total, 0)::numeric AS km_total,
+  COALESCE(m.active_days, 0)::int AS active_days,
+  to_char(m.first_date, 'DD/MM/YYYY') AS first_date,
+  to_char(m.last_date, 'DD/MM/YYYY') AS last_date,
+  COALESCE(r.revenue_total, 0)::numeric AS revenue_total,
+  COALESCE(r.revenue_carlo, 0)::numeric AS revenue_carlo,
+  COALESCE(r.revenue_contado, 0)::numeric AS revenue_contado,
+  COALESCE(r.revenue_records, 0)::int AS revenue_records,
+  COALESCE(f.diesel_liters, 0)::numeric AS diesel_liters,
+  COALESCE(f.diesel_cost, 0)::numeric AS diesel_cost,
+  COALESCE(f.staack_liters, 0)::numeric AS staack_liters,
+  COALESCE(f.staack_cost, 0)::numeric AS staack_cost,
+  COALESCE(f.shell_liters, 0)::numeric AS shell_liters,
+  COALESCE(f.shell_cost, 0)::numeric AS shell_cost,
+  COALESCE(f.fuel_events, 0)::int AS fuel_events,
+  CASE WHEN COALESCE(f.diesel_liters, 0) > 0 THEN (COALESCE(f.diesel_cost, 0) / f.diesel_liters)::numeric ELSE 0 END AS avg_diesel_price,
+  CASE WHEN COALESCE(m.km_total, 0) > 0 THEN ((COALESCE(f.diesel_liters, 0) / m.km_total) * 100)::numeric ELSE 0 END AS consumption_l_100km,
+  CASE WHEN COALESCE(m.km_total, 0) > 0 THEN (COALESCE(r.revenue_total, 0) / m.km_total)::numeric ELSE 0 END AS revenue_per_km,
+  CASE WHEN COALESCE(m.km_total, 0) > 0 THEN (COALESCE(f.diesel_cost, 0) / m.km_total)::numeric ELSE 0 END AS fuel_cost_per_km,
+  (COALESCE(r.revenue_total, 0) - COALESCE(f.diesel_cost, 0))::numeric AS revenue_after_fuel,
+  CASE WHEN COALESCE(m.km_total, 0) > 0 THEN ((COALESCE(r.revenue_total, 0) - COALESCE(f.diesel_cost, 0)) / m.km_total)::numeric ELSE 0 END AS after_fuel_per_km
+FROM truck_base b
+LEFT JOIN mileage m ON m.lkw_norm = b.lkw_norm
+LEFT JOIN revenue r ON r.lkw_norm = b.lkw_norm
+LEFT JOIN fuel f ON f.lkw_norm = b.lkw_norm
+WHERE COALESCE(m.km_total, 0) <> 0
+   OR COALESCE(r.revenue_total, 0) <> 0
+   OR COALESCE(f.diesel_liters, 0) <> 0
+ORDER BY revenue_after_fuel DESC, revenue_total DESC, km_total DESC, b.lkw_id ASC;
 `;
 
 const DATA_PLAN_GRID_SQL = `
@@ -1746,6 +1894,23 @@ async function writeReportLog(connectionString, payload) {
 
 function makeBerichtFilename(year, week) {
   return `bericht_${Number.parseInt(String(year), 10)}_w${pad2(Number.parseInt(String(week), 10))}.pdf`;
+}
+
+function makeLkwKmEuroFilename(period, year, month, week, at = new Date()) {
+  const p = String(period || "year").trim().toLowerCase();
+  const y = Number.parseInt(String(year), 10);
+  const m = Number.parseInt(String(month), 10);
+  const w = Number.parseInt(String(week), 10);
+  if (p === "week" && Number.isFinite(y) && Number.isFinite(w) && w >= 1 && w <= 53) {
+    return `lkw_km_euro_${y}_w${pad2(w)}.pdf`;
+  }
+  if (p === "month" && Number.isFinite(y) && Number.isFinite(m) && m >= 1 && m <= 12) {
+    return `lkw_km_euro_${y}_${pad2(m)}.pdf`;
+  }
+  if (Number.isFinite(y) && y > 0) {
+    return `lkw_km_euro_${y}_year.pdf`;
+  }
+  return `lkw_km_euro_${formatUtcDateStamp(at)}.pdf`;
 }
 
 function makeDataPlanFilename(year, week) {
@@ -6649,6 +6814,259 @@ function buildLkwFuelYearRows(fuelRows = [], truck = {}) {
     });
 }
 
+function formatLkwKmEuroPeriodLabel(period, year, month, week) {
+  const p = String(period || "year").trim().toLowerCase();
+  const y = toIntSafe(year, 0);
+  if (p === "week") return `${y}/W${pad2(week)}`;
+  if (p === "month") return `${y}/${pad2(month)}`;
+  return `${y} whole year`;
+}
+
+function scoreLkwKmEuroRows(rows = []) {
+  const baseRows = (Array.isArray(rows) ? rows : []).map((row) => ({
+    ...row,
+    km_total_num: toNumberSafe(row?.km_total, 0),
+    revenue_total_num: toNumberSafe(row?.revenue_total, 0),
+    diesel_liters_num: toNumberSafe(row?.diesel_liters, 0),
+    diesel_cost_num: toNumberSafe(row?.diesel_cost, 0),
+    avg_diesel_price_num: toNumberSafe(row?.avg_diesel_price, 0),
+    consumption_l_100km_num: toNumberSafe(row?.consumption_l_100km, 0),
+    revenue_per_km_num: toNumberSafe(row?.revenue_per_km, 0),
+    fuel_cost_per_km_num: toNumberSafe(row?.fuel_cost_per_km, 0),
+    after_fuel_per_km_num: toNumberSafe(row?.after_fuel_per_km, 0),
+    revenue_after_fuel_num: toNumberSafe(row?.revenue_after_fuel, 0),
+  }));
+
+  const maxKm = Math.max(1, ...baseRows.map((row) => row.km_total_num));
+  const maxRevenuePerKm = Math.max(0.01, ...baseRows.map((row) => row.revenue_per_km_num));
+  const consumptionValues = baseRows.map((row) => row.consumption_l_100km_num).filter((v) => v > 0);
+  const fuelCostValues = baseRows.map((row) => row.fuel_cost_per_km_num).filter((v) => v > 0);
+  const minConsumption = consumptionValues.length ? Math.min(...consumptionValues) : 0;
+  const maxConsumption = consumptionValues.length ? Math.max(...consumptionValues) : 0;
+  const minFuelCost = fuelCostValues.length ? Math.min(...fuelCostValues) : 0;
+  const maxFuelCost = fuelCostValues.length ? Math.max(...fuelCostValues) : 0;
+
+  const inverseNorm = (value, minValue, maxValue) => {
+    const n = toNumberSafe(value, 0);
+    if (n <= 0) return 0;
+    if (Math.abs(maxValue - minValue) < 0.000001) return 1;
+    return Math.max(0, Math.min(1, (maxValue - n) / (maxValue - minValue)));
+  };
+
+  return baseRows
+    .map((row) => {
+      const revenueNorm = Math.max(0, Math.min(1, row.revenue_per_km_num / maxRevenuePerKm));
+      const kmNorm = Math.max(0, Math.min(1, row.km_total_num / maxKm));
+      const consumptionNorm = inverseNorm(row.consumption_l_100km_num, minConsumption, maxConsumption);
+      const fuelCostNorm = inverseNorm(row.fuel_cost_per_km_num, minFuelCost, maxFuelCost);
+      const score = (revenueNorm * 45) + (kmNorm * 25) + (consumptionNorm * 20) + (fuelCostNorm * 10);
+      return { ...row, efficiency_score: score };
+    })
+    .sort((a, b) => (
+      b.efficiency_score - a.efficiency_score
+      || b.after_fuel_per_km_num - a.after_fuel_per_km_num
+      || b.revenue_total_num - a.revenue_total_num
+      || String(a.lkw_nummer || "").localeCompare(String(b.lkw_nummer || ""), undefined, { numeric: true, sensitivity: "base" })
+    ))
+    .map((row, idx) => ({ ...row, efficiency_rank: idx + 1 }));
+}
+
+async function buildLkwKmEuroPdfWithPdfLib({ userId, period, year, month, week, rows }) {
+  const pdfDoc = await PDFDocument.create();
+  const font = await pdfDoc.embedFont(StandardFonts.Helvetica);
+  const boldFont = await pdfDoc.embedFont(StandardFonts.HelveticaBold);
+
+  const rankedRows = scoreLkwKmEuroRows(rows);
+  const periodLabel = formatLkwKmEuroPeriodLabel(period, year, month, week);
+  const pageSize = [842, 595];
+  const margin = 24;
+  const textColor = rgb(0.08, 0.13, 0.22);
+  const mutedColor = rgb(0.34, 0.4, 0.5);
+  const borderColor = rgb(0.72, 0.79, 0.88);
+  const headerBg = rgb(0.10, 0.28, 0.46);
+  const headerText = rgb(1, 1, 1);
+  const oddBg = rgb(0.965, 0.98, 1);
+  const goodBg = rgb(0.90, 0.98, 0.92);
+  const warnBg = rgb(1, 0.965, 0.90);
+  const badBg = rgb(1, 0.93, 0.91);
+  const accent = rgb(0.13, 0.40, 0.66);
+
+  let page = pdfDoc.addPage(pageSize);
+  let y = page.getHeight() - margin;
+
+  const drawText = (text, x, yy, size, usedFont = font, color = textColor, maxWidth = null) => {
+    const value = maxWidth ? fitTextToWidth(usedFont, safeText(text, ""), size, maxWidth) : safeText(text, "");
+    page.drawText(value, { x, y: yy, size, font: usedFont, color });
+  };
+
+  const centerText = (text, x, yy, width, size, usedFont = font, color = textColor) => {
+    const value = fitTextToWidth(usedFont, safeText(text, ""), size, Math.max(10, width - 8));
+    const w = measureTextWidth(usedFont, value, size);
+    page.drawText(value, { x: x + Math.max(3, (width - w) / 2), y: yy, size, font: usedFont, color });
+  };
+
+  const ensureSpace = (needed) => {
+    if (y - needed >= margin) return;
+    page = pdfDoc.addPage(pageSize);
+    y = page.getHeight() - margin;
+  };
+
+  const totals = rankedRows.reduce((acc, row) => {
+    acc.km += row.km_total_num;
+    acc.revenue += row.revenue_total_num;
+    acc.liters += row.diesel_liters_num;
+    acc.fuelCost += row.diesel_cost_num;
+    acc.afterFuel += row.revenue_after_fuel_num;
+    return acc;
+  }, { km: 0, revenue: 0, liters: 0, fuelCost: 0, afterFuel: 0 });
+  const avgConsumption = totals.km > 0 ? (totals.liters / totals.km) * 100 : 0;
+  const avgPrice = totals.liters > 0 ? totals.fuelCost / totals.liters : 0;
+  const best = rankedRows[0] || null;
+
+  const drawHeader = () => {
+    page.drawRectangle({
+      x: margin,
+      y: y - 70,
+      width: page.getWidth() - margin * 2,
+      height: 70,
+      color: rgb(0.90, 0.94, 0.98),
+      borderColor,
+      borderWidth: 1,
+    });
+    drawText("LKW - KM - Euro", margin + 16, y - 25, 20, boldFont, accent);
+    drawText(`Zeitraum: ${periodLabel}`, margin + 16, y - 47, 11, boldFont, textColor);
+    drawText(formatReportGeneratedLabel(userId), margin + 470, y - 25, 8, font, mutedColor, 320);
+    drawText("Daten: LKW, YF, Carlo, Contado, Staack, Shell", margin + 470, y - 43, 8, font, mutedColor, 320);
+    y -= 86;
+  };
+
+  const drawMetricCards = () => {
+    const cards = [
+      { label: "LKW", value: String(rankedRows.length), meta: best ? `Best: ${safeText(best.lkw_nummer, "")}` : "-" },
+      { label: "Umsatz", value: `${formatMoney(totals.revenue)} Euro`, meta: "Carlo + Contado" },
+      { label: "KM", value: `${formatMoneyInt(totals.km)} km`, meta: "Yellow Fox" },
+      { label: "Diesel", value: `${formatMoneyInt(totals.liters)} L`, meta: `${formatMoney(totals.fuelCost)} Euro` },
+      { label: "Verbrauch", value: `${avgConsumption.toFixed(1)} L/100`, meta: `Avg ${formatMoney(avgPrice)} Euro/L` },
+      { label: "Nach Diesel", value: `${formatMoney(totals.afterFuel)} Euro`, meta: "Umsatz minus Diesel" },
+    ];
+    const gap = 8;
+    const width = (page.getWidth() - margin * 2 - gap * (cards.length - 1)) / cards.length;
+    const height = 58;
+    for (let idx = 0; idx < cards.length; idx += 1) {
+      const card = cards[idx];
+      const x = margin + idx * (width + gap);
+      page.drawRectangle({ x, y: y - height, width, height, color: rgb(0.97, 0.985, 1), borderColor, borderWidth: 0.8 });
+      centerText(card.value, x, y - 18, width, 9, boldFont, accent);
+      centerText(card.meta, x, y - 34, width, 6.7, font, mutedColor);
+      centerText(card.label, x, y - 49, width, 7, boldFont, textColor);
+    }
+    y -= height + 14;
+  };
+
+  const drawExplanation = () => {
+    ensureSpace(34);
+    page.drawRectangle({
+      x: margin,
+      y: y - 30,
+      width: page.getWidth() - margin * 2,
+      height: 30,
+      color: rgb(0.94, 0.975, 0.97),
+      borderColor: rgb(0.65, 0.82, 0.78),
+      borderWidth: 0.8,
+    });
+    const topText = best
+      ? `Best LKW: ${safeText(best.lkw_nummer, "")} | score ${best.efficiency_score.toFixed(1)} | ${formatMoney(best.revenue_per_km_num)} Euro/km | ${best.consumption_l_100km_num.toFixed(1)} L/100 km`
+      : "No data for selected period.";
+    drawText(topText, margin + 10, y - 12, 8.5, boldFont, textColor, page.getWidth() - margin * 2 - 20);
+    drawText("Ranking score: revenue/km 45%, KM utilization 25%, low L/100 km 20%, low fuel cost/km 10%.", margin + 10, y - 24, 7.2, font, mutedColor, page.getWidth() - margin * 2 - 20);
+    y -= 42;
+  };
+
+  const columns = [
+    { key: "efficiency_rank", label: "#", width: 28 },
+    { key: "lkw_nummer", label: "LKW", width: 78 },
+    { key: "firma", label: "Firma", width: 76 },
+    { key: "km_total_num", label: "KM", width: 65 },
+    { key: "revenue_total_num", label: "Umsatz", width: 82 },
+    { key: "revenue_per_km_num", label: "Euro/km", width: 58 },
+    { key: "diesel_liters_num", label: "Diesel L", width: 65 },
+    { key: "consumption_l_100km_num", label: "L/100", width: 52 },
+    { key: "avg_diesel_price_num", label: "Euro/L", width: 52 },
+    { key: "fuel_cost_per_km_num", label: "Fuel/km", width: 58 },
+    { key: "after_fuel_per_km_num", label: "After/km", width: 60 },
+    { key: "efficiency_score", label: "Score", width: 50 },
+  ];
+  const tableWidth = columns.reduce((sum, col) => sum + col.width, 0);
+  const rowH = 17;
+  const tableX = margin + ((page.getWidth() - margin * 2 - tableWidth) / 2);
+
+  const formatCell = (row, key) => {
+    if (key === "efficiency_rank") return String(row.efficiency_rank || "");
+    if (key === "km_total_num" || key === "diesel_liters_num") return formatMoneyInt(row[key]);
+    if (key === "revenue_total_num") return formatMoney(row[key]);
+    if (key === "revenue_per_km_num" || key === "avg_diesel_price_num" || key === "fuel_cost_per_km_num" || key === "after_fuel_per_km_num") return formatMoney(row[key]);
+    if (key === "consumption_l_100km_num") return toNumberSafe(row[key], 0) > 0 ? toNumberSafe(row[key], 0).toFixed(1) : "-";
+    if (key === "efficiency_score") return toNumberSafe(row[key], 0).toFixed(1);
+    return safeText(row?.[key], "");
+  };
+
+  const drawTableHeader = () => {
+    page.drawRectangle({ x: tableX, y: y - rowH + 2, width: tableWidth, height: rowH, color: headerBg });
+    let x = tableX;
+    for (const col of columns) {
+      centerText(col.label, x, y - 11, col.width, 7.1, boldFont, headerText);
+      x += col.width;
+    }
+    y -= rowH;
+  };
+
+  const drawTable = () => {
+    ensureSpace(38);
+    drawText("Vergleich aller Maschinen", margin, y, 12, boldFont, textColor);
+    y -= 16;
+    drawTableHeader();
+    if (!rankedRows.length) {
+      ensureSpace(rowH + 4);
+      page.drawRectangle({ x: tableX, y: y - rowH + 2, width: tableWidth, height: rowH, color: oddBg, borderColor, borderWidth: 0.5 });
+      centerText("Keine Daten", tableX, y - 11, tableWidth, 8, font, mutedColor);
+      y -= rowH;
+      return;
+    }
+    for (const row of rankedRows) {
+      if (y - rowH < margin) {
+        page = pdfDoc.addPage(pageSize);
+        y = page.getHeight() - margin;
+        drawTableHeader();
+      }
+      let fill = row.efficiency_rank <= 3 ? goodBg : (row.efficiency_rank > Math.max(3, rankedRows.length - 3) ? badBg : null);
+      if (!fill && row.efficiency_score < 35) fill = warnBg;
+      page.drawRectangle({
+        x: tableX,
+        y: y - rowH + 2,
+        width: tableWidth,
+        height: rowH,
+        color: fill || (row.efficiency_rank % 2 === 0 ? oddBg : rgb(1, 1, 1)),
+        borderColor,
+        borderWidth: 0.35,
+      });
+      let x = tableX;
+      for (const col of columns) {
+        const useFont = row.efficiency_rank <= 3 && ["efficiency_rank", "lkw_nummer", "efficiency_score"].includes(col.key) ? boldFont : font;
+        centerText(formatCell(row, col.key), x, y - 11, col.width, 6.9, useFont, textColor);
+        x += col.width;
+      }
+      y -= rowH;
+    }
+  };
+
+  drawHeader();
+  drawMetricCards();
+  drawExplanation();
+  drawTable();
+
+  return pdfDoc.save();
+}
+
 async function buildLkwSinglePdfWithPdfLib({ userId, truck, repairRows, fuelRows, revenueRows, mileageRow }) {
   const pdfDoc = await PDFDocument.create();
   const font = await pdfDoc.embedFont(StandardFonts.Helvetica);
@@ -8383,6 +8801,8 @@ async function handleHistory(request, env) {
     let filename = `report_${formatUtcDateStamp(new Date())}.pdf`;
     if (reportType === "bericht" && isoYear && isoWeek) {
       filename = makeBerichtFilename(isoYear, isoWeek);
+    } else if (reportType === "lkw_km_euro") {
+      filename = makeLkwKmEuroFilename(params?.period, params?.year || isoYear, params?.month, params?.week || isoWeek);
     } else if (reportType === "data_plan" && isoYear && isoWeek) {
       filename = makeDataPlanFilename(isoYear, isoWeek);
     } else if (reportType === "data_data" && isoYear && isoWeek) {
@@ -8709,6 +9129,34 @@ function validateGeneratePayload(body) {
     return { ok: true, reportType, year, week };
   }
 
+  if (reportType === "lkw_km_euro") {
+    const periodRaw = String(body.period || "year").trim().toLowerCase();
+    const period = ["year", "month", "week"].includes(periodRaw) ? periodRaw : "year";
+    const year = Number.parseInt(String(body.year ?? ""), 10);
+    const month = Number.parseInt(String(body.month ?? "0"), 10);
+    const week = Number.parseInt(String(body.week ?? "0"), 10);
+    const yearParam = report.params.find((p) => p.id === "year");
+    const minYear = toInt(yearParam?.min, 2025);
+    const maxYear = toInt(yearParam?.max, 2035);
+    if (!Number.isFinite(year) || year < minYear || year > maxYear) {
+      return { ok: false, status: 400, error: "Invalid year" };
+    }
+    if (period === "month" && (!Number.isFinite(month) || month < 1 || month > 12)) {
+      return { ok: false, status: 400, error: "Invalid year/month" };
+    }
+    if (period === "week" && (!Number.isFinite(week) || week < 1 || week > 53)) {
+      return { ok: false, status: 400, error: "Invalid year/week" };
+    }
+    return {
+      ok: true,
+      reportType,
+      period,
+      year,
+      month: period === "month" ? month : 0,
+      week: period === "week" ? week : 0,
+    };
+  }
+
   if (reportType === "diesel") {
     return { ok: true, reportType };
   }
@@ -8883,6 +9331,7 @@ async function handleGenerateWithBody(body, env, enforceRateLimit = true) {
 
   if (
     valid.reportType !== "bericht"
+    && valid.reportType !== "lkw_km_euro"
     && valid.reportType !== "data_plan"
     && valid.reportType !== "data_data"
     && valid.reportType !== "einnahmen"
@@ -9027,6 +9476,73 @@ async function handleGenerateWithBody(body, env, enforceRateLimit = true) {
           "",
           ...lines,
         ],
+      });
+    }
+  } else if (valid.reportType === "lkw_km_euro") {
+    let rows;
+    try {
+      const result = await queryNeon(
+        dbConnectionString,
+        LKW_KM_EURO_SQL,
+        [valid.period, valid.year, valid.month, valid.week],
+      );
+      rows = result.rows || [];
+    } catch (err) {
+      return json(
+        {
+          ok: false,
+          error: "Failed to execute SQL query",
+          code: "SQL_ERROR",
+          details: String(err?.message || err || "unknown error"),
+        },
+        500,
+        { "Cache-Control": "no-store" },
+      );
+    }
+
+    filename = makeLkwKmEuroFilename(valid.period, valid.year, valid.month, valid.week);
+    outputKey = `lkw_km_euro:${valid.period}:${valid.year}:${pad2(valid.month)}:W${pad2(valid.week)}`;
+    try {
+      pdfBytes = await buildLkwKmEuroPdfWithPdfLib({
+        userId: reportUserLabel,
+        period: valid.period,
+        year: valid.year,
+        month: valid.month,
+        week: valid.week,
+        rows,
+      });
+    } catch (err) {
+      pdfEngine = "legacy-fallback";
+      const rankedRows = scoreLkwKmEuroRows(rows);
+      const lines = [
+        `Period: ${formatLkwKmEuroPeriodLabel(valid.period, valid.year, valid.month, valid.week)}`,
+        "Ranking score: revenue/km 45%, KM utilization 25%, low L/100 km 20%, low fuel cost/km 10%.",
+        "",
+        "Rank | LKW | Firma | KM | Revenue | Euro/km | Diesel L | L/100 km | Euro/L | Fuel/km | After fuel/km | Score",
+        "-".repeat(180),
+      ];
+      for (const row of rankedRows) {
+        lines.push([
+          safeText(row.efficiency_rank, ""),
+          safeText(row.lkw_nummer, ""),
+          safeText(row.firma, ""),
+          formatMoneyInt(row.km_total_num),
+          formatMoney(row.revenue_total_num),
+          formatMoney(row.revenue_per_km_num),
+          formatMoneyInt(row.diesel_liters_num),
+          row.consumption_l_100km_num > 0 ? row.consumption_l_100km_num.toFixed(1) : "-",
+          formatMoney(row.avg_diesel_price_num),
+          formatMoney(row.fuel_cost_per_km_num),
+          formatMoney(row.after_fuel_per_km_num),
+          row.efficiency_score.toFixed(1),
+        ].join(" | "));
+      }
+      pdfBytes = buildSimplePdf({
+        title: "LKW - KM - Euro",
+        subtitle: formatReportGeneratedLabel(reportUserLabel),
+        lines,
+        pageWidth: 1040,
+        pageHeight: 595,
       });
     }
   } else if (valid.reportType === "data_plan") {
@@ -10336,9 +10852,15 @@ async function handleGenerateWithBody(body, env, enforceRateLimit = true) {
   }
 
   const reportParams = { source: "miniapp_generate", report_type: valid.reportType };
-  if ("year" in valid && "week" in valid) {
+  if ("year" in valid && "week" in valid && toIntSafe(valid.week, 0) >= 1) {
     reportParams.year = valid.year;
     reportParams.week = valid.week;
+  }
+  if (valid.reportType === "lkw_km_euro") {
+    reportParams.period = safeText(valid.period, "year");
+    reportParams.year = valid.year;
+    if (valid.period === "month") reportParams.month = valid.month;
+    if (valid.period === "week") reportParams.week = valid.week;
   }
   if (valid.reportType === "yf_driver_month") {
     reportParams.month = valid.month;
@@ -10392,7 +10914,7 @@ async function handleGenerateWithBody(body, env, enforceRateLimit = true) {
       chatId: auth.userId,
       reportType: valid.reportType,
       isoYear: "year" in valid ? valid.year : null,
-      isoWeek: "week" in valid ? valid.week : null,
+      isoWeek: ("week" in valid && toIntSafe(valid.week, 0) >= 1) ? valid.week : null,
       status: "success",
       params: reportParams,
       durationMs: Date.now() - startedMs,
