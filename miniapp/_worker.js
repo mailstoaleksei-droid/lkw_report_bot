@@ -6962,6 +6962,12 @@ function buildLkwKmEuroModel(rows = []) {
     total.period_label = period.period_label;
     total.period_start = period.period_start;
     total.period_end = period.period_end;
+    total.truck_count = items.filter((row) => (
+      Math.abs(row.km_total_num) >= 0.005
+      || Math.abs(row.revenue_total_num) >= 0.005
+      || Math.abs(row.diesel_liters_num) >= 0.005
+      || Math.abs(row.diesel_cost_num) >= 0.005
+    )).length;
     total.revenue_per_km = total.km_total > 0 ? total.revenue_total / total.km_total : 0;
     return total;
   });
@@ -7079,25 +7085,6 @@ async function buildLkwKmEuroPdfWithPdfLib({ userId, period, year, month, week, 
     y -= height + 14;
   };
 
-  const drawExplanation = () => {
-    ensureSpace(34);
-    page.drawRectangle({
-      x: margin,
-      y: y - 30,
-      width: page.getWidth() - margin * 2,
-      height: 30,
-      color: rgb(0.94, 0.975, 0.97),
-      borderColor: rgb(0.65, 0.82, 0.78),
-      borderWidth: 0.8,
-    });
-    const topText = best
-      ? `Best LKW nach Umsatz/km: ${safeText(best.lkw_nummer, "")} | ${formatMoney(best.revenue_per_km_num)} Euro pro km | ${formatMoney(best.revenue_total_num)} Euro Umsatz`
-      : "No data for selected period.";
-    drawText(topText, margin + 10, y - 12, 8.5, boldFont, textColor, page.getWidth() - margin * 2 - 20);
-    drawText("Umsatz/km zeigt, wie viel Umsatz pro gefahrenem Kilometer erwirtschaftet wurde.", margin + 10, y - 24, 7.2, font, mutedColor, page.getWidth() - margin * 2 - 20);
-    y -= 42;
-  };
-
   const columns = [
     { key: "rank", label: "#", width: 28 },
     { key: "lkw_nummer", label: "LKW", width: 86 },
@@ -7134,7 +7121,7 @@ async function buildLkwKmEuroPdfWithPdfLib({ userId, period, year, month, week, 
 
   const drawTable = () => {
     ensureSpace(38);
-    drawText("Vergleich aller Maschinen", margin, y, 12, boldFont, textColor);
+    centerText("Vergleich aller Maschinen", tableX, y, tableWidth, 12, boldFont, textColor);
     y -= 16;
     drawTableHeader();
     if (!rankedRows.length) {
@@ -7173,15 +7160,16 @@ async function buildLkwKmEuroPdfWithPdfLib({ userId, period, year, month, week, 
   const drawPeriodSummary = () => {
     if (model.periodDefs.length <= 1) return;
     const summaryCols = [
-      { key: "period_label", label: "Zeitraum", width: 72 },
-      { key: "km_total", label: "KM", width: 80 },
-      { key: "revenue_total", label: "Umsatz", width: 96 },
-      { key: "revenue_per_km", label: "Umsatz/km", width: 78 },
-      { key: "diesel_cost", label: "Diesel Euro", width: 94 },
-      { key: "revenue_carlo", label: "Carlo", width: 88 },
-      { key: "revenue_contado", label: "Contado", width: 88 },
-      { key: "staack_cost", label: "Staack", width: 82 },
-      { key: "shell_cost", label: "Shell", width: 82 },
+      { key: "period_label", label: "Zeitraum", width: 66 },
+      { key: "truck_count", label: "LKW", width: 42 },
+      { key: "km_total", label: "KM", width: 76 },
+      { key: "revenue_total", label: "Umsatz", width: 92 },
+      { key: "revenue_per_km", label: "Umsatz/km", width: 72 },
+      { key: "diesel_cost", label: "Diesel Euro", width: 88 },
+      { key: "revenue_carlo", label: "Carlo", width: 84 },
+      { key: "revenue_contado", label: "Contado", width: 84 },
+      { key: "staack_cost", label: "Staack", width: 76 },
+      { key: "shell_cost", label: "Shell", width: 76 },
     ];
     const rowHeight = 17;
     const width = summaryCols.reduce((sum, col) => sum + col.width, 0);
@@ -7196,7 +7184,7 @@ async function buildLkwKmEuroPdfWithPdfLib({ userId, period, year, month, week, 
       y -= rowHeight;
     };
     ensureSpace(36 + rowHeight * (model.totalsByPeriod.length + 1));
-    drawText("Dynamik Gesamt: ausgewaehlter Zeitraum und 3 vorherige", margin, y, 12, boldFont, textColor);
+    centerText("Dynamik Gesamt: ausgewaehlter Zeitraum und 3 vorherige", x0, y, width, 12, boldFont, textColor);
     y -= 16;
     drawHeaderRow();
     for (const row of model.totalsByPeriod) {
@@ -7204,6 +7192,7 @@ async function buildLkwKmEuroPdfWithPdfLib({ userId, period, year, month, week, 
       let x = x0;
       for (const col of summaryCols) {
         let value = safeText(row?.[col.key], "");
+        if (col.key === "truck_count") value = String(toIntSafe(row[col.key], 0));
         if (col.key === "km_total") value = formatMoneyInt(row[col.key]);
         if (["revenue_total", "revenue_per_km", "diesel_cost", "revenue_carlo", "revenue_contado", "staack_cost", "shell_cost"].includes(col.key)) value = formatMoney(row[col.key]);
         centerText(value, x, y - 11, col.width, 6.8, row.period_idx === model.selectedIdx ? boldFont : font, textColor);
@@ -7281,7 +7270,6 @@ async function buildLkwKmEuroPdfWithPdfLib({ userId, period, year, month, week, 
 
   drawHeader();
   drawMetricCards();
-  drawExplanation();
   drawPeriodSummary();
   drawTable();
   drawTruckDynamics();
@@ -9759,11 +9747,12 @@ async function handleGenerateWithBody(body, env, enforceRateLimit = true) {
       }
       if (model.totalsByPeriod.length > 1) {
         lines.push("");
-        lines.push("Period | KM | Umsatz | Umsatz/km | Diesel Euro | Carlo | Contado | Staack | Shell");
+        lines.push("Period | LKW | KM | Umsatz | Umsatz/km | Diesel Euro | Carlo | Contado | Staack | Shell");
         lines.push("-".repeat(150));
         for (const row of model.totalsByPeriod) {
           lines.push([
             safeText(row.period_label, ""),
+            String(toIntSafe(row.truck_count, 0)),
             formatMoneyInt(row.km_total),
             formatMoney(row.revenue_total),
             formatMoney(row.revenue_per_km),
