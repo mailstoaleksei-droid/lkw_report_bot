@@ -7246,25 +7246,48 @@ async function buildLkwKmEuroPdfWithPdfLib({ userId, period, year, month, week, 
   const drawTruckDynamics = () => {
     if (model.periodDefs.length <= 1 || !model.dynamicsRows.length) return;
     const theme = themes.mileage;
-    const periodWidth = 138;
-    const lkwWidth = 78;
-    const firmaWidth = 82;
+    const width = page.getWidth() - margin * 2;
+    const x0 = margin;
+    const lkwWidth = 72;
+    const firmaWidth = 90;
+    const trendWidth = 62;
+    const periodWidth = (width - lkwWidth - firmaWidth - trendWidth) / model.periodDefs.length;
     const subCols = [
-      { key: "km_total_num", label: "KM", width: 40 },
-      { key: "revenue_total_num", label: "Umsatz", width: 54 },
-      { key: "diesel_cost_num", label: "Diesel", width: 44 },
+      { key: "km_total_num", label: "KM", width: periodWidth * 0.29 },
+      { key: "revenue_total_num", label: "Umsatz", width: periodWidth * 0.36 },
+      { key: "diesel_cost_num", label: "Diesel", width: periodWidth * 0.35 },
     ];
-    const width = lkwWidth + firmaWidth + (periodWidth * model.periodDefs.length);
-    const x0 = margin + ((page.getWidth() - margin * 2 - width) / 2);
     const headerH = 30;
     const rowHeight = 16;
+    const selectedPos = model.periodDefs.findIndex((periodDef) => periodDef.period_idx === model.selectedIdx);
+    const previousPeriod = selectedPos > 0 ? model.periodDefs[selectedPos - 1] : null;
+    const periodThemes = [themes.mileage, themes.revenue, themes.diesel, themes.master];
+
+    const calculateTrendPct = (row) => {
+      if (!previousPeriod) return null;
+      const currentRow = row.rows_by_period.get(model.selectedIdx) || {};
+      const previousRow = row.rows_by_period.get(previousPeriod.period_idx) || {};
+      const current = toNumberSafe(currentRow?.revenue_per_km_num, 0);
+      const previous = toNumberSafe(previousRow?.revenue_per_km_num, 0);
+      if (previous <= 0) return null;
+      return ((current - previous) / previous) * 100;
+    };
+
+    const formatTrendPct = (trendPct) => {
+      if (!Number.isFinite(trendPct)) return "-";
+      const sign = trendPct > 0 ? "+" : "";
+      return `${sign}${trendPct.toFixed(1)}%`;
+    };
 
     const drawHeaderRows = () => {
-      page.drawRectangle({ x: x0, y: y - headerH + 2, width, height: headerH, color: theme.head });
+      page.drawRectangle({ x: x0, y: y - headerH + 2, width: lkwWidth + firmaWidth, height: headerH, color: theme.head });
       centerText("LKW", x0, y - 19, lkwWidth, 7, boldFont, headerText);
       centerText("Firma", x0 + lkwWidth, y - 19, firmaWidth, 7, boldFont, headerText);
       let x = x0 + lkwWidth + firmaWidth;
-      for (const periodDef of model.periodDefs) {
+      for (let periodIdx = 0; periodIdx < model.periodDefs.length; periodIdx += 1) {
+        const periodDef = model.periodDefs[periodIdx];
+        const periodTheme = periodThemes[periodIdx % periodThemes.length];
+        page.drawRectangle({ x, y: y - headerH + 2, width: periodWidth, height: headerH, color: periodTheme.head });
         centerText(periodDef.period_label, x, y - 10, periodWidth, 7, boldFont, headerText);
         let subX = x;
         for (const sub of subCols) {
@@ -7273,6 +7296,9 @@ async function buildLkwKmEuroPdfWithPdfLib({ userId, period, year, month, week, 
         }
         x += periodWidth;
       }
+      page.drawRectangle({ x, y: y - headerH + 2, width: trendWidth, height: headerH, color: themes.revenue.head });
+      centerText("Dynamik", x, y - 12, trendWidth, 6.8, boldFont, headerText);
+      centerText("U/km %", x, y - 24, trendWidth, 5.8, boldFont, headerText);
       y -= headerH;
     };
 
@@ -7286,12 +7312,18 @@ async function buildLkwKmEuroPdfWithPdfLib({ userId, period, year, month, week, 
         y = page.getHeight() - margin;
         drawHeaderRows();
       }
-      page.drawRectangle({ x: x0, y: y - rowHeight + 2, width, height: rowHeight, color: idx % 2 ? theme.row : rgb(1, 1, 1), borderColor: theme.border, borderWidth: 0.3 });
+      const baseFill = idx % 2 ? theme.row : rgb(1, 1, 1);
+      page.drawRectangle({ x: x0, y: y - rowHeight + 2, width: lkwWidth + firmaWidth, height: rowHeight, color: baseFill, borderColor: theme.border, borderWidth: 0.3 });
       centerText(row.lkw_nummer, x0, y - 10, lkwWidth, 5.9, font, textColor);
       centerText(row.firma, x0 + lkwWidth, y - 10, firmaWidth, 5.6, font, textColor);
       let x = x0 + lkwWidth + firmaWidth;
-      for (const periodDef of model.periodDefs) {
+      for (let periodIdx = 0; periodIdx < model.periodDefs.length; periodIdx += 1) {
+        const periodDef = model.periodDefs[periodIdx];
         const periodRow = row.rows_by_period.get(periodDef.period_idx) || {};
+        const periodTheme = periodThemes[periodIdx % periodThemes.length];
+        const periodFill = periodDef.period_idx === model.selectedIdx ? periodTheme.bg : (idx % 2 ? periodTheme.row : rgb(1, 1, 1));
+        page.drawRectangle({ x, y: y - rowHeight + 2, width: periodWidth, height: rowHeight, color: periodFill, borderColor: periodTheme.border, borderWidth: 0.3 });
+        page.drawRectangle({ x, y: y - rowHeight + 2, width: 1.2, height: rowHeight, color: periodTheme.accent });
         let subX = x;
         for (const sub of subCols) {
           let value = "-";
@@ -7303,6 +7335,15 @@ async function buildLkwKmEuroPdfWithPdfLib({ userId, period, year, month, week, 
         }
         x += periodWidth;
       }
+      const trendPct = calculateTrendPct(row);
+      const trendFill = !Number.isFinite(trendPct)
+        ? baseFill
+        : (trendPct >= 0 ? rgb(0.90, 0.98, 0.92) : rgb(1, 0.95, 0.95));
+      const trendColor = !Number.isFinite(trendPct)
+        ? mutedColor
+        : (trendPct >= 0 ? rgb(0.10, 0.45, 0.20) : rgb(0.68, 0.16, 0.16));
+      page.drawRectangle({ x, y: y - rowHeight + 2, width: trendWidth, height: rowHeight, color: trendFill, borderColor: themes.revenue.border, borderWidth: 0.3 });
+      centerText(formatTrendPct(trendPct), x, y - 10, trendWidth, 6.1, boldFont, trendColor);
       y -= rowHeight;
     }
     y -= 10;
