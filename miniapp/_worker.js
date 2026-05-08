@@ -7080,7 +7080,10 @@ async function buildLkwKmEuroPdfWithPdfLib({ userId, period, year, month, week, 
     acc.fuelCost += row.diesel_cost_num;
     return acc;
   }, { km: 0, revenue: 0, carlo: 0, contado: 0, liters: 0, fuelCost: 0 });
-  const best = rankedRows[0] || null;
+  const activeRevenueLkwCount = rankedRows.filter((row) => (
+    Math.abs(row.km_total_num) >= 0.005
+    && Math.abs(row.revenue_total_num) >= 0.005
+  )).length;
 
   const drawHeader = () => {
     page.drawRectangle({
@@ -7101,7 +7104,7 @@ async function buildLkwKmEuroPdfWithPdfLib({ userId, period, year, month, week, 
 
   const drawMetricCards = () => {
     const cards = [
-      { label: "LKW", value: String(rankedRows.length), meta: best ? `Best Umsatz/km: ${safeText(best.lkw_nummer, "")}` : "-", theme: themes.master },
+      { label: "Aktive LKW", value: String(activeRevenueLkwCount), meta: "KM > 0 und Umsatz > 0", theme: themes.master },
       { label: "Umsatz", value: `${formatMoney(totals.revenue)} Euro`, meta: "Carlo + Contado", theme: themes.revenue },
       { label: "KM", value: `${formatMoneyInt(totals.km)} km`, meta: "Yellow Fox", theme: themes.mileage },
       { label: "Diesel", value: `${formatMoney(totals.fuelCost)} Euro`, meta: `${formatMoneyInt(totals.liters)} L`, theme: themes.diesel },
