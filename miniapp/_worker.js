@@ -7013,6 +7013,36 @@ async function buildLkwKmEuroPdfWithPdfLib({ userId, period, year, month, week, 
   const oddBg = rgb(0.965, 0.98, 1);
   const goodBg = rgb(0.90, 0.98, 0.92);
   const accent = rgb(0.13, 0.40, 0.66);
+  const themes = {
+    master: {
+      accent,
+      head: headerBg,
+      bg: rgb(0.97, 0.985, 1),
+      row: oddBg,
+      border: borderColor,
+    },
+    mileage: {
+      accent: rgb(0.25, 0.35, 0.62),
+      head: rgb(0.18, 0.25, 0.48),
+      bg: rgb(0.95, 0.965, 1),
+      row: rgb(0.965, 0.975, 1),
+      border: rgb(0.68, 0.73, 0.88),
+    },
+    revenue: {
+      accent: rgb(0.16, 0.50, 0.28),
+      head: rgb(0.10, 0.36, 0.20),
+      bg: rgb(0.94, 0.985, 0.955),
+      row: rgb(0.965, 0.995, 0.975),
+      border: rgb(0.62, 0.80, 0.67),
+    },
+    diesel: {
+      accent: rgb(0.72, 0.48, 0.12),
+      head: rgb(0.57, 0.37, 0.08),
+      bg: rgb(1, 0.975, 0.92),
+      row: rgb(1, 0.985, 0.945),
+      border: rgb(0.88, 0.75, 0.48),
+    },
+  };
 
   let page = pdfDoc.addPage(pageSize);
   let y = page.getHeight() - margin;
@@ -7032,6 +7062,15 @@ async function buildLkwKmEuroPdfWithPdfLib({ userId, period, year, month, week, 
     if (y - needed >= margin) return;
     page = pdfDoc.addPage(pageSize);
     y = page.getHeight() - margin;
+  };
+
+  const drawSectionTitle = (title, x, width, theme = themes.master) => {
+    const titleBandHeight = 22;
+    const titleTopGap = 8;
+    ensureSpace(titleBandHeight + titleTopGap);
+    y -= titleTopGap;
+    centerText(title, x, y - ((titleBandHeight - 11) / 2) - 1, width, 11, boldFont, theme.accent || textColor);
+    y -= titleBandHeight;
   };
 
   const totals = rankedRows.reduce((acc, row) => {
@@ -7064,12 +7103,12 @@ async function buildLkwKmEuroPdfWithPdfLib({ userId, period, year, month, week, 
 
   const drawMetricCards = () => {
     const cards = [
-      { label: "LKW", value: String(rankedRows.length), meta: best ? `Best Umsatz/km: ${safeText(best.lkw_nummer, "")}` : "-" },
-      { label: "Umsatz", value: `${formatMoney(totals.revenue)} Euro`, meta: "Carlo + Contado" },
-      { label: "KM", value: `${formatMoneyInt(totals.km)} km`, meta: "Yellow Fox" },
-      { label: "Diesel", value: `${formatMoney(totals.fuelCost)} Euro`, meta: `${formatMoneyInt(totals.liters)} L` },
-      { label: "Carlo", value: `${formatMoney(totals.carlo)} Euro`, meta: "Umsatz" },
-      { label: "Contado", value: `${formatMoney(totals.contado)} Euro`, meta: "Umsatz" },
+      { label: "LKW", value: String(rankedRows.length), meta: best ? `Best Umsatz/km: ${safeText(best.lkw_nummer, "")}` : "-", theme: themes.master },
+      { label: "Umsatz", value: `${formatMoney(totals.revenue)} Euro`, meta: "Carlo + Contado", theme: themes.revenue },
+      { label: "KM", value: `${formatMoneyInt(totals.km)} km`, meta: "Yellow Fox", theme: themes.mileage },
+      { label: "Diesel", value: `${formatMoney(totals.fuelCost)} Euro`, meta: `${formatMoneyInt(totals.liters)} L`, theme: themes.diesel },
+      { label: "Carlo", value: `${formatMoney(totals.carlo)} Euro`, meta: "Umsatz", theme: themes.revenue },
+      { label: "Contado", value: `${formatMoney(totals.contado)} Euro`, meta: "Umsatz", theme: themes.revenue },
     ];
     const gap = 8;
     const width = (page.getWidth() - margin * 2 - gap * (cards.length - 1)) / cards.length;
@@ -7077,8 +7116,10 @@ async function buildLkwKmEuroPdfWithPdfLib({ userId, period, year, month, week, 
     for (let idx = 0; idx < cards.length; idx += 1) {
       const card = cards[idx];
       const x = margin + idx * (width + gap);
-      page.drawRectangle({ x, y: y - height, width, height, color: rgb(0.97, 0.985, 1), borderColor, borderWidth: 0.8 });
-      centerText(card.value, x, y - 18, width, 9, boldFont, accent);
+      const theme = card.theme || themes.master;
+      page.drawRectangle({ x, y: y - height, width, height, color: theme.bg, borderColor: theme.border, borderWidth: 0.8 });
+      page.drawRectangle({ x, y: y - height, width: 3, height, color: theme.accent });
+      centerText(card.value, x, y - 18, width, 9, boldFont, theme.accent);
       centerText(card.meta, x, y - 34, width, 6.7, font, mutedColor);
       centerText(card.label, x, y - 49, width, 7, boldFont, textColor);
     }
@@ -7109,8 +7150,8 @@ async function buildLkwKmEuroPdfWithPdfLib({ userId, period, year, month, week, 
     return safeText(row?.[key], "");
   };
 
-  const drawTableHeader = () => {
-    page.drawRectangle({ x: tableX, y: y - rowH + 2, width: tableWidth, height: rowH, color: headerBg });
+  const drawTableHeader = (theme = themes.master) => {
+    page.drawRectangle({ x: tableX, y: y - rowH + 2, width: tableWidth, height: rowH, color: theme.head });
     let x = tableX;
     for (const col of columns) {
       centerText(col.label, x, y - 11, col.width, 7.1, boldFont, headerText);
@@ -7120,13 +7161,12 @@ async function buildLkwKmEuroPdfWithPdfLib({ userId, period, year, month, week, 
   };
 
   const drawTable = () => {
-    ensureSpace(38);
-    centerText("Vergleich aller Maschinen", tableX, y, tableWidth, 12, boldFont, textColor);
-    y -= 16;
-    drawTableHeader();
+    const theme = themes.master;
+    drawSectionTitle("Vergleich aller Maschinen", tableX, tableWidth, theme);
+    drawTableHeader(theme);
     if (!rankedRows.length) {
       ensureSpace(rowH + 4);
-      page.drawRectangle({ x: tableX, y: y - rowH + 2, width: tableWidth, height: rowH, color: oddBg, borderColor, borderWidth: 0.5 });
+      page.drawRectangle({ x: tableX, y: y - rowH + 2, width: tableWidth, height: rowH, color: theme.row, borderColor: theme.border, borderWidth: 0.5 });
       centerText("Keine Daten", tableX, y - 11, tableWidth, 8, font, mutedColor);
       y -= rowH;
       return;
@@ -7135,7 +7175,7 @@ async function buildLkwKmEuroPdfWithPdfLib({ userId, period, year, month, week, 
       if (y - rowH < margin) {
         page = pdfDoc.addPage(pageSize);
         y = page.getHeight() - margin;
-        drawTableHeader();
+        drawTableHeader(theme);
       }
       const fill = row.rank <= 3 ? goodBg : null;
       page.drawRectangle({
@@ -7143,8 +7183,8 @@ async function buildLkwKmEuroPdfWithPdfLib({ userId, period, year, month, week, 
         y: y - rowH + 2,
         width: tableWidth,
         height: rowH,
-        color: fill || (row.rank % 2 === 0 ? oddBg : rgb(1, 1, 1)),
-        borderColor,
+        color: fill || (row.rank % 2 === 0 ? theme.row : rgb(1, 1, 1)),
+        borderColor: theme.border,
         borderWidth: 0.35,
       });
       let x = tableX;
@@ -7159,6 +7199,7 @@ async function buildLkwKmEuroPdfWithPdfLib({ userId, period, year, month, week, 
 
   const drawPeriodSummary = () => {
     if (model.periodDefs.length <= 1) return;
+    const theme = themes.revenue;
     const summaryCols = [
       { key: "period_label", label: "Zeitraum", width: 66 },
       { key: "truck_count", label: "LKW", width: 42 },
@@ -7175,7 +7216,7 @@ async function buildLkwKmEuroPdfWithPdfLib({ userId, period, year, month, week, 
     const width = summaryCols.reduce((sum, col) => sum + col.width, 0);
     const x0 = margin + ((page.getWidth() - margin * 2 - width) / 2);
     const drawHeaderRow = () => {
-      page.drawRectangle({ x: x0, y: y - rowHeight + 2, width, height: rowHeight, color: headerBg });
+      page.drawRectangle({ x: x0, y: y - rowHeight + 2, width, height: rowHeight, color: theme.head });
       let x = x0;
       for (const col of summaryCols) {
         centerText(col.label, x, y - 11, col.width, 7, boldFont, headerText);
@@ -7183,12 +7224,11 @@ async function buildLkwKmEuroPdfWithPdfLib({ userId, period, year, month, week, 
       }
       y -= rowHeight;
     };
-    ensureSpace(36 + rowHeight * (model.totalsByPeriod.length + 1));
-    centerText("Dynamik Gesamt: ausgewaehlter Zeitraum und 3 vorherige", x0, y, width, 12, boldFont, textColor);
-    y -= 16;
+    ensureSpace(30 + rowHeight * (model.totalsByPeriod.length + 1));
+    drawSectionTitle("Dynamik Gesamt: ausgewaehlter Zeitraum und 3 vorherige", x0, width, theme);
     drawHeaderRow();
     for (const row of model.totalsByPeriod) {
-      page.drawRectangle({ x: x0, y: y - rowHeight + 2, width, height: rowHeight, color: row.period_idx === model.selectedIdx ? goodBg : (row.period_idx % 2 ? oddBg : rgb(1, 1, 1)), borderColor, borderWidth: 0.35 });
+      page.drawRectangle({ x: x0, y: y - rowHeight + 2, width, height: rowHeight, color: row.period_idx === model.selectedIdx ? theme.bg : (row.period_idx % 2 ? theme.row : rgb(1, 1, 1)), borderColor: theme.border, borderWidth: 0.35 });
       let x = x0;
       for (const col of summaryCols) {
         let value = safeText(row?.[col.key], "");
@@ -7205,6 +7245,7 @@ async function buildLkwKmEuroPdfWithPdfLib({ userId, period, year, month, week, 
 
   const drawTruckDynamics = () => {
     if (model.periodDefs.length <= 1 || !model.dynamicsRows.length) return;
+    const theme = themes.mileage;
     const periodWidth = 138;
     const lkwWidth = 78;
     const firmaWidth = 82;
@@ -7219,7 +7260,7 @@ async function buildLkwKmEuroPdfWithPdfLib({ userId, period, year, month, week, 
     const rowHeight = 16;
 
     const drawHeaderRows = () => {
-      page.drawRectangle({ x: x0, y: y - headerH + 2, width, height: headerH, color: headerBg });
+      page.drawRectangle({ x: x0, y: y - headerH + 2, width, height: headerH, color: theme.head });
       centerText("LKW", x0, y - 19, lkwWidth, 7, boldFont, headerText);
       centerText("Firma", x0 + lkwWidth, y - 19, firmaWidth, 7, boldFont, headerText);
       let x = x0 + lkwWidth + firmaWidth;
@@ -7235,9 +7276,8 @@ async function buildLkwKmEuroPdfWithPdfLib({ userId, period, year, month, week, 
       y -= headerH;
     };
 
-    ensureSpace(46 + headerH + rowHeight * Math.min(model.dynamicsRows.length, 12));
-    drawText("Dynamik je LKW: KM / Umsatz / Diesel", margin, y, 12, boldFont, textColor);
-    y -= 16;
+    ensureSpace(30 + headerH + rowHeight * Math.min(model.dynamicsRows.length, 12));
+    drawSectionTitle("Dynamik je LKW: KM / Umsatz / Diesel", x0, width, theme);
     drawHeaderRows();
     for (let idx = 0; idx < model.dynamicsRows.length; idx += 1) {
       const row = model.dynamicsRows[idx];
@@ -7246,7 +7286,7 @@ async function buildLkwKmEuroPdfWithPdfLib({ userId, period, year, month, week, 
         y = page.getHeight() - margin;
         drawHeaderRows();
       }
-      page.drawRectangle({ x: x0, y: y - rowHeight + 2, width, height: rowHeight, color: idx % 2 ? oddBg : rgb(1, 1, 1), borderColor, borderWidth: 0.3 });
+      page.drawRectangle({ x: x0, y: y - rowHeight + 2, width, height: rowHeight, color: idx % 2 ? theme.row : rgb(1, 1, 1), borderColor: theme.border, borderWidth: 0.3 });
       centerText(row.lkw_nummer, x0, y - 10, lkwWidth, 5.9, font, textColor);
       centerText(row.firma, x0 + lkwWidth, y - 10, firmaWidth, 5.6, font, textColor);
       let x = x0 + lkwWidth + firmaWidth;
