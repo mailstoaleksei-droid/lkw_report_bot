@@ -7255,7 +7255,7 @@ async function buildLkwKmEuroPdfWithPdfLib({ userId, period, year, month, week, 
     const subCols = [
       { key: "km_total_num", label: "KM", width: periodWidth * 0.29 },
       { key: "revenue_total_num", label: "Umsatz", width: periodWidth * 0.36 },
-      { key: "diesel_cost_num", label: "Diesel", width: periodWidth * 0.35 },
+      { key: "revenue_per_km_num", label: "Euro/km", width: periodWidth * 0.35 },
     ];
     const headerH = 30;
     const rowHeight = 16;
@@ -7303,7 +7303,7 @@ async function buildLkwKmEuroPdfWithPdfLib({ userId, period, year, month, week, 
     };
 
     ensureSpace(30 + headerH + rowHeight * Math.min(model.dynamicsRows.length, 12));
-    drawSectionTitle("Dynamik je LKW: KM / Umsatz / Diesel", x0, width, theme);
+    drawSectionTitle("Dynamik je LKW: KM / Umsatz / Euro/km", x0, width, theme);
     drawHeaderRows();
     for (let idx = 0; idx < model.dynamicsRows.length; idx += 1) {
       const row = model.dynamicsRows[idx];
@@ -7329,7 +7329,7 @@ async function buildLkwKmEuroPdfWithPdfLib({ userId, period, year, month, week, 
           let value = "-";
           if (sub.key === "km_total_num") value = formatMoneyInt(periodRow?.km_total_num || 0);
           if (sub.key === "revenue_total_num") value = formatMoneyCompact(periodRow?.revenue_total_num || 0);
-          if (sub.key === "diesel_cost_num") value = formatMoneyCompact(periodRow?.diesel_cost_num || 0);
+          if (sub.key === "revenue_per_km_num") value = formatMoney(periodRow?.revenue_per_km_num || 0);
           centerText(value, subX, y - 10, sub.width, 5.5, periodDef.period_idx === model.selectedIdx ? boldFont : font, textColor);
           subX += sub.width;
         }
