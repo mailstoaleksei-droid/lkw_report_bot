@@ -6964,9 +6964,7 @@ function buildLkwKmEuroModel(rows = []) {
     total.period_end = period.period_end;
     total.truck_count = items.filter((row) => (
       Math.abs(row.km_total_num) >= 0.005
-      || Math.abs(row.revenue_total_num) >= 0.005
-      || Math.abs(row.diesel_liters_num) >= 0.005
-      || Math.abs(row.diesel_cost_num) >= 0.005
+      && Math.abs(row.revenue_total_num) >= 0.005
     )).length;
     total.revenue_per_km = total.km_total > 0 ? total.revenue_total / total.km_total : 0;
     return total;
