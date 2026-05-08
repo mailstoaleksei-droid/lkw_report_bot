@@ -72,8 +72,9 @@
 - [x] `Bericht` (year/week)
 - [x] `Bericht -> LKW - KM - Euro`
   - periods: whole year, month, ISO week
+  - month/week reports include the selected period plus the previous 3 months/weeks for management trend comparison
   - sources: `LKW`, `YF`, `Carlo`, `Contado`, `Staack`, `Shell`
-  - PDF compares all trucks by revenue, kilometers, diesel liters/cost, average fuel price, consumption, and efficiency ranking
+  - PDF compares all trucks by absolute revenue, kilometers, diesel cost, Carlo/Contado split, and `Umsatz/km`
 - [x] `Data/Plan -> Plan` (selected week + 3 weeks)
 - [x] `Data/Plan -> Data` (selected week, 7 days)
 - [x] `Einnahmen` (monthly revenue)
