@@ -7282,8 +7282,8 @@ async function buildLkwKmEuroPdfWithPdfLib({ userId, period, year, month, week, 
   drawHeader();
   drawMetricCards();
   drawExplanation();
-  drawTable();
   drawPeriodSummary();
+  drawTable();
   drawTruckDynamics();
 
   return pdfDoc.save();
