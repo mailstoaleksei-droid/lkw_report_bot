@@ -608,6 +608,9 @@ def extract_trucks(wb) -> list[TruckRow]:
         external_id = _clean_text(row[col_id])
         if not external_id or not external_id.upper().startswith("L"):
             continue
+        plate_number = _clean_text(row[col_num]) if col_num is not None and col_num < len(row) else None
+        if not plate_number:
+            continue
 
         status = _clean_text(row[col_status]) if col_status is not None and col_status < len(row) else None
         status_norm = _norm(status)
@@ -622,7 +625,7 @@ def extract_trucks(wb) -> list[TruckRow]:
         rows.append(
             TruckRow(
                 external_id=external_id,
-                plate_number=_clean_text(row[col_num]) if col_num is not None and col_num < len(row) else None,
+                plate_number=plate_number,
                 truck_type=_clean_text(row[col_type]) if col_type is not None and col_type < len(row) else None,
                 company_name=_clean_text(row[col_company]) if col_company is not None and col_company < len(row) else None,
                 status=status,
@@ -2043,6 +2046,41 @@ def run_etl(database_url: str, xlsm_path: Path) -> dict[str, int]:
                     inserted = bool(cur.fetchone()[0])
                     rows_inserted += 1 if inserted else 0
                     rows_updated += 0 if inserted else 1
+
+                truck_external_ids = [t.external_id for t in trucks]
+                if truck_external_ids:
+                    cur.execute(
+                        """
+                        UPDATE trucks
+                        SET
+                            is_active = FALSE,
+                            status = COALESCE(NULLIF(status, ''), 'inactive'),
+                            updated_at = NOW()
+                        WHERE external_id IS NOT NULL
+                          AND upper(external_id) LIKE 'L%%'
+                          AND NOT (external_id = ANY(%s::text[]))
+                          AND COALESCE(is_active, true)
+                        """,
+                        (truck_external_ids,),
+                    )
+                    rows_updated += cur.rowcount
+
+                driver_external_ids = [d.external_id for d in drivers]
+                if driver_external_ids:
+                    cur.execute(
+                        """
+                        UPDATE drivers
+                        SET
+                            is_active = FALSE,
+                            updated_at = NOW()
+                        WHERE external_id IS NOT NULL
+                          AND upper(external_id) LIKE 'F%%'
+                          AND NOT (external_id = ANY(%s::text[]))
+                          AND COALESCE(is_active, true)
+                        """,
+                        (driver_external_ids,),
+                    )
+                    rows_updated += cur.rowcount
 
                 for rec in fahrer_weekly_rows:
                     cur.execute(

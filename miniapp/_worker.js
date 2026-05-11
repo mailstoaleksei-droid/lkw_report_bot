@@ -949,6 +949,8 @@ LEFT JOIN agg a
  AND a.iso_year = w.iso_year
  AND a.iso_week = w.iso_week
 WHERE COALESCE(NULLIF(t.external_id, ''), '') <> ''
+  AND COALESCE(t.is_active, true)
+  AND COALESCE(NULLIF(t.plate_number, ''), NULLIF(t.raw_payload->>'LKW-Nummer', ''), NULLIF(t.raw_payload->>'Number', '')) IS NOT NULL
 ORDER BY t.external_id, w.week_idx;
 `;
 
@@ -1030,6 +1032,8 @@ LEFT JOIN agg_day ad
 LEFT JOIN agg_week aw
   ON aw.truck_id = t.id
 WHERE COALESCE(NULLIF(t.external_id, ''), '') <> ''
+  AND COALESCE(t.is_active, true)
+  AND COALESCE(NULLIF(t.plate_number, ''), NULLIF(t.raw_payload->>'LKW-Nummer', ''), NULLIF(t.raw_payload->>'Number', '')) IS NOT NULL
 ORDER BY t.external_id, x.day_idx;
 `;
 
@@ -1179,6 +1183,8 @@ SELECT
   COALESCE(NULLIF(t.raw_payload->>'Tankpool Card', ''), NULLIF(t.raw_payload->>'Tankpool', '')) AS tankpool_card
 FROM trucks t
 LEFT JOIN companies c ON c.id = t.company_id
+WHERE COALESCE(t.is_active, true)
+  AND COALESCE(NULLIF(t.plate_number, ''), NULLIF(t.raw_payload->>'LKW-Nummer', ''), NULLIF(t.raw_payload->>'Number', '')) IS NOT NULL
 ORDER BY t.external_id;
 `;
 
@@ -1213,7 +1219,9 @@ SELECT
   COALESCE(NULLIF(t.raw_payload->>'2026', ''), '0') AS cost_2026
 FROM trucks t
 LEFT JOIN companies c ON c.id = t.company_id
-WHERE (
+WHERE COALESCE(t.is_active, true)
+AND COALESCE(NULLIF(t.plate_number, ''), NULLIF(t.raw_payload->>'LKW-Nummer', ''), NULLIF(t.raw_payload->>'Number', '')) IS NOT NULL
+AND (
   $1::text = ''
   OR lower(t.external_id) = lower($1::text)
   OR lower(COALESCE(t.plate_number, '')) = lower($1::text)
@@ -1454,6 +1462,9 @@ SELECT
   COALESCE(NULLIF(d.raw_payload->>'Datum entlassen', ''), NULLIF(d.raw_payload->>'Dismiss Date', '')) AS datum_entlassen
 FROM drivers d
 LEFT JOIN companies c ON c.id = d.company_id
+WHERE COALESCE(d.is_active, true)
+  AND COALESCE(NULLIF(d.external_id, ''), '') <> ''
+  AND COALESCE(NULLIF(d.full_name, ''), '') <> ''
 ORDER BY d.external_id;
 `;
 
@@ -1527,6 +1538,9 @@ SELECT
 FROM drivers d
 CROSS JOIN report_year_ref r
 LEFT JOIN companies c ON c.id = d.company_id
+WHERE COALESCE(d.is_active, true)
+  AND COALESCE(NULLIF(d.external_id, ''), '') <> ''
+  AND COALESCE(NULLIF(d.full_name, ''), '') <> ''
 ORDER BY d.external_id;
 `;
 
@@ -11680,6 +11694,8 @@ async function buildMetaWithAccess(request, env) {
               external_id AS lkw_id,
               COALESCE(NULLIF(plate_number, ''), NULLIF(raw_payload->>'LKW-Nummer', ''), NULLIF(raw_payload->>'Number', '')) AS lkw_nummer
             FROM trucks
+            WHERE COALESCE(is_active, true)
+              AND COALESCE(NULLIF(plate_number, ''), NULLIF(raw_payload->>'LKW-Nummer', ''), NULLIF(raw_payload->>'Number', '')) IS NOT NULL
             ORDER BY external_id
           `,
           [],
@@ -11703,6 +11719,7 @@ async function buildMetaWithAccess(request, env) {
             FROM drivers
             WHERE COALESCE(external_id, '') <> ''
               AND COALESCE(full_name, '') <> ''
+              AND COALESCE(is_active, true)
             ORDER BY external_id
           `,
           [],
@@ -11894,6 +11911,8 @@ async function handleLookup(request, env) {
             external_id AS lkw_id,
             COALESCE(NULLIF(plate_number, ''), NULLIF(raw_payload->>'LKW-Nummer', ''), NULLIF(raw_payload->>'Number', '')) AS lkw_nummer
           FROM trucks
+          WHERE COALESCE(is_active, true)
+            AND COALESCE(NULLIF(plate_number, ''), NULLIF(raw_payload->>'LKW-Nummer', ''), NULLIF(raw_payload->>'Number', '')) IS NOT NULL
           ORDER BY external_id
         `,
         [],
@@ -11916,6 +11935,7 @@ async function handleLookup(request, env) {
           FROM drivers
           WHERE COALESCE(external_id, '') <> ''
             AND COALESCE(full_name, '') <> ''
+            AND COALESCE(is_active, true)
           ORDER BY external_id
         `,
         [],
