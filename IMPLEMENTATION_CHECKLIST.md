@@ -1,6 +1,6 @@
 # LKW Telegram Mini App - Implementation Checklist
 
-> Last updated: 2026-05-08
+> Last updated: 2026-05-11
 > Status legend: [ ] pending | [~] in progress | [x] done
 
 ## 1) Infra and Deploy
@@ -31,6 +31,11 @@
 - [x] ETL import for `Diesel` added:
   - table: `report_diesel_monthly`
   - columns: liters / euro / euro per liter
+- [x] ETL import for `Tankkarten` added:
+  - table: `report_tankkarten_driver_cards`
+  - source: sheet `Tankkarten`
+  - rows included when `Wo gespeichert` = `Driver`
+  - columns: `Card №`, `Tankstelle`, `PIN`, `LKW №`, `Wo gespeichert`
 - [x] ETL import for `YF_Fahrer` and `YF` added:
   - tables: `report_yf_fahrer_monthly`, `report_yf_lkw_daily`
   - parser + Worker integration active
@@ -67,6 +72,11 @@
   - dead PID lock is auto-removed on next run
   - invalid/corrupted lock file is auto-removed
   - long-running active ETL still remains protected by lock
+- [x] LKW/Fahrer master-data sync hardened for appended Excel rows:
+  - new filled rows from sheets `LKW` and `Fahrer` are imported automatically
+  - blank LKW placeholders without `LKW-Nummer` are ignored
+  - master rows missing from the current workbook are marked inactive instead of remaining visible in Mini App reports
+  - Mini App LKW/Fahrer lookups and list/grid reports filter inactive or incomplete master records
 
 ## 4) Reports Implemented in Mini App
 - [x] `Bericht` (year/week)
@@ -94,6 +104,11 @@
     - select one LKW
     - columns: `LKW-ID`, `LKW-Nummer`, `DKV Card`, `Shell Card`, `Tankpool Card`
     - zero values hidden
+  - `Pin Tankkarten` PDF added inside Diesel block:
+    - source: sheet `Tankkarten`
+    - groups cards by `LKW №`
+    - includes only cards where `Wo gespeichert` = `Driver`
+    - columns: `LKW №`, `Tankstelle`, `Card №`, `PIN`
 - [x] `Bonus` (monthly driver bonus)
   - params: `year`, `month`, optional `Fahrer`
   - source: `BonusDynamik` via SQL (`report_bonus_dynamik_monthly`)
