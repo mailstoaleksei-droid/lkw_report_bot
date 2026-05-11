@@ -46,6 +46,7 @@ REQUIRED_DRIVER_KEYS = ("fahrerid", "fahrername")
 BERICHT_DISPO_SHEET = "Bericht_Dispo"
 BONUS_DYNAMIK_SHEET = "BonusDynamik"
 DIESEL_SHEET = "Diesel"
+TANKKARTEN_SHEET = "Tankkarten"
 YF_FAHRER_SHEET = "YF_Fahrer"
 YF_SHEET = "YF"
 REPAIR_SHEET = "Repair"
@@ -404,6 +405,17 @@ class DieselMonthRow:
     euro_per_liter_shell: Decimal
     euro_per_liter_dkv: Decimal
     euro_per_liter_avg: Decimal
+    raw_payload: dict[str, object]
+
+
+@dataclass
+class TankkartenDriverCardRow:
+    source_row: int
+    card_number: str
+    tankstelle: str
+    pin: str
+    lkw_number: str
+    wo_gespeichert: str
     raw_payload: dict[str, object]
 
 
@@ -1310,6 +1322,48 @@ def _row_payload(header: list[object], row: list[object], sheet: str, source_row
     return payload
 
 
+def extract_tankkarten_driver_cards(wb) -> list[TankkartenDriverCardRow]:
+    if TANKKARTEN_SHEET not in wb.sheetnames:
+        return []
+
+    ws = wb[TANKKARTEN_SHEET]
+    rows: list[TankkartenDriverCardRow] = []
+    for row_idx in range(3, ws.max_row + 1):
+        card_number = _clean_text(ws.cell(row=row_idx, column=2).value) or ""
+        tankstelle = _clean_text(ws.cell(row=row_idx, column=3).value) or ""
+        pin = _clean_text(ws.cell(row=row_idx, column=5).value) or ""
+        lkw_number = _clean_text(ws.cell(row=row_idx, column=6).value) or ""
+        wo_gespeichert = _clean_text(ws.cell(row=row_idx, column=7).value) or ""
+
+        if not any((card_number, tankstelle, pin, lkw_number, wo_gespeichert)):
+            continue
+        if wo_gespeichert.strip().lower() != "driver":
+            continue
+        if not lkw_number:
+            continue
+
+        rows.append(
+            TankkartenDriverCardRow(
+                source_row=row_idx,
+                card_number=card_number,
+                tankstelle=tankstelle,
+                pin=pin,
+                lkw_number=lkw_number,
+                wo_gespeichert=wo_gespeichert,
+                raw_payload={
+                    "sheet": TANKKARTEN_SHEET,
+                    "row": row_idx,
+                    "Card №": card_number,
+                    "Tankstelle": tankstelle,
+                    "PIN": pin,
+                    "LKW №": lkw_number,
+                    "Wo gespeichert": wo_gespeichert,
+                },
+            )
+        )
+    return rows
+
+
 def extract_lkw_fuel_transactions(wb) -> list[LkwFuelTransactionRow]:
     rows: list[LkwFuelTransactionRow] = []
 
@@ -1613,6 +1667,29 @@ def _ensure_diesel_table(cur) -> None:
     )
 
 
+def _ensure_tankkarten_driver_cards_table(cur) -> None:
+    cur.execute(
+        """
+        CREATE TABLE IF NOT EXISTS report_tankkarten_driver_cards (
+            source_row INTEGER PRIMARY KEY,
+            card_number TEXT NOT NULL DEFAULT '',
+            tankstelle TEXT NOT NULL DEFAULT '',
+            pin TEXT NOT NULL DEFAULT '',
+            lkw_number TEXT NOT NULL DEFAULT '',
+            wo_gespeichert TEXT NOT NULL DEFAULT '',
+            raw_payload JSONB NOT NULL DEFAULT '{}'::jsonb,
+            updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+        )
+        """
+    )
+    cur.execute(
+        """
+        CREATE INDEX IF NOT EXISTS idx_report_tankkarten_driver_lkw
+            ON report_tankkarten_driver_cards (lower(replace(trim(lkw_number), ' ', '')))
+        """
+    )
+
+
 def _ensure_lkw_fuel_transactions_table(cur) -> None:
     cur.execute(
         """
@@ -1805,6 +1882,7 @@ REPORT_REPLACE_TABLES = (
     "report_einnahmen_firm_monthly",
     "report_bonus_dynamik_monthly",
     "report_diesel_monthly",
+    "report_tankkarten_driver_cards",
     "report_lkw_fuel_transactions",
     "report_lkw_revenue_records",
     "report_yf_fahrer_monthly",
@@ -1862,6 +1940,7 @@ def run_etl(database_url: str, xlsm_path: Path) -> dict[str, int]:
             einnahmen_firm_rows = extract_einnahmen_firm_rows(wb)
             bonus_rows = extract_bonus_dynamik_months(wb)
             diesel_rows = extract_diesel_months(wb)
+            tankkarten_rows = extract_tankkarten_driver_cards(wb)
             lkw_fuel_rows = extract_lkw_fuel_transactions(wb)
             lkw_revenue_rows = extract_lkw_revenue_rows(wb)
             yf_fahrer_rows = extract_yf_fahrer_months(wb)
@@ -1886,6 +1965,7 @@ def run_etl(database_url: str, xlsm_path: Path) -> dict[str, int]:
                 _ensure_einnahmen_firm_table(cur)
                 _ensure_bonus_table(cur)
                 _ensure_diesel_table(cur)
+                _ensure_tankkarten_driver_cards_table(cur)
                 _ensure_lkw_fuel_transactions_table(cur)
                 _ensure_lkw_revenue_table(cur)
                 _ensure_yf_fahrer_table(cur)
@@ -2163,6 +2243,33 @@ def run_etl(database_url: str, xlsm_path: Path) -> dict[str, int]:
                     )
                     rows_inserted += 1
 
+                for rec in tankkarten_rows:
+                    cur.execute(
+                        """
+                        INSERT INTO tmp_report_tankkarten_driver_cards (
+                            source_row,
+                            card_number,
+                            tankstelle,
+                            pin,
+                            lkw_number,
+                            wo_gespeichert,
+                            raw_payload,
+                            updated_at
+                        )
+                        VALUES (%s, %s, %s, %s, %s, %s, %s::jsonb, NOW())
+                        """,
+                        (
+                            rec.source_row,
+                            rec.card_number,
+                            rec.tankstelle,
+                            rec.pin,
+                            rec.lkw_number,
+                            rec.wo_gespeichert,
+                            json.dumps(rec.raw_payload, ensure_ascii=False, default=str),
+                        ),
+                    )
+                    rows_inserted += 1
+
                 for rec in lkw_fuel_rows:
                     cur.execute(
                         """
@@ -2352,7 +2459,7 @@ def run_etl(database_url: str, xlsm_path: Path) -> dict[str, int]:
                     WHERE id = %s
                     """,
                     (
-                        len(trucks) + len(drivers) + len(fahrer_weekly_rows) + len(einnahmen_rows) + len(einnahmen_firm_rows) + len(bonus_rows) + len(diesel_rows) + len(lkw_fuel_rows) + len(lkw_revenue_rows) + len(yf_fahrer_rows) + len(yf_lkw_rows) + len(repair_rows),
+                        len(trucks) + len(drivers) + len(fahrer_weekly_rows) + len(einnahmen_rows) + len(einnahmen_firm_rows) + len(bonus_rows) + len(diesel_rows) + len(tankkarten_rows) + len(lkw_fuel_rows) + len(lkw_revenue_rows) + len(yf_fahrer_rows) + len(yf_lkw_rows) + len(repair_rows),
                         rows_inserted,
                         rows_updated,
                         rows_deleted,
@@ -2366,6 +2473,7 @@ def run_etl(database_url: str, xlsm_path: Path) -> dict[str, int]:
                                 "einnahmen_firms": len(einnahmen_firm_rows),
                                 "bonus_rows": len(bonus_rows),
                                 "diesel_months": len(diesel_rows),
+                                "tankkarten_driver_cards": len(tankkarten_rows),
                                 "lkw_fuel_rows": len(lkw_fuel_rows),
                                 "lkw_revenue_rows": len(lkw_revenue_rows),
                                 "yf_fahrer_rows": len(yf_fahrer_rows),
@@ -2389,6 +2497,7 @@ def run_etl(database_url: str, xlsm_path: Path) -> dict[str, int]:
                 "einnahmen_firms": len(einnahmen_firm_rows),
                 "bonus_rows": len(bonus_rows),
                 "diesel_months": len(diesel_rows),
+                "tankkarten_driver_cards": len(tankkarten_rows),
                 "lkw_fuel_rows": len(lkw_fuel_rows),
                 "lkw_revenue_rows": len(lkw_revenue_rows),
                 "yf_fahrer_rows": len(yf_fahrer_rows),
@@ -2440,6 +2549,7 @@ def main() -> int:
         f"einnahmen_firms={result['einnahmen_firms']} "
         f"bonus_rows={result['bonus_rows']} "
         f"diesel_months={result['diesel_months']} "
+        f"tankkarten_driver_cards={result['tankkarten_driver_cards']} "
         f"lkw_fuel_rows={result['lkw_fuel_rows']} "
         f"lkw_revenue_rows={result['lkw_revenue_rows']} "
         f"yf_fahrer_rows={result['yf_fahrer_rows']} "

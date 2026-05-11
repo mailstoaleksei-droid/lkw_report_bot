@@ -2647,6 +2647,15 @@
           disposition,
         );
       }
+      if (type === "pin_tankkarten") {
+        const params = item?.params || {};
+        return buildGenerateDirectUrl(
+          "pin_tankkarten",
+          { lkw_number: String(params.lkw_number || "") },
+          initData || "",
+          disposition,
+        );
+      }
       if (type === "yf_driver_month") {
         const params = item?.params || {};
         return buildGenerateDirectUrl(
@@ -4618,11 +4627,18 @@
               <button type="button" class="btn btn-primary" id="dieselChooseCard">LKW Karte</button>
             </div>
           </div>
+          <div class="field">
+            <div class="note">Tankkarten PIN fuer Driver-Karten nach LKW Nummer</div>
+            <div class="note-actions">
+              <button type="button" class="btn btn-primary" id="dieselChoosePinTankkarten">Pin Tankkarten</button>
+            </div>
+          </div>
         `);
         setNote("");
         hideSheetFooter();
         $("dieselChooseSnapshot").onclick = () => renderSnapshot();
         $("dieselChooseCard").onclick = () => renderCard();
+        $("dieselChoosePinTankkarten").onclick = () => renderPinTankkarten();
       };
 
       const renderSnapshot = () => {
@@ -4672,6 +4688,35 @@
           await sendReportGenerate("diesel_lkw_card", { lkw_id: lkwId });
         };
         populateLkwVehicleDatalist("dieselCardVehicleOptions");
+      };
+
+      const renderPinTankkarten = async () => {
+        setSheetHeader("Diesel - Pin Tankkarten", "Tankkarten PIN fuer Driver-Karten", "PDF");
+        setSheetCloseAction("back", renderMenu);
+        setSegments([], "", () => {});
+        setForm(`
+          <div class="field">
+            <label>Pin Tankkarten</label>
+            <input id="pinTankkartenVehicle" list="pinTankkartenVehicleOptions" type="text" placeholder="${L("choose")}" autocomplete="off" />
+            <datalist id="pinTankkartenVehicleOptions"></datalist>
+            <div class="note">Card No, Tankstelle und PIN aus Blatt Tankkarten fuer Wo gespeichert = Driver.</div>
+            <div class="note-actions">
+              <button type="button" class="btn btn-primary" id="pinTankkartenRun">${L("generate")}</button>
+            </div>
+          </div>
+        `);
+        setNote("");
+        hideSheetFooter();
+        $("pinTankkartenRun").onclick = async () => {
+          const lkwNumber = String($("pinTankkartenVehicle")?.value || "").trim();
+          if (!lkwNumber) {
+            haptic("error");
+            showToast(L("choose"));
+            return;
+          }
+          await sendReportGenerate("pin_tankkarten", { lkw_number: lkwNumber });
+        };
+        populateLkwVehicleDatalist("pinTankkartenVehicleOptions");
       };
 
       renderMenu();

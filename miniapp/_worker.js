@@ -211,6 +211,28 @@ const REPORTS = [
     ],
   },
   {
+    id: "pin_tankkarten",
+    enabled: true,
+    icon: "fuel",
+    name: {
+      en: "Pin Tankkarten",
+      ru: "Pin Tankkarten",
+      de: "Pin Tankkarten",
+    },
+    description: {
+      en: "Tankkarten PIN report for Driver cards by selected LKW from sheet Tankkarten",
+      ru: "Отчет по PIN топливных карт со статусом Driver по выбранной машине с листа Tankkarten",
+      de: "Tankkarten-PIN-Bericht fuer Driver-Karten nach ausgewaehltem LKW aus Blatt Tankkarten",
+    },
+    params: [
+      {
+        id: "lkw_number",
+        type: "text",
+        label: { en: "LKW Nummer", ru: "Номер машины", de: "LKW Nummer" },
+      },
+    ],
+  },
+  {
     id: "yf_driver_month",
     enabled: true,
     icon: "chart",
@@ -1315,6 +1337,20 @@ ORDER BY t.external_id
 LIMIT 1;
 `;
 
+const PIN_TANKKARTEN_SQL = `
+SELECT
+  source_row,
+  card_number,
+  tankstelle,
+  pin,
+  lkw_number,
+  wo_gespeichert
+FROM report_tankkarten_driver_cards
+WHERE lower(replace(trim(lkw_number), ' ', '')) = lower(replace(trim($1::text), ' ', ''))
+  AND lower(trim(wo_gespeichert)) = 'driver'
+ORDER BY tankstelle, card_number, source_row;
+`;
+
 const YF_DRIVER_MONTH_SQL = `
 SELECT
   month_index,
@@ -2005,6 +2041,12 @@ function makeDieselLkwCardFilename(lkwId, at = new Date()) {
   const clean = String(lkwId || "").trim();
   if (clean) return `diesel_lkw_card_${clean}.pdf`;
   return `diesel_lkw_card_${formatUtcDateStamp(at)}.pdf`;
+}
+
+function makePinTankkartenFilename(lkwNumber, at = new Date()) {
+  const clean = sanitizeFilenamePart(lkwNumber);
+  if (clean) return `pin_tankkarten_${clean}.pdf`;
+  return `pin_tankkarten_${formatUtcDateStamp(at)}.pdf`;
 }
 
 function sanitizeFilenamePart(value) {
@@ -6662,6 +6704,143 @@ async function buildDieselLkwCardPdfWithPdfLib({ userId, rows, lkwId }) {
   return pdfDoc.save();
 }
 
+async function buildPinTankkartenPdfWithPdfLib({ userId, rows, lkwNumber }) {
+  const pdfDoc = await PDFDocument.create();
+  const font = await pdfDoc.embedFont(StandardFonts.Helvetica);
+  const boldFont = await pdfDoc.embedFont(StandardFonts.HelveticaBold);
+
+  const pageSize = [842, 595];
+  const margin = 28;
+  const rowHeight = 24;
+  const textSize = 10;
+  const borderColor = rgb(0.74, 0.8, 0.9);
+  const headerBg = rgb(0.93, 0.96, 1);
+  const oddBg = rgb(0.985, 0.99, 1);
+  const textColor = rgb(0.08, 0.14, 0.24);
+  const columns = [
+    { key: "lkw_number", label: "LKW", width: 130 },
+    { key: "card_number", label: "Card No", width: 170 },
+    { key: "tankstelle", label: "Tankstelle", width: 160 },
+    { key: "pin", label: "PIN", width: 110 },
+    { key: "wo_gespeichert", label: "Status", width: 120 },
+  ];
+  const tableWidth = columns.reduce((sum, col) => sum + col.width, 0);
+  const tableX = margin + ((pageSize[0] - (margin * 2) - tableWidth) / 2);
+
+  let page = pdfDoc.addPage(pageSize);
+  let y = page.getHeight() - margin;
+
+  const drawHeader = () => {
+    page.drawText("Pin Tankkarten", {
+      x: margin,
+      y,
+      size: 16,
+      font: boldFont,
+      color: textColor,
+    });
+    y -= 18;
+    page.drawText(`Sheet Tankkarten | LKW: ${safeText(lkwNumber, "-")} | ${formatReportGeneratedLabel(userId)}`, {
+      x: margin,
+      y,
+      size: 9,
+      font,
+      color: rgb(0.24, 0.3, 0.4),
+    });
+    y -= 28;
+
+    page.drawRectangle({
+      x: tableX,
+      y: y - rowHeight + 2,
+      width: tableWidth,
+      height: rowHeight,
+      color: headerBg,
+      borderColor,
+      borderWidth: 1,
+    });
+
+    let x = tableX;
+    for (const col of columns) {
+      const label = fitTextToWidth(boldFont, col.label, textSize, col.width - 8);
+      const labelWidth = measureTextWidth(boldFont, label, textSize);
+      page.drawText(label, {
+        x: x + ((col.width - labelWidth) / 2),
+        y: y - 15,
+        size: textSize,
+        font: boldFont,
+        color: textColor,
+      });
+      x += col.width;
+      if (x < tableX + tableWidth - 0.5) {
+        page.drawLine({
+          start: { x, y: y - rowHeight + 2 },
+          end: { x, y: y + 2 },
+          thickness: 0.8,
+          color: borderColor,
+        });
+      }
+    }
+    y -= rowHeight;
+  };
+
+  drawHeader();
+
+  if (!Array.isArray(rows) || rows.length === 0) {
+    page.drawText("No Driver cards found for this LKW.", {
+      x: margin,
+      y: y - 20,
+      size: 11,
+      font,
+      color: textColor,
+    });
+    return pdfDoc.save();
+  }
+
+  for (let idx = 0; idx < rows.length; idx += 1) {
+    if (y - rowHeight < margin) {
+      page = pdfDoc.addPage(pageSize);
+      y = page.getHeight() - margin;
+      drawHeader();
+    }
+
+    const row = rows[idx] || {};
+    page.drawRectangle({
+      x: tableX,
+      y: y - rowHeight + 2,
+      width: tableWidth,
+      height: rowHeight,
+      color: idx % 2 === 0 ? rgb(1, 1, 1) : oddBg,
+      borderColor,
+      borderWidth: 0.6,
+    });
+
+    let x = tableX;
+    for (const col of columns) {
+      const raw = safeText(row?.[col.key], "");
+      const value = fitTextToWidth(col.key === "pin" ? boldFont : font, raw, textSize, col.width - 8);
+      const valueWidth = measureTextWidth(col.key === "pin" ? boldFont : font, value, textSize);
+      page.drawText(value, {
+        x: x + ((col.width - valueWidth) / 2),
+        y: y - 15,
+        size: textSize,
+        font: col.key === "pin" ? boldFont : font,
+        color: textColor,
+      });
+      x += col.width;
+      if (x < tableX + tableWidth - 0.5) {
+        page.drawLine({
+          start: { x, y: y - rowHeight + 2 },
+          end: { x, y: y + 2 },
+          thickness: 0.5,
+          color: borderColor,
+        });
+      }
+    }
+    y -= rowHeight;
+  }
+
+  return pdfDoc.save();
+}
+
 async function buildLkwMasterPdfWithPdfLib({ userId, rows, title }) {
   const pdfDoc = await PDFDocument.create();
   const font = await pdfDoc.embedFont(StandardFonts.Helvetica);
@@ -9114,6 +9293,8 @@ async function handleHistory(request, env) {
       filename = makeDieselFilename();
     } else if (reportType === "diesel_lkw_card") {
       filename = makeDieselLkwCardFilename(params?.lkw_id);
+    } else if (reportType === "pin_tankkarten") {
+      filename = makePinTankkartenFilename(params?.lkw_number);
     } else if (reportType === "yf_driver_month") {
       filename = makeYfDriverMonthFilename(params?.month, params?.driver_query);
     } else if (reportType === "yf_lkw_week") {
@@ -9468,6 +9649,14 @@ function validateGeneratePayload(body) {
     return { ok: true, reportType, lkwId };
   }
 
+  if (reportType === "pin_tankkarten") {
+    const lkwNumber = String(body.lkw_number || "").trim().slice(0, 80);
+    if (!lkwNumber) {
+      return { ok: false, status: 400, error: "Missing lkw_number" };
+    }
+    return { ok: true, reportType, lkwNumber };
+  }
+
   if (reportType === "yf_driver_month") {
     const month = Number.parseInt(String(body.month ?? ""), 10);
     const driverQuery = String(body.driver_query || "").trim().slice(0, 120);
@@ -9637,6 +9826,7 @@ async function handleGenerateWithBody(body, env, enforceRateLimit = true) {
     && valid.reportType !== "einnahmen_firm"
     && valid.reportType !== "diesel"
     && valid.reportType !== "diesel_lkw_card"
+    && valid.reportType !== "pin_tankkarten"
     && valid.reportType !== "yf_driver_month"
     && valid.reportType !== "yf_lkw_week"
     && valid.reportType !== "yf_lkw_month"
@@ -10210,6 +10400,61 @@ async function handleGenerateWithBody(body, env, enforceRateLimit = true) {
       }
       pdfBytes = buildSimplePdf({
         title: `Diesel - LKW Karte ${filterLkwId}`,
+        subtitle: formatReportGeneratedLabel(reportUserLabel),
+        lines,
+        pageWidth: 842,
+        pageHeight: 595,
+      });
+    }
+  } else if (valid.reportType === "pin_tankkarten") {
+    let rows;
+    const filterLkwNumber = safeText(valid.lkwNumber, "").trim();
+    try {
+      const result = await queryNeon(
+        dbConnectionString,
+        PIN_TANKKARTEN_SQL,
+        [filterLkwNumber],
+      );
+      rows = result.rows || [];
+    } catch (err) {
+      return json(
+        {
+          ok: false,
+          error: "Failed to execute SQL query",
+          code: "SQL_ERROR",
+          details: String(err?.message || err || "unknown error"),
+        },
+        500,
+        { "Cache-Control": "no-store" },
+      );
+    }
+
+    filename = makePinTankkartenFilename(filterLkwNumber);
+    outputKey = `pin_tankkarten:${filterLkwNumber}`;
+    try {
+      pdfBytes = await buildPinTankkartenPdfWithPdfLib({
+        userId: reportUserLabel,
+        rows,
+        lkwNumber: filterLkwNumber,
+      });
+    } catch (err) {
+      pdfEngine = "legacy-fallback";
+      const lines = [];
+      lines.push("LKW | Card No | Tankstelle | PIN | Status");
+      lines.push("-".repeat(90));
+      for (const row of rows) {
+        lines.push(
+          [
+            safeText(row.lkw_number, ""),
+            safeText(row.card_number, ""),
+            safeText(row.tankstelle, ""),
+            safeText(row.pin, ""),
+            safeText(row.wo_gespeichert, ""),
+          ].join(" | "),
+        );
+      }
+      pdfBytes = buildSimplePdf({
+        title: `Pin Tankkarten ${filterLkwNumber}`,
         subtitle: formatReportGeneratedLabel(reportUserLabel),
         lines,
         pageWidth: 842,

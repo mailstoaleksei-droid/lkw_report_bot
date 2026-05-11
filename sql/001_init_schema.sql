@@ -172,6 +172,20 @@ CREATE TABLE IF NOT EXISTS report_diesel_monthly (
     PRIMARY KEY (report_year, month_index)
 );
 
+CREATE TABLE IF NOT EXISTS report_tankkarten_driver_cards (
+    source_row INTEGER PRIMARY KEY,
+    card_number TEXT NOT NULL DEFAULT '',
+    tankstelle TEXT NOT NULL DEFAULT '',
+    pin TEXT NOT NULL DEFAULT '',
+    lkw_number TEXT NOT NULL DEFAULT '',
+    wo_gespeichert TEXT NOT NULL DEFAULT '',
+    raw_payload JSONB NOT NULL DEFAULT '{}'::JSONB,
+    updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+CREATE INDEX IF NOT EXISTS idx_report_tankkarten_driver_lkw
+    ON report_tankkarten_driver_cards (lower(replace(trim(lkw_number), ' ', '')));
+
 CREATE TABLE IF NOT EXISTS report_yf_fahrer_monthly (
     month_index SMALLINT NOT NULL CHECK (month_index BETWEEN 1 AND 12),
     fahrer_name TEXT NOT NULL,
