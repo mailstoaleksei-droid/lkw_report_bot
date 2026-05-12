@@ -72,6 +72,14 @@
   - dead PID lock is auto-removed on next run
   - invalid/corrupted lock file is auto-removed
   - long-running active ETL still remains protected by lock
+  - Windows PID checks use `tasklist` instead of `os.kill(pid, 0)` to avoid false stale-lock removal
+  - recent locks are kept for up to 2 hours before stale recovery, preventing overlapping ETL runs
+  - ETL steps have per-step timeouts so a hung import cannot block the pipeline indefinitely
+  - freshness auto-remediation skips starting ETL when the pipeline lock already exists
+- [x] Mini App report generation hardened against ETL/update delays:
+  - Neon SQL calls in the Worker have a 25-second timeout
+  - ETL trigger proxy has a 10-second timeout
+  - report generation returns a controlled error instead of leaving the Telegram UI on `Sending...`
 - [x] LKW/Fahrer master-data sync hardened for appended Excel rows:
   - new filled rows from sheets `LKW` and `Fahrer` are imported automatically
   - blank LKW placeholders without `LKW-Nummer` are ignored
