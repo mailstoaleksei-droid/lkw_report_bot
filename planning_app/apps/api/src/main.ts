@@ -1,34 +1,35 @@
 import Fastify from "fastify";
 import cors from "@fastify/cors";
 import cookie from "@fastify/cookie";
-import jwt from "@fastify/jwt";
+import { loadConfig } from "./config.js";
+import { closePrisma } from "./prisma.js";
+import { registerHealthRoutes } from "./routes/health.js";
+import { registerAuthRoutes } from "./routes/auth.js";
+import { registerImportRoutes } from "./routes/imports.js";
+import { registerMetaRoutes } from "./routes/meta.js";
 
 const app = Fastify({ logger: true });
+const config = loadConfig();
 
 await app.register(cors, {
-  origin: process.env.CORS_ORIGIN || "http://localhost:3000",
+  origin: config.corsOrigin,
   credentials: true,
 });
 
 await app.register(cookie);
-await app.register(jwt, {
-  secret: process.env.JWT_SECRET || "development_only_change_me",
-});
 
-app.get("/healthz", async () => ({
-  ok: true,
-  service: "lkw-planning-api",
-  time: new Date().toISOString(),
-}));
+await registerHealthRoutes(app);
+await registerMetaRoutes(app, config);
+await registerAuthRoutes(app, config);
+await registerImportRoutes(app);
 
-app.get("/api/meta", async () => ({
-  ok: true,
-  app: "LKW Planning App",
-  mode: process.env.NODE_ENV || "development",
-}));
+for (const signal of ["SIGINT", "SIGTERM"] as const) {
+  process.on(signal, async () => {
+    app.log.info({ signal }, "Shutting down");
+    await closePrisma();
+    await app.close();
+    process.exit(0);
+  });
+}
 
-const port = Number.parseInt(process.env.API_PORT || "4000", 10);
-const host = process.env.API_HOST || "0.0.0.0";
-
-await app.listen({ port, host });
-
+await app.listen({ port: config.apiPort, host: config.apiHost });

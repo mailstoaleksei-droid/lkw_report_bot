@@ -124,12 +124,28 @@ model Lkw {
   updatedAt      DateTime     @updatedAt
   deletedAt      DateTime?
   assignments    Assignment[]
+  aliases        LkwAlias[]
 
   @@index([companyId])
   @@index([status])
   @@index([isActive])
   @@index([createdAt])
   @@index([updatedAt])
+  @@schema("planning")
+}
+
+model LkwAlias {
+  id        String   @id @default(uuid())
+  lkwId     String
+  lkw       Lkw      @relation(fields: [lkwId], references: [id])
+  alias     String
+  source    String   @default("excel")
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([alias, source])
+  @@index([lkwId])
+  @@index([alias])
   @@schema("planning")
 }
 
@@ -319,10 +335,41 @@ model ImportRun {
   rolledBackAt    DateTime?
   errors          ImportError[]
   availability    DriverAvailability[]
+  dailyPlanRows   DailyPlanImportRow[]
 
   @@index([sourceType])
   @@index([status])
   @@index([createdAt])
+  @@schema("planning")
+}
+
+model DailyPlanImportRow {
+  id             String    @id @default(uuid())
+  importRunId    String
+  importRun      ImportRun @relation(fields: [importRunId], references: [id])
+  sourceSheet    String
+  sourceRow      Int
+  planningDate   DateTime?
+  wagenRaw       String?
+  lkwNumberRaw   String?
+  lkwId          String?
+  runde          Int?
+  auftragText    String?
+  plz            String?
+  country        String?
+  info           String?
+  statusRaw      String?
+  normalizedStatus OrderStatus?
+  validationCode String?
+  validationMessage String?
+  rawPayload     Json      @default("{}")
+  createdAt      DateTime  @default(now())
+
+  @@index([importRunId])
+  @@index([planningDate])
+  @@index([lkwId])
+  @@index([runde])
+  @@index([normalizedStatus])
   @@schema("planning")
 }
 

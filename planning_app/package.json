@@ -12,11 +12,11 @@
     "lint": "npm run lint --workspaces",
     "db:generate": "prisma generate",
     "db:migrate": "prisma migrate dev",
-    "db:deploy": "prisma migrate deploy"
+    "db:deploy": "prisma migrate deploy",
+    "db:seed": "npm run seed:admin --workspace @lkw-planning/api"
   },
   "devDependencies": {
     "prisma": "^5.22.0",
     "typescript": "^5.6.3"
   }
 }
-
