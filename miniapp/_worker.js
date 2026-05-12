@@ -1926,19 +1926,45 @@ function getNeonSqlEndpoint(connectionString) {
   return `https://${apiHost}/sql`;
 }
 
-async function queryNeon(connectionString, query, params = []) {
+const NEON_QUERY_TIMEOUT_MS = 25000;
+const ETL_TRIGGER_TIMEOUT_MS = 10000;
+
+async function fetchWithTimeout(url, options = {}, timeoutMs = 25000) {
+  const controller = typeof AbortController === "function" ? new AbortController() : null;
+  const timer = controller ? setTimeout(() => controller.abort(), timeoutMs) : null;
+  try {
+    return await fetch(url, {
+      ...options,
+      ...(controller ? { signal: controller.signal } : {}),
+    });
+  } catch (err) {
+    if (err?.name === "AbortError") {
+      throw new Error(`Request timed out after ${Math.round(timeoutMs / 1000)}s`);
+    }
+    throw err;
+  } finally {
+    if (timer) clearTimeout(timer);
+  }
+}
+
+async function queryNeon(connectionString, query, params = [], options = {}) {
   const endpoint = getNeonSqlEndpoint(connectionString);
   const payload = { query, params };
-  const resp = await fetch(endpoint, {
-    method: "POST",
-    headers: {
-      "Neon-Connection-String": connectionString,
-      "Neon-Raw-Text-Output": "true",
-      "Neon-Array-Mode": "true",
-      "Content-Type": "application/json",
+  const timeoutMs = Number.parseInt(String(options?.timeoutMs || NEON_QUERY_TIMEOUT_MS), 10) || NEON_QUERY_TIMEOUT_MS;
+  const resp = await fetchWithTimeout(
+    endpoint,
+    {
+      method: "POST",
+      headers: {
+        "Neon-Connection-String": connectionString,
+        "Neon-Raw-Text-Output": "true",
+        "Neon-Array-Mode": "true",
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify(payload),
     },
-    body: JSON.stringify(payload),
-  });
+    timeoutMs,
+  );
 
   if (!resp.ok) {
     let message = `SQL request failed with status ${resp.status}`;
@@ -11579,15 +11605,19 @@ async function handleEtlRun(request, env) {
   if (triggerToken) headers.Authorization = `Bearer ${triggerToken}`;
 
   try {
-    const resp = await fetch(triggerUrl, {
-      method: "POST",
-      headers,
-      body: JSON.stringify({
-        initData: body?.initData || "",
-        requested_by: auth.userId,
-        source: "miniapp",
-      }),
-    });
+    const resp = await fetchWithTimeout(
+      triggerUrl,
+      {
+        method: "POST",
+        headers,
+        body: JSON.stringify({
+          initData: body?.initData || "",
+          requested_by: auth.userId,
+          source: "miniapp",
+        }),
+      },
+      ETL_TRIGGER_TIMEOUT_MS,
+    );
     const text = await resp.text();
     let payload = {};
     try {

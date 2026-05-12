@@ -21,7 +21,24 @@ from dotenv import load_dotenv
 BASE_DIR = Path(__file__).resolve().parent
 LOG_FILE = BASE_DIR / "etl_runner.log"
 LOCK_FILE = Path(os.environ.get("TEMP", r"C:\Windows\Temp")) / "lkw_etl_pipeline.lock"
-LOCK_STALE_SEC = 6 * 3600
+
+
+def env_int(name: str, default: int, minimum: int = 1) -> int:
+    raw = (os.getenv(name) or "").strip()
+    if not raw:
+        return max(minimum, default)
+    try:
+        return max(minimum, int(raw))
+    except ValueError:
+        return max(minimum, default)
+
+
+LOCK_STALE_SEC = env_int("ETL_PIPELINE_LOCK_STALE_SEC", 2 * 3600, minimum=15 * 60)
+STEP_TIMEOUTS_SEC = {
+    "xlsm": env_int("ETL_STEP_TIMEOUT_XLSM_SEC", 45 * 60, minimum=5 * 60),
+    "xlsb": env_int("ETL_STEP_TIMEOUT_XLSB_SEC", 20 * 60, minimum=5 * 60),
+    "sim_cards": env_int("ETL_STEP_TIMEOUT_SIM_CARDS_SEC", 10 * 60, minimum=2 * 60),
+}
 
 
 def log(msg: str) -> None:
@@ -57,7 +74,23 @@ def run_step(name: str, script: str, required: bool = True) -> bool:
     py = BASE_DIR / ".venv" / "Scripts" / "python.exe"
     cmd = [str(py), str(BASE_DIR / script)]
     log(f"STEP START: {name} -> {' '.join(cmd)}")
-    cp = subprocess.run(cmd, capture_output=True, text=True, cwd=str(BASE_DIR))
+    timeout_sec = STEP_TIMEOUTS_SEC.get(name, env_int("ETL_STEP_TIMEOUT_DEFAULT_SEC", 30 * 60, minimum=5 * 60))
+    try:
+        cp = subprocess.run(
+            cmd,
+            capture_output=True,
+            text=True,
+            cwd=str(BASE_DIR),
+            timeout=timeout_sec,
+        )
+    except subprocess.TimeoutExpired as exc:
+        stdout = (exc.stdout or "").strip()
+        stderr = (exc.stderr or "").strip()
+        if stdout:
+            log(f"{name} stdout before timeout: {stdout}")
+        if stderr:
+            log(f"{name} stderr before timeout: {stderr}")
+        raise RuntimeError(f"{name} timed out after {timeout_sec} seconds") from exc
     if cp.stdout.strip():
         log(f"{name} stdout: {cp.stdout.strip()}")
     if cp.stderr.strip():
@@ -87,6 +120,21 @@ def is_process_running(pid: int) -> bool:
         return False
     if pid == os.getpid():
         return True
+    if os.name == "nt":
+        try:
+            cp = subprocess.run(
+                ["tasklist", "/FI", f"PID eq {pid}", "/FO", "CSV", "/NH"],
+                capture_output=True,
+                text=True,
+                timeout=10,
+                check=False,
+            )
+        except Exception:
+            return True
+        if cp.returncode != 0:
+            return True
+        out = (cp.stdout or "").strip()
+        return out.startswith('"')
     try:
         os.kill(pid, 0)
     except ProcessLookupError:
@@ -125,14 +173,18 @@ def acquire_pipeline_lock() -> bool:
             started_at = _to_int(info.get("started_at"))
             age_sec = max(0, now_ts - started_at) if started_at else 0
 
+            process_active = is_process_running(pid) if pid else False
             stale_reason = ""
             if not info:
                 stale_reason = "invalid lock payload"
-            elif pid and is_process_running(pid):
+            elif pid and process_active:
                 log(f"ETL PIPELINE SKIP: active lock pid={pid} ({LOCK_FILE})")
                 return False
-            elif pid and not is_process_running(pid):
-                stale_reason = f"stale pid={pid}"
+            elif started_at and age_sec <= LOCK_STALE_SEC:
+                log(f"ETL PIPELINE SKIP: recent lock pid={pid} age_sec={age_sec} ({LOCK_FILE})")
+                return False
+            elif pid and not process_active:
+                stale_reason = f"stale pid={pid} age_sec={age_sec}"
             elif started_at and age_sec > LOCK_STALE_SEC:
                 stale_reason = f"stale age_sec={age_sec}"
 

@@ -70,6 +70,10 @@ def _state_file_path() -> Path:
     return Path(os.environ.get("TEMP", r"C:\Windows\Temp")) / "lkw_etl_stale_state.json"
 
 
+def _pipeline_lock_file_path() -> Path:
+    return Path(os.environ.get("TEMP", r"C:\Windows\Temp")) / "lkw_etl_pipeline.lock"
+
+
 def _load_state(path: Path) -> dict:
     if not path.exists():
         return {}
@@ -115,6 +119,11 @@ def _maybe_start_etl_remediation(state: dict, stale_key: str) -> bool:
     """Start the scheduled ETL task when freshness is stale, throttled by state."""
     if not _env_bool("ETL_AUTO_REMEDIATE", True):
         _log("etl_remediation: disabled")
+        return False
+
+    lock_file = _pipeline_lock_file_path()
+    if lock_file.exists():
+        _log(f"etl_remediation: skipped=active_pipeline_lock lock={lock_file}")
         return False
 
     now_ts = int(time.time())
