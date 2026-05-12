@@ -16,7 +16,8 @@
     "db:seed": "npm run seed:admin --workspace @lkw-planning/api"
   },
   "devDependencies": {
-    "prisma": "^5.22.0",
+    "@prisma/client": "^6.19.3",
+    "prisma": "^6.19.3",
     "typescript": "^5.6.3"
   }
 }

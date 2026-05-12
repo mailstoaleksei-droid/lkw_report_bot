@@ -1,24 +1,10 @@
 import { RoleName } from "@prisma/client";
-import fs from "node:fs";
 import { hashPassword } from "../auth/password.js";
+import { loadEnvFromNearestProjectRoot } from "../env.js";
 import { prisma, closePrisma } from "../prisma.js";
 
-function loadEnvFile(path = ".env"): void {
-  try {
-    if (!fs.existsSync(path)) return;
-    const lines = fs.readFileSync(path, "utf8").split(/\r?\n/);
-    for (const line of lines) {
-      if (!line || line.trim().startsWith("#") || !line.includes("=")) continue;
-      const [key, ...rest] = line.split("=");
-      if (!process.env[key]) process.env[key] = rest.join("=").trim();
-    }
-  } catch {
-    // Environment loading is best-effort for local seed execution.
-  }
-}
-
 async function main(): Promise<void> {
-  loadEnvFile();
+  loadEnvFromNearestProjectRoot();
   const email = (process.env.ADMIN_EMAIL || "").trim().toLowerCase();
   const password = process.env.ADMIN_PASSWORD || "";
   const displayName = (process.env.ADMIN_DISPLAY_NAME || "Admin").trim();

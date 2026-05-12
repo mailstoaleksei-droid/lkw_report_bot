@@ -16,7 +16,7 @@ Status legend:
 - [x] Existing `miniapp/`, `bot.py`, and ETL scripts left untouched for planning work.
 - [x] No real secrets added to `planning_app/`.
 - [x] `.env.example` added with placeholders only.
-- [ ] Decide production DB boundary: separate DB `lkw_planning` or schema `planning`.
+- [x] Decide production DB boundary: separate DB `lkw_planning`.
 
 ## 1. Foundation
 
@@ -33,18 +33,23 @@ Status legend:
 - [x] Manual actions document added.
 - [x] Install Node dependencies.
 - [x] Validate Prisma schema with real Prisma CLI.
-- [ ] Create first Prisma migration.
+- [x] Create first Prisma migration.
+  - Migration SQL is stored in `prisma/migrations/202605121_initial_planning_schema/migration.sql`.
+  - It was applied manually to `lkw_planning` because Prisma schema engine failed against Neon TLS on this Windows machine.
 - [x] Add seed script for first Admin user.
-- [ ] Add local `.env` for development.
+- [x] Seed first Admin user: `a.samosvat@groo.de`.
+- [x] Add local `.env` for development.
+- [x] Configure Prisma runtime with JS PostgreSQL adapter.
 - [ ] Verify Docker Compose build.
   - Blocked locally: Docker CLI is not installed or not in PATH.
+  - `winget install Docker.DockerDesktop` downloaded installer but failed at admin/UAC install step.
 
 ## 2. Backend API
 
 - [x] Fastify health endpoint skeleton added.
 - [x] Add environment/config module.
 - [x] Add Prisma client module.
-- [ ] Add auth module.
+- [x] Add auth module.
 - [x] Add password hashing.
 - [x] Add session/JWT flow.
 - [ ] Add role guards.
@@ -77,7 +82,8 @@ Status legend:
 - [x] Add LKW alias table for `Wagen` mapping.
 - [x] Add daily plan import staging table.
 - [x] Add explicit normalized status mapping table or code module.
-- [ ] Add migration indexes review.
+- [x] Add migration indexes review.
+  - Initial indexes exist for planning date, LKW, driver, Runde, status, createdAt, and updatedAt.
 
 ## 4. Excel And Existing DB Imports
 
@@ -85,9 +91,13 @@ Status legend:
 - [ ] Import from existing reporting DB: weekly schedules.
 - [ ] Import from Excel `Urlaub`: daily vacation/sick data.
 - [ ] Import from Excel daily Tagesplan source.
-- [ ] Identify exact source sheet for daily Tagesplan.
+- [x] Identify exact source sheet for daily Tagesplan.
+  - Source workbook: `Dispo 2026 Wochenplanung_.xlsm`.
+  - Each date sheet is one planning date, for example `04.05`.
+  - Header row is row 1.
 - [ ] Parse `Runde_1`, `Runde_2`, `Runde_3`.
-- [ ] Map `Wagen` values to LKW.
+- [~] Map `Wagen` values to LKW.
+  - Confirmed examples: `2206 -> GR-OO2206`, `411 -> KO-HH411`, `4295 -> WI-QY4295`.
 - [ ] Add preview before import.
 - [ ] Add validation report.
 - [ ] Add duplicate detection.
@@ -152,12 +162,14 @@ Status legend:
 
 ## 9. Manual Decisions Needed
 
-- [manual] Choose DB isolation: separate database or same DB with schema `planning`.
-- [manual] Confirm exact daily Tagesplan Excel source sheet/file.
-- [manual] Confirm `Wagen` -> LKW alias rules for short numbers like `411`, `4235`.
+- [x] Choose DB isolation: separate database `lkw_planning`.
+- [x] Confirm exact daily Tagesplan Excel source sheet/file.
+- [~] Confirm `Wagen` -> LKW alias rules for short numbers like `411`, `4235`.
+  - Confirmed: `411 -> KO-HH411`, `4295 -> WI-QY4295`.
+  - Still needs full alias import table from LKW master data for all edge cases.
 - [manual] Confirm meaning of green/red status icons in Tagesplan.
 - [manual] Confirm if MVP UI should show exactly 3 Runde or allow dynamic Runde count.
-- [manual] Confirm first Admin user email for seed script.
+- [x] Confirm first Admin user email for seed script: `a.samosvat@groo.de`.
 - [manual] `npm audit --omit=dev` still reports 2 moderate advisories in `next -> postcss`; npm currently reports no non-forced fix.
 
 ## 10. Phase 2
