@@ -1,0 +1,397 @@
+generator client {
+  provider        = "prisma-client-js"
+  previewFeatures = ["multiSchema"]
+}
+
+datasource db {
+  provider          = "postgresql"
+  url               = env("DATABASE_URL")
+  shadowDatabaseUrl = env("SHADOW_DATABASE_URL")
+  schemas           = ["planning"]
+}
+
+enum RoleName {
+  ADMIN
+  OPERATOR
+  VIEWER
+  MANAGER
+
+  @@schema("planning")
+}
+
+enum MasterStatus {
+  ACTIVE
+  INACTIVE
+  SOLD
+  RETURNED
+  WORKSHOP
+  RESERVE
+  DISMISSED
+  VACATION
+  SICK
+  UNKNOWN
+
+  @@schema("planning")
+}
+
+enum OrderStatus {
+  OPEN
+  PLANNED
+  PROBLEM
+  DONE
+  CANCELLED
+
+  @@schema("planning")
+}
+
+enum ImportStatus {
+  PREVIEW
+  VALIDATED
+  EXECUTED
+  ROLLED_BACK
+  FAILED
+
+  @@schema("planning")
+}
+
+enum AuditEventType {
+  ORDER_CREATED
+  ORDER_UPDATED
+  ORDER_CANCELLED
+  ORDER_DELETED
+  LKW_ASSIGNED
+  DRIVER_ASSIGNED
+  CHASSIS_ASSIGNED
+  ASSIGNMENT_UPDATED
+  STATUS_CHANGED
+  IMPORT_EXECUTED
+  USER_CREATED
+  USER_ROLE_CHANGED
+  EXPORT_CREATED
+
+  @@schema("planning")
+}
+
+model User {
+  id             String     @id @default(uuid())
+  email          String     @unique
+  passwordHash   String
+  displayName    String
+  role           RoleName   @default(VIEWER)
+  isActive       Boolean    @default(true)
+  lastLoginAt    DateTime?
+  createdAt      DateTime   @default(now())
+  updatedAt      DateTime   @updatedAt
+  deletedAt      DateTime?
+  auditEvents    AuditLog[]
+  imports        ImportRun[]
+  exportLogs     ExportLog[]
+
+  @@index([role])
+  @@index([isActive])
+  @@schema("planning")
+}
+
+model Company {
+  id        String   @id @default(uuid())
+  name      String   @unique
+  code      String?
+  isActive  Boolean  @default(true)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  lkw       Lkw[]
+  drivers   Driver[]
+
+  @@schema("planning")
+}
+
+model Lkw {
+  id             String       @id @default(uuid())
+  externalId     String?      @unique
+  number         String       @unique
+  type           String?
+  companyId      String?
+  company        Company?     @relation(fields: [companyId], references: [id])
+  status         MasterStatus @default(ACTIVE)
+  rawStatus      String?
+  statusSince    DateTime?
+  soldDate       DateTime?
+  returnedDate   DateTime?
+  isActive       Boolean      @default(true)
+  sourceRowHash  String?
+  rawPayload     Json         @default("{}")
+  createdAt      DateTime     @default(now())
+  updatedAt      DateTime     @updatedAt
+  deletedAt      DateTime?
+  assignments    Assignment[]
+
+  @@index([companyId])
+  @@index([status])
+  @@index([isActive])
+  @@index([createdAt])
+  @@index([updatedAt])
+  @@schema("planning")
+}
+
+model Driver {
+  id                 String               @id @default(uuid())
+  externalId         String?              @unique
+  fullName           String
+  surname            String?
+  phone              String?
+  companyId          String?
+  company            Company?             @relation(fields: [companyId], references: [id])
+  status             MasterStatus         @default(ACTIVE)
+  rawStatus          String?
+  dismissedDate      DateTime?
+  isActive           Boolean              @default(true)
+  telegramLookupHint String?
+  sourceRowHash      String?
+  rawPayload         Json                 @default("{}")
+  createdAt          DateTime             @default(now())
+  updatedAt          DateTime             @updatedAt
+  deletedAt          DateTime?
+  availability       DriverAvailability[]
+  assignments        Assignment[]
+  telegramAccounts   TelegramAccount[]
+
+  @@index([companyId])
+  @@index([surname])
+  @@index([status])
+  @@index([isActive])
+  @@index([createdAt])
+  @@index([updatedAt])
+  @@schema("planning")
+}
+
+model DriverAvailability {
+  id          String       @id @default(uuid())
+  driverId    String
+  driver      Driver       @relation(fields: [driverId], references: [id])
+  date        DateTime
+  status      MasterStatus
+  rawStatus   String?
+  source      String       @default("excel")
+  importRunId String?
+  importRun   ImportRun?   @relation(fields: [importRunId], references: [id])
+  rawPayload  Json         @default("{}")
+  createdAt   DateTime     @default(now())
+  updatedAt   DateTime     @updatedAt
+
+  @@unique([driverId, date, source])
+  @@index([date])
+  @@index([driverId, date])
+  @@index([status])
+  @@schema("planning")
+}
+
+model Chassis {
+  id          String       @id @default(uuid())
+  externalId  String?      @unique
+  number      String       @unique
+  status      MasterStatus @default(ACTIVE)
+  rawStatus   String?
+  rawPayload  Json         @default("{}")
+  createdAt   DateTime     @default(now())
+  updatedAt   DateTime     @updatedAt
+  deletedAt   DateTime?
+  assignments Assignment[]
+
+  @@index([status])
+  @@schema("planning")
+}
+
+model Order {
+  id              String       @id @default(uuid())
+  planningDate    DateTime
+  runde           Int
+  description     String
+  customer        String?
+  plz             String?
+  city            String?
+  country         String?
+  plannedTime     String?
+  info            String?
+  tourType        String?
+  externalOrderId String?
+  status          OrderStatus  @default(OPEN)
+  problemReason   String?
+  createdById     String?
+  createdAt       DateTime     @default(now())
+  updatedAt       DateTime     @updatedAt
+  deletedAt       DateTime?
+  assignments     Assignment[]
+  auditEvents     AuditLog[]
+  externalMapping ExternalOrderMapping?
+
+  @@index([planningDate])
+  @@index([runde])
+  @@index([status])
+  @@index([externalOrderId])
+  @@index([createdAt])
+  @@index([updatedAt])
+  @@schema("planning")
+}
+
+model Assignment {
+  id            String      @id @default(uuid())
+  orderId       String
+  order         Order       @relation(fields: [orderId], references: [id])
+  lkwId         String?
+  lkw           Lkw?        @relation(fields: [lkwId], references: [id])
+  driverId      String?
+  driver        Driver?     @relation(fields: [driverId], references: [id])
+  chassisId     String?
+  chassis       Chassis?    @relation(fields: [chassisId], references: [id])
+  planningDate  DateTime
+  runde         Int
+  status        OrderStatus @default(PLANNED)
+  problemReason String?
+  rawPayload    Json        @default("{}")
+  createdAt     DateTime    @default(now())
+  updatedAt     DateTime    @updatedAt
+  deletedAt     DateTime?
+  auditEvents   AuditLog[]
+
+  @@index([planningDate])
+  @@index([planningDate, runde, lkwId])
+  @@index([lkwId])
+  @@index([driverId])
+  @@index([chassisId])
+  @@index([runde])
+  @@index([status])
+  @@index([createdAt])
+  @@index([updatedAt])
+  @@schema("planning")
+}
+
+model Holiday {
+  id        String   @id @default(uuid())
+  date      DateTime
+  name      String
+  region    String
+  isNational Boolean @default(false)
+  createdAt DateTime @default(now())
+
+  @@unique([date, region, name])
+  @@index([date])
+  @@index([region])
+  @@schema("planning")
+}
+
+model AuditLog {
+  id            String         @id @default(uuid())
+  eventType     AuditEventType
+  entityType    String
+  entityId      String
+  orderId       String?
+  order         Order?         @relation(fields: [orderId], references: [id])
+  assignmentId  String?
+  assignment    Assignment?    @relation(fields: [assignmentId], references: [id])
+  userId        String?
+  user          User?          @relation(fields: [userId], references: [id])
+  before        Json?
+  after         Json?
+  message       String?
+  createdAt     DateTime       @default(now())
+
+  @@index([eventType])
+  @@index([entityType, entityId])
+  @@index([orderId])
+  @@index([assignmentId])
+  @@index([userId])
+  @@index([createdAt])
+  @@schema("planning")
+}
+
+model ImportRun {
+  id              String               @id @default(uuid())
+  sourceType      String
+  sourceFileName  String
+  sourceFileHash  String?
+  status          ImportStatus         @default(PREVIEW)
+  previewPayload  Json                 @default("{}")
+  validationStats Json                 @default("{}")
+  createdById     String?
+  createdBy       User?                @relation(fields: [createdById], references: [id])
+  createdAt       DateTime             @default(now())
+  executedAt      DateTime?
+  rolledBackAt    DateTime?
+  errors          ImportError[]
+  availability    DriverAvailability[]
+
+  @@index([sourceType])
+  @@index([status])
+  @@index([createdAt])
+  @@schema("planning")
+}
+
+model ImportError {
+  id          String    @id @default(uuid())
+  importRunId String
+  importRun   ImportRun @relation(fields: [importRunId], references: [id])
+  rowNumber   Int?
+  fieldName   String?
+  severity    String
+  code        String
+  message     String
+  rawPayload  Json      @default("{}")
+  createdAt   DateTime  @default(now())
+
+  @@index([importRunId])
+  @@index([severity])
+  @@schema("planning")
+}
+
+model ExportLog {
+  id          String   @id @default(uuid())
+  exportType  String
+  format      String
+  filters     Json     @default("{}")
+  outputPath  String?
+  createdById String?
+  createdBy   User?    @relation(fields: [createdById], references: [id])
+  createdAt   DateTime @default(now())
+
+  @@index([exportType])
+  @@index([format])
+  @@index([createdAt])
+  @@schema("planning")
+}
+
+model AppSetting {
+  key       String   @id
+  value     Json
+  updatedAt DateTime @updatedAt
+
+  @@schema("planning")
+}
+
+model TelegramAccount {
+  id             String   @id @default(uuid())
+  telegramUserId BigInt   @unique
+  driverId       String?
+  driver         Driver?  @relation(fields: [driverId], references: [id])
+  isActive       Boolean  @default(true)
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  @@index([driverId])
+  @@schema("planning")
+}
+
+model ExternalOrderMapping {
+  id              String   @id @default(uuid())
+  orderId          String   @unique
+  order            Order    @relation(fields: [orderId], references: [id])
+  externalSystem   String
+  externalOrderId  String
+  syncStatus       String   @default("pending")
+  lastSyncedAt     DateTime?
+  rawPayload       Json     @default("{}")
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
+
+  @@unique([externalSystem, externalOrderId])
+  @@schema("planning")
+}
