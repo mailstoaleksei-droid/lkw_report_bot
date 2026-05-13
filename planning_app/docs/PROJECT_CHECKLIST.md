@@ -41,8 +41,10 @@ Status legend:
 - [x] Add local `.env` for development.
 - [x] Configure Prisma runtime with JS PostgreSQL adapter.
 - [ ] Verify Docker Compose build.
-  - Blocked locally: Docker CLI is not installed or not in PATH.
-  - `winget install Docker.DockerDesktop` downloaded installer but failed at admin/UAC install step.
+  - Docker Desktop 4.73.0 installed successfully on 2026-05-13.
+  - Docker CLI works by direct path: `C:\Program Files\Docker\Docker\resources\bin\docker.exe`.
+  - Pending: Windows restart or logout/login is needed after enabling WSL/Hyper-V and adding the user to `docker-users`.
+  - Current Codex session runs as `nbgroo21\codexsandboxoffline` and cannot access the Docker daemon pipe yet.
 
 ## 2. Backend API
 
@@ -155,7 +157,7 @@ Status legend:
 - [ ] Monthly restore test procedure documented.
 - [ ] Healthchecks verified.
 - [ ] Docker healthchecks verified.
-  - Blocked locally until Docker is installed.
+  - Blocked locally until Windows restart/login refresh after Docker Desktop installation.
 - [ ] Log rotation configured.
 - [ ] Hetzner deployment notes.
 - [ ] Cloudflare DNS/SSL notes.

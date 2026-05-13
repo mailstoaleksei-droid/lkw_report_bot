@@ -39,42 +39,42 @@ Local status:
 - First Admin seed email is `a.samosvat@groo.de`.
 - The generated local Admin password is stored only in `planning_app/.env`.
 
-## 3. Install Docker
+## 3. Docker Desktop
 
-Docker is not currently available from the shell on this machine:
-
-```powershell
-docker --version
-```
-
-returned:
-
-```text
-docker is not recognized
-```
-
-Automatic install attempt:
-- `winget install -e --id Docker.DockerDesktop --accept-package-agreements --accept-source-agreements`
-- The installer downloaded successfully.
-- The install failed at the Windows admin/UAC step.
-
-Manual action:
-1. Open PowerShell as Administrator.
-2. Run:
+Local status:
+- Docker Desktop 4.73.0 is installed.
+- Docker CLI is available by direct path:
 
 ```powershell
-winget install -e --id Docker.DockerDesktop --accept-package-agreements --accept-source-agreements
+& 'C:\Program Files\Docker\Docker\resources\bin\docker.exe' --version
 ```
 
-3. Restart Windows if Docker asks for it.
-4. After restart, verify:
+Current verified version:
+- Docker CLI: `29.4.3`
+- Docker Compose plugin: `5.1.3`
+
+Installation notes:
+- The first install failed because `C:\ProgramData\DockerDesktop` was owned by a normal user.
+- The folder owner was changed to `Administrators`.
+- The second install succeeded.
+- The installer enabled `VirtualMachinePlatform`, `Microsoft-Windows-Subsystem-Linux`, and `Microsoft-Hyper-V`.
+
+Manual action still needed:
+1. Restart Windows, or at minimum log out and log in again.
+2. Start Docker Desktop.
+3. Verify in a normal PowerShell:
 
 ```powershell
 docker --version
 docker compose version
+docker info
 ```
 
-Then test from `planning_app/`:
+Reason:
+- The interactive user `NBGROO21\Aleksei Samosvat` is already in local group `docker-users`.
+- The current Codex runner is `nbgroo21\codexsandboxoffline`, so it cannot access the Docker daemon pipe until the session/user token is refreshed.
+
+After that, test from `planning_app/`:
 
 ```powershell
 docker compose up --build
