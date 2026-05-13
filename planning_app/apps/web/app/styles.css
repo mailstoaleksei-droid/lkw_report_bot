@@ -32,7 +32,8 @@ p {
 }
 
 button,
-input {
+input,
+select {
   font: inherit;
 }
 
@@ -56,7 +57,8 @@ button:disabled {
   opacity: 0.65;
 }
 
-input {
+input,
+select {
   border: 1px solid var(--line);
   border-radius: 6px;
   color: var(--text);
@@ -142,6 +144,18 @@ label {
   grid-template-columns: repeat(6, minmax(120px, 1fr));
   gap: 12px;
   margin: 0 0 20px;
+}
+
+.filters-panel {
+  align-items: end;
+  background: var(--panel);
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  display: grid;
+  gap: 12px;
+  grid-template-columns: repeat(4, minmax(140px, 1fr)) auto auto;
+  margin: 0 0 20px;
+  padding: 14px;
 }
 
 .metric,
@@ -338,6 +352,7 @@ th {
   }
 
   .dashboard,
+  .filters-panel,
   .side-grid,
   .imports-grid {
     grid-template-columns: repeat(2, minmax(120px, 1fr));
@@ -350,6 +365,7 @@ th {
   }
 
   .dashboard,
+  .filters-panel,
   .side-grid,
   .imports-grid {
     grid-template-columns: 1fr;

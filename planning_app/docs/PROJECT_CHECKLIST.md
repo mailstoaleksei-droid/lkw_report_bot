@@ -167,7 +167,8 @@ Status legend:
   - The first table column is LKW.
 - [ ] Orders-first mode.
 - [~] Filters: date, week, month, company, LKW, driver, status, Runde.
-  - Date filter is implemented; other filters are pending.
+  - Date, LKW, driver, status, and Runde filters are implemented in the web UI.
+  - Week, month, and company filters are pending.
 - [x] Conflict/problem indicators.
   - Problem rows are highlighted and problem status is shown.
 - [ ] Holiday warning banner.
@@ -187,7 +188,8 @@ Status legend:
 - [ ] PDF Wochenplan.
 - [ ] Excel Wochenplan.
 - [~] Export respects filters.
-  - Date filter is supported; other UI filters are pending.
+  - Date filter is supported by the export endpoint.
+  - LKW, driver, status, and Runde filters are currently UI-only and must be added to the export endpoint.
 - [x] Export log records created.
 
 ## 8. Operations

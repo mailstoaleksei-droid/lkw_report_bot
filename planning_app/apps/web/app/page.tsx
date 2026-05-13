@@ -166,6 +166,10 @@ export default function HomePage() {
   const [audit, setAudit] = useState<AuditItem[]>([]);
   const [importResults, setImportResults] = useState<Record<string, ImportResult>>({});
   const [importBusy, setImportBusy] = useState<string | null>(null);
+  const [lkwFilter, setLkwFilter] = useState("");
+  const [driverFilter, setDriverFilter] = useState("");
+  const [statusFilter, setStatusFilter] = useState("");
+  const [rundeFilter, setRundeFilter] = useState("");
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
@@ -200,6 +204,17 @@ export default function HomePage() {
       ["Problems", String(counters.problemOrders)],
     ];
   }, [planning]);
+
+  const filteredRows = useMemo(() => {
+    return (planning?.rows || []).filter((row) => {
+      const lkwMatch = !lkwFilter || row.lkw?.number.toLowerCase().includes(lkwFilter.toLowerCase());
+      const driverMatch = !driverFilter || row.driver?.fullName.toLowerCase().includes(driverFilter.toLowerCase());
+      const statusValue = row.order.status || row.status;
+      const statusMatch = !statusFilter || statusValue === statusFilter;
+      const rundeMatch = !rundeFilter || String(row.runde) === rundeFilter;
+      return lkwMatch && driverMatch && statusMatch && rundeMatch;
+    });
+  }, [planning, lkwFilter, driverFilter, statusFilter, rundeFilter]);
 
   async function loadDashboardData(date: string): Promise<void> {
     setError(null);
@@ -336,6 +351,50 @@ export default function HomePage() {
         ))}
       </section>
 
+      <section className="filters-panel">
+        <label>
+          LKW
+          <input value={lkwFilter} onChange={(event) => setLkwFilter(event.target.value)} placeholder="GR-OO..." />
+        </label>
+        <label>
+          Driver
+          <input value={driverFilter} onChange={(event) => setDriverFilter(event.target.value)} placeholder="Name" />
+        </label>
+        <label>
+          Status
+          <select value={statusFilter} onChange={(event) => setStatusFilter(event.target.value)}>
+            <option value="">All</option>
+            <option value="OPEN">OPEN</option>
+            <option value="PLANNED">PLANNED</option>
+            <option value="PROBLEM">PROBLEM</option>
+            <option value="DONE">DONE</option>
+            <option value="CANCELLED">CANCELLED</option>
+          </select>
+        </label>
+        <label>
+          Runde
+          <select value={rundeFilter} onChange={(event) => setRundeFilter(event.target.value)}>
+            <option value="">All</option>
+            <option value="1">1</option>
+            <option value="2">2</option>
+            <option value="3">3</option>
+          </select>
+        </label>
+        <button
+          type="button"
+          className="secondary-button"
+          onClick={() => {
+            setLkwFilter("");
+            setDriverFilter("");
+            setStatusFilter("");
+            setRundeFilter("");
+          }}
+        >
+          Clear filters
+        </button>
+        <span className="muted">{filteredRows.length} visible / {planning?.rows.length || 0} total</span>
+      </section>
+
       <section className="planner">
         <div className="planner-header">
           <div>
@@ -365,7 +424,7 @@ export default function HomePage() {
               </tr>
             </thead>
             <tbody>
-              {(planning?.rows || []).map((row) => (
+              {filteredRows.map((row) => (
                 <tr key={row.id} className={row.status === "PROBLEM" || row.order.status === "PROBLEM" ? "problem-row" : ""}>
                   <td>{row.lkw?.number || "-"}</td>
                   <td>{row.lkw?.status || "-"}</td>
@@ -383,9 +442,9 @@ export default function HomePage() {
                   </td>
                 </tr>
               ))}
-              {planning && planning.rows.length === 0 ? (
+              {planning && filteredRows.length === 0 ? (
                 <tr>
-                  <td colSpan={10}>No planning rows for this date.</td>
+                  <td colSpan={10}>No planning rows match the current filters.</td>
                 </tr>
               ) : null}
             </tbody>
