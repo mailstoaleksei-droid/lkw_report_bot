@@ -3,6 +3,7 @@ import type { FastifyInstance } from "fastify";
 import { z } from "zod";
 import { requireUser } from "../auth/guards.js";
 import type { AppConfig } from "../config.js";
+import { lkwPlanningWhere, toPlanningDate } from "../domain/planning-availability.js";
 import { prisma } from "../prisma.js";
 
 const querySchema = z.object({
@@ -10,6 +11,7 @@ const querySchema = z.object({
   companyId: z.string().uuid().optional(),
   status: z.nativeEnum(MasterStatus).optional(),
   activeOnly: z.coerce.boolean().default(false),
+  planningDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional(),
   limit: z.coerce.number().int().min(1).max(500).default(200),
 });
 
@@ -23,16 +25,20 @@ export async function registerLkwRoutes(app: FastifyInstance, config: AppConfig)
       return reply.code(400).send({ ok: false, error: "Invalid query" });
     }
 
-    const { q, companyId, status, activeOnly, limit } = parsed.data;
+    const { q, companyId, status, activeOnly, planningDate, limit } = parsed.data;
+    const dateAwareActiveWhere = activeOnly && planningDate
+      ? lkwPlanningWhere(toPlanningDate(planningDate))
+      : {};
     const items = await prisma.lkw.findMany({
       where: {
         deletedAt: null,
         ...(companyId ? { companyId } : {}),
         ...(status ? { status } : {}),
-        ...(activeOnly ? {
+        ...(activeOnly && !planningDate ? {
           isActive: true,
           status: { notIn: [MasterStatus.INACTIVE, MasterStatus.SOLD, MasterStatus.RETURNED] },
         } : {}),
+        ...dateAwareActiveWhere,
         ...(q ? {
           OR: [
             { number: { contains: q, mode: "insensitive" } },

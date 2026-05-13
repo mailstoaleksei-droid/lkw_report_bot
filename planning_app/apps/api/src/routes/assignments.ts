@@ -3,6 +3,7 @@ import type { FastifyInstance } from "fastify";
 import { z } from "zod";
 import { requireUser } from "../auth/guards.js";
 import type { AppConfig } from "../config.js";
+import { driverUnavailableReason, lkwUnavailableReason } from "../domain/planning-availability.js";
 import { prisma } from "../prisma.js";
 
 const assignmentSchema = z.object({
@@ -72,20 +73,8 @@ async function checkAssignmentProblems(
     if (!lkw || lkw.deletedAt) {
       reasons.push("LKW not found");
     } else {
-      if (
-        !lkw.isActive ||
-        lkw.status === MasterStatus.INACTIVE ||
-        lkw.status === MasterStatus.SOLD ||
-        lkw.status === MasterStatus.RETURNED
-      ) {
-        reasons.push("LKW is not active for normal planning");
-      }
-      if (lkw.soldDate && lkw.soldDate <= order.planningDate) {
-        reasons.push("LKW sold on or before planning date");
-      }
-      if (lkw.returnedDate && lkw.returnedDate <= order.planningDate) {
-        reasons.push("LKW returned on or before planning date");
-      }
+      const unavailableReason = lkwUnavailableReason(lkw, order.planningDate);
+      if (unavailableReason) reasons.push(unavailableReason);
       const sameRunde = await tx.assignment.findFirst({
         where: {
           orderId: { not: input.orderId },
@@ -108,12 +97,8 @@ async function checkAssignmentProblems(
     if (!driver || driver.deletedAt) {
       reasons.push("Driver not found");
     } else {
-      if (!driver.isActive || driver.status === MasterStatus.DISMISSED) {
-        reasons.push("Driver is not active");
-      }
-      if (driver.dismissedDate && driver.dismissedDate <= order.planningDate) {
-        reasons.push("Driver dismissed on or before planning date");
-      }
+      const unavailableReason = driverUnavailableReason(driver, order.planningDate);
+      if (unavailableReason) reasons.push(unavailableReason);
       const availability = await tx.driverAvailability.findFirst({
         where: {
           driverId: input.driverId,

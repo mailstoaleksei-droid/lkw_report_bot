@@ -217,6 +217,23 @@ function hasManagerAccess(role: string): boolean {
   return ["ADMIN", "MANAGER"].includes(role);
 }
 
+function isAfterPlanningDate(value: string | null, selectedDate: string): boolean {
+  return Boolean(value && value.slice(0, 10) > selectedDate);
+}
+
+function isLkwVisibleForPlanning(item: LkwItem, selectedDate: string): boolean {
+  if (item.status === "INACTIVE") return false;
+  if (item.status === "SOLD") return isAfterPlanningDate(item.soldDate, selectedDate);
+  if (item.status === "RETURNED") return isAfterPlanningDate(item.returnedDate, selectedDate);
+  return item.isActive;
+}
+
+function isDriverVisibleForPlanning(item: DriverItem, selectedDate: string): boolean {
+  if (item.status === "INACTIVE") return false;
+  if (item.status === "DISMISSED") return isAfterPlanningDate(item.dismissedDate, selectedDate);
+  return item.isActive;
+}
+
 async function apiFetch<T>(path: string, options: RequestInit = {}): Promise<T> {
   const response = await fetch(`${apiBaseUrl}${path}`, {
     ...options,
@@ -386,12 +403,12 @@ export default function HomePage() {
   }, [planning, lkwFilter, driverFilter, statusFilter, rundeFilter]);
 
   const planningLkw = useMemo(() => (
-    lkw.filter((item) => item.isActive && !["INACTIVE", "SOLD", "RETURNED"].includes(item.status))
-  ), [lkw]);
+    lkw.filter((item) => isLkwVisibleForPlanning(item, selectedDate))
+  ), [lkw, selectedDate]);
 
   const planningDrivers = useMemo(() => (
-    drivers.filter((item) => item.isActive && !["INACTIVE", "DISMISSED"].includes(item.status))
-  ), [drivers]);
+    drivers.filter((item) => isDriverVisibleForPlanning(item, selectedDate))
+  ), [drivers, selectedDate]);
 
   const lkwDriverSuggestions = useMemo(() => {
     const suggestions: Record<string, string> = {};

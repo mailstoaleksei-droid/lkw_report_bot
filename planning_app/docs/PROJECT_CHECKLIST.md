@@ -147,14 +147,19 @@ Status legend:
 
 ## 5. Business Rules
 
-- [ ] Normalize LKW statuses.
-- [ ] Hide sold/returned/inactive LKW from normal planning on selected date.
+- [x] Normalize LKW statuses.
+  - Status normalization module maps known raw status variants into planning enums.
+- [x] Hide sold/returned/inactive LKW from normal planning on selected date.
+  - LKW availability is date-aware: sold/returned LKW can still be used before their sold/returned date.
 - [ ] Show workshop LKW as blocked/problem when needed.
-- [ ] Allow multiple Runde per LKW per day.
+- [x] Allow multiple Runde per LKW per day.
+  - Assignment conflicts block only the same LKW in the same date/Runde.
 - [x] Mark same LKW same Runde conflict as Problem.
   - Assignment write API checks same date/Runde LKW conflicts.
-- [ ] Normalize driver statuses.
-- [ ] Hide dismissed drivers after dismissal date.
+- [x] Normalize driver statuses.
+  - Status normalization module maps known raw status variants into planning enums.
+- [x] Hide dismissed drivers after dismissal date.
+  - Driver availability is date-aware: dismissed drivers can still be used before their dismissal date.
 - [x] Check daily vacation/sick availability.
   - Imported reporting weekly U/K rows are expanded into daily `DriverAvailability` rows.
 - [x] Mark unavailable driver assignment as Problem.

@@ -1,9 +1,10 @@
-import { MasterStatus, OrderStatus } from "@prisma/client";
+import { OrderStatus } from "@prisma/client";
 import type { FastifyInstance } from "fastify";
 import { z } from "zod";
 import { requireUser } from "../auth/guards.js";
 import type { AppConfig } from "../config.js";
 import { getGermanHamburgHolidays } from "../domain/holidays.js";
+import { lkwPlanningWhere } from "../domain/planning-availability.js";
 import { prisma } from "../prisma.js";
 
 const dayQuerySchema = z.object({
@@ -68,11 +69,7 @@ export async function registerPlanningRoutes(app: FastifyInstance, config: AppCo
         },
       }),
       prisma.lkw.count({
-        where: {
-          deletedAt: null,
-          isActive: true,
-          status: { notIn: [MasterStatus.INACTIVE, MasterStatus.SOLD, MasterStatus.RETURNED] },
-        },
+        where: lkwPlanningWhere(start),
       }),
     ]);
 
