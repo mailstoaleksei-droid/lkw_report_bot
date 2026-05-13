@@ -34,7 +34,7 @@ export async function registerAuthRoutes(app: FastifyInstance, config: AppConfig
     reply.setCookie(config.sessionCookieName, token, {
       httpOnly: true,
       sameSite: "lax",
-      secure: config.nodeEnv === "production",
+      secure: config.sessionCookieSecure,
       path: "/",
       maxAge: 60 * 60 * 12,
     });
@@ -93,4 +93,3 @@ export async function registerAuthRoutes(app: FastifyInstance, config: AppConfig
     };
   });
 }
-

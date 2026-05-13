@@ -55,13 +55,17 @@ Status legend:
 - [x] Add auth module.
 - [x] Add password hashing.
 - [x] Add session/JWT flow.
-- [ ] Add role guards.
+- [x] Add role guards.
+  - `requireUser` verifies session cookie and minimum role.
 - [ ] Add user management endpoints.
-- [ ] Add LKW endpoints.
-- [ ] Add driver endpoints.
+- [x] Add LKW endpoints.
+  - `GET /api/lkw` supports read filters for the planning UI.
+- [x] Add driver endpoints.
+  - `GET /api/drivers` supports read filters for the planning UI.
 - [ ] Add order endpoints.
 - [ ] Add assignment endpoints.
-- [ ] Add planning query endpoints.
+- [x] Add planning query endpoints.
+  - `GET /api/planning/day?date=YYYY-MM-DD` returns counters, LKW-first rows, driver availability, and unassigned orders.
 - [ ] Add audit log endpoints.
 - [~] Add import endpoints.
 - [ ] Add export endpoints.

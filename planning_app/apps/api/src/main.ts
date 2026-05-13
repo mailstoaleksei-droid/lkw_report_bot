@@ -5,8 +5,11 @@ import { loadConfig } from "./config.js";
 import { closePrisma } from "./prisma.js";
 import { registerHealthRoutes } from "./routes/health.js";
 import { registerAuthRoutes } from "./routes/auth.js";
+import { registerDriverRoutes } from "./routes/drivers.js";
 import { registerImportRoutes } from "./routes/imports.js";
+import { registerLkwRoutes } from "./routes/lkw.js";
 import { registerMetaRoutes } from "./routes/meta.js";
+import { registerPlanningRoutes } from "./routes/planning.js";
 
 const app = Fastify({ logger: true });
 const config = loadConfig();
@@ -22,6 +25,9 @@ await registerHealthRoutes(app);
 await registerMetaRoutes(app, config);
 await registerAuthRoutes(app, config);
 await registerImportRoutes(app);
+await registerLkwRoutes(app, config);
+await registerDriverRoutes(app, config);
+await registerPlanningRoutes(app, config);
 
 for (const signal of ["SIGINT", "SIGTERM"] as const) {
   process.on(signal, async () => {
