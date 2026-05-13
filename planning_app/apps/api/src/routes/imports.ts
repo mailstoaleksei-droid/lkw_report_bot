@@ -6,6 +6,10 @@ import {
   previewReportingMasterImport,
 } from "../services/reporting-master-import.js";
 import {
+  executeReportingDriverAvailabilityImport,
+  previewReportingDriverAvailabilityImport,
+} from "../services/reporting-driver-availability-import.js";
+import {
   executeReportingScheduleImport,
   previewReportingScheduleImport,
 } from "../services/reporting-schedule-import.js";
@@ -58,6 +62,22 @@ export async function registerImportRoutes(app: FastifyInstance): Promise<void> 
   app.post("/api/imports/reporting-schedules/execute", async (_request, reply) => {
     try {
       return await executeReportingScheduleImport();
+    } catch (error) {
+      requestImportError(reply, error);
+    }
+  });
+
+  app.get("/api/imports/reporting-driver-availability/preview", async (_request, reply) => {
+    try {
+      return await previewReportingDriverAvailabilityImport();
+    } catch (error) {
+      requestImportError(reply, error);
+    }
+  });
+
+  app.post("/api/imports/reporting-driver-availability/execute", async (_request, reply) => {
+    try {
+      return await executeReportingDriverAvailabilityImport();
     } catch (error) {
       requestImportError(reply, error);
     }

@@ -103,7 +103,13 @@ Status legend:
   - Skipped 548 reporting status rows that are not assignment rows.
   - Marked 12 imported schedule orders as `PROBLEM` because no driver was resolved in the reporting source.
   - Docker API preview and execute endpoints verified on 2026-05-13.
-- [ ] Import from Excel `Urlaub`: daily vacation/sick data.
+- [x] Import from reporting DB `report_fahrer_weekly_status`: daily vacation/sick data.
+  - Preview endpoint added: `GET /api/imports/reporting-driver-availability/preview`.
+  - Execute endpoint added: `POST /api/imports/reporting-driver-availability/execute`.
+  - Imported on 2026-05-13: 5712 daily availability rows from 816 U/K weekly source rows.
+  - Marked 15 assignments and 15 linked orders as `PROBLEM` where the assigned driver is unavailable.
+  - Docker API preview and execute endpoints verified on 2026-05-13.
+- [ ] Direct Excel `Urlaub` import fallback, if reporting DB ETL is unavailable.
 - [ ] Import from Excel daily Tagesplan source.
 - [x] Identify exact source sheet for daily Tagesplan.
   - Source workbook: `Dispo 2026 Wochenplanung_.xlsm`.
@@ -131,8 +137,10 @@ Status legend:
 - [ ] Mark same LKW same Runde conflict as Problem.
 - [ ] Normalize driver statuses.
 - [ ] Hide dismissed drivers after dismissal date.
-- [ ] Check daily vacation/sick availability.
-- [ ] Mark unavailable driver assignment as Problem.
+- [x] Check daily vacation/sick availability.
+  - Imported reporting weekly U/K rows are expanded into daily `DriverAvailability` rows.
+- [x] Mark unavailable driver assignment as Problem.
+  - Current import marks existing assignments and linked orders as `PROBLEM` when the assigned driver is unavailable.
 - [ ] Holiday warning for Germany/Hamburg.
 - [ ] Do not block saving on Problem in MVP.
 
