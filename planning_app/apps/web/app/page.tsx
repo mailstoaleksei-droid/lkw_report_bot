@@ -211,6 +211,10 @@ function todayDate(): string {
   return new Date().toISOString().slice(0, 10);
 }
 
+function hasManagerAccess(role: string): boolean {
+  return ["ADMIN", "MANAGER"].includes(role);
+}
+
 async function apiFetch<T>(path: string, options: RequestInit = {}): Promise<T> {
   const response = await fetch(`${apiBaseUrl}${path}`, {
     ...options,
@@ -441,6 +445,9 @@ export default function HomePage() {
   }, [audit, auditFilter]);
 
   async function loadDashboardData(date: string): Promise<void> {
+    const currentUser = user;
+    if (!currentUser) return;
+
     setError(null);
     setLoading(true);
     try {
@@ -448,9 +455,11 @@ export default function HomePage() {
         apiFetch<PlanningDayResponse>(`/api/planning/day?date=${date}`),
         apiFetch<{ ok: true; items: LkwItem[] }>("/api/lkw?limit=500"),
         apiFetch<{ ok: true; items: DriverItem[] }>("/api/drivers?limit=500"),
-        apiFetch<{ ok: true; items: AuditItem[] }>("/api/audit-log?limit=200"),
+        hasManagerAccess(currentUser.role)
+          ? apiFetch<{ ok: true; items: AuditItem[] }>("/api/audit-log?limit=200")
+          : Promise.resolve({ ok: true as const, items: [] }),
       ]);
-      const usersResult = user?.role === "ADMIN"
+      const usersResult = currentUser.role === "ADMIN"
         ? await apiFetch<{ ok: true; items: ManagedUser[] }>("/api/users")
         : { ok: true as const, items: [] };
       setPlanning(planningResult);
@@ -814,13 +823,16 @@ export default function HomePage() {
   }
 
   const canEditPlanning = ["ADMIN", "OPERATOR", "MANAGER"].includes(user.role);
+  const canViewImports = hasManagerAccess(user.role);
+  const canExecuteImports = user.role === "ADMIN";
+  const canViewAudit = hasManagerAccess(user.role);
   const visibleSections: Array<{ key: AppSection; label: string }> = [
     { key: "dashboard", label: "Dashboard" },
     { key: "planning", label: "Tagesplanung" },
-    { key: "imports", label: "Imports" },
+    ...(canViewImports ? [{ key: "imports" as AppSection, label: "Imports" }] : []),
     { key: "lkw", label: "LKW management" },
     { key: "drivers", label: "Driver management" },
-    { key: "audit", label: "Audit Log" },
+    ...(canViewAudit ? [{ key: "audit" as AppSection, label: "Audit Log" }] : []),
     ...(user.role === "ADMIN" ? [{ key: "users" as AppSection, label: "User management" }] : []),
   ];
 
@@ -1226,7 +1238,8 @@ export default function HomePage() {
                     </button>
                     <button
                       type="button"
-                      disabled={Boolean(importBusy)}
+                      disabled={Boolean(importBusy) || !canExecuteImports}
+                      title={canExecuteImports ? "Execute import" : "Only Admin can execute imports"}
                       onClick={() => runImportAction(action, "execute")}
                     >
                       Execute

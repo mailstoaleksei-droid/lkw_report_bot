@@ -1,5 +1,7 @@
 import type { FastifyInstance, FastifyReply } from "fastify";
 import { z } from "zod";
+import { requireUser } from "../auth/guards.js";
+import type { AppConfig } from "../config.js";
 import { normalizeMasterStatus, normalizeOrderStatus } from "../domain/status-normalization.js";
 import {
   executeReportingMasterImport,
@@ -18,8 +20,11 @@ const statusPreviewSchema = z.object({
   values: z.array(z.string()).default([]),
 });
 
-export async function registerImportRoutes(app: FastifyInstance): Promise<void> {
+export async function registerImportRoutes(app: FastifyInstance, config: AppConfig): Promise<void> {
   app.post("/api/imports/status-preview", async (request, reply) => {
+    const user = await requireUser(request, reply, config, "MANAGER");
+    if (!user) return;
+
     const parsed = statusPreviewSchema.safeParse(request.body);
     if (!parsed.success) {
       return reply.code(400).send({ ok: false, error: "Invalid payload" });
@@ -35,7 +40,10 @@ export async function registerImportRoutes(app: FastifyInstance): Promise<void> 
     };
   });
 
-  app.get("/api/imports/reporting-master-data/preview", async (_request, reply) => {
+  app.get("/api/imports/reporting-master-data/preview", async (request, reply) => {
+    const user = await requireUser(request, reply, config, "MANAGER");
+    if (!user) return;
+
     try {
       return await previewReportingMasterImport();
     } catch (error) {
@@ -43,7 +51,10 @@ export async function registerImportRoutes(app: FastifyInstance): Promise<void> 
     }
   });
 
-  app.post("/api/imports/reporting-master-data/execute", async (_request, reply) => {
+  app.post("/api/imports/reporting-master-data/execute", async (request, reply) => {
+    const user = await requireUser(request, reply, config, "ADMIN");
+    if (!user) return;
+
     try {
       return await executeReportingMasterImport();
     } catch (error) {
@@ -51,7 +62,10 @@ export async function registerImportRoutes(app: FastifyInstance): Promise<void> 
     }
   });
 
-  app.get("/api/imports/reporting-schedules/preview", async (_request, reply) => {
+  app.get("/api/imports/reporting-schedules/preview", async (request, reply) => {
+    const user = await requireUser(request, reply, config, "MANAGER");
+    if (!user) return;
+
     try {
       return await previewReportingScheduleImport();
     } catch (error) {
@@ -59,7 +73,10 @@ export async function registerImportRoutes(app: FastifyInstance): Promise<void> 
     }
   });
 
-  app.post("/api/imports/reporting-schedules/execute", async (_request, reply) => {
+  app.post("/api/imports/reporting-schedules/execute", async (request, reply) => {
+    const user = await requireUser(request, reply, config, "ADMIN");
+    if (!user) return;
+
     try {
       return await executeReportingScheduleImport();
     } catch (error) {
@@ -67,7 +84,10 @@ export async function registerImportRoutes(app: FastifyInstance): Promise<void> 
     }
   });
 
-  app.get("/api/imports/reporting-driver-availability/preview", async (_request, reply) => {
+  app.get("/api/imports/reporting-driver-availability/preview", async (request, reply) => {
+    const user = await requireUser(request, reply, config, "MANAGER");
+    if (!user) return;
+
     try {
       return await previewReportingDriverAvailabilityImport();
     } catch (error) {
@@ -75,7 +95,10 @@ export async function registerImportRoutes(app: FastifyInstance): Promise<void> 
     }
   });
 
-  app.post("/api/imports/reporting-driver-availability/execute", async (_request, reply) => {
+  app.post("/api/imports/reporting-driver-availability/execute", async (request, reply) => {
+    const user = await requireUser(request, reply, config, "ADMIN");
+    if (!user) return;
+
     try {
       return await executeReportingDriverAvailabilityImport();
     } catch (error) {

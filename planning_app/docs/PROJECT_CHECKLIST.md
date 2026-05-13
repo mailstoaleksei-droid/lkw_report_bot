@@ -57,7 +57,9 @@ Status legend:
 - [x] Add session/JWT flow.
 - [x] Add role guards.
   - `requireUser` verifies session cookie and minimum role.
-- [ ] Add user management endpoints.
+- [x] Add user management endpoints.
+  - Admin-only list/create/update endpoints are implemented.
+  - API blocks self role downgrade and self deactivation.
 - [x] Add LKW endpoints.
   - `GET /api/lkw` supports read filters for the planning UI.
 - [x] Add driver endpoints.
@@ -70,7 +72,10 @@ Status legend:
   - `GET /api/planning/day?date=YYYY-MM-DD` returns counters, LKW-first rows, driver availability, and unassigned orders.
 - [x] Add audit log endpoints.
   - `GET /api/audit-log` supports entity, order, assignment, user, event type, and limit filters.
+  - Audit endpoint requires Manager/Admin.
 - [~] Add import endpoints.
+  - Import preview endpoints require Manager/Admin.
+  - Import execute endpoints require Admin.
 - [x] Add export endpoints.
   - `GET /api/exports/tagesplanung.xls?date=YYYY-MM-DD` exports Tagesplanung rows for Excel.
 - [~] Add holiday endpoints.
@@ -200,10 +205,12 @@ Status legend:
   - Edit/create actions are pending.
 - [~] Import page with preview.
   - Root UI now includes import cards for reporting master data, weekly schedules, and driver availability.
+  - Imports tab is visible only for Manager/Admin; execute buttons are enabled only for Admin.
 - [~] Audit Log page.
   - Web UI shows the latest 200 audit events in a searchable table.
   - Order and assignment audit messages now include field-level before/after change summaries for new changes.
   - Audit rows now show the linked Auftrag when the audit event belongs to an order or assignment.
+  - Audit tab is visible only for Manager/Admin.
   - Separate route/page and advanced filters are pending.
 - [~] User management page.
   - Admin UI can list users, create users with temporary passwords, change roles, and activate/deactivate users.

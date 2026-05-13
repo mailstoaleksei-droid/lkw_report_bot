@@ -29,7 +29,7 @@ await app.register(cookie);
 await registerHealthRoutes(app);
 await registerMetaRoutes(app, config);
 await registerAuthRoutes(app, config);
-await registerImportRoutes(app);
+await registerImportRoutes(app, config);
 await registerLkwRoutes(app, config);
 await registerDriverRoutes(app, config);
 await registerOrderRoutes(app, config);

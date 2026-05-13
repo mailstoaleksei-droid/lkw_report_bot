@@ -17,7 +17,7 @@ const auditQuerySchema = z.object({
 
 export async function registerAuditRoutes(app: FastifyInstance, config: AppConfig): Promise<void> {
   app.get("/api/audit-log", async (request, reply) => {
-    const user = await requireUser(request, reply, config, "VIEWER");
+    const user = await requireUser(request, reply, config, "MANAGER");
     if (!user) return;
 
     const parsed = auditQuerySchema.safeParse(request.query);
