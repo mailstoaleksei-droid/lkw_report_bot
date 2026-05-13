@@ -494,6 +494,11 @@ th {
   gap: 12px;
 }
 
+.section-grid .management-panel {
+  grid-template-rows: auto auto minmax(0, 1fr);
+  min-height: calc(100vh - 250px);
+}
+
 .management-panel input {
   align-self: start;
   height: 40px;
@@ -520,7 +525,9 @@ th {
 }
 
 .compact-table {
-  max-height: 460px;
+  max-height: calc(100vh - 360px);
+  min-height: 0;
+  overflow: auto;
 }
 
 .compact-table table {
