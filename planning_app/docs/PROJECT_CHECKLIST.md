@@ -169,6 +169,8 @@ Status legend:
   - Root page includes the MVP Tagesplanung read view.
 - [x] LKW-first table starting with LKW column.
   - The first table column is LKW.
+  - The LKW-first table now shows `Status` before `Info`; `Time` is hidden in this view.
+  - The `Info` column shows problem details first, then order info when no problem exists.
   - Operators/Admins can mark a row as assigned from the right-side action column.
   - Assigned rows move into the `Assigned orders` block and can be returned to active planning.
 - [x] Orders-first mode.
@@ -190,15 +192,18 @@ Status legend:
   - Web UI shows a yellow warning banner when the selected date is a Germany/Hamburg holiday.
 - [~] LKW management page.
   - Web UI shows a searchable LKW management table from the planning database.
+  - LKW management is now separated into its own top-level tab.
   - Edit/create actions are pending.
 - [~] Driver management page.
   - Web UI shows a searchable driver management table from the planning database.
+  - Driver management is now separated into its own top-level tab.
   - Edit/create actions are pending.
 - [~] Import page with preview.
   - Root UI now includes import cards for reporting master data, weekly schedules, and driver availability.
 - [~] Audit Log page.
   - Web UI shows the latest 200 audit events in a searchable table.
   - Order and assignment audit messages now include field-level before/after change summaries for new changes.
+  - Audit rows now show the linked Auftrag when the audit event belongs to an order or assignment.
   - Separate route/page and advanced filters are pending.
 - [~] User management page.
   - Admin UI can list users, create users with temporary passwords, change roles, and activate/deactivate users.

@@ -119,6 +119,13 @@ label {
   gap: 12px;
 }
 
+.app-tabs {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin: 18px 0 0;
+}
+
 .secondary-button {
   background: #e7edf5;
   color: var(--text);
@@ -406,6 +413,12 @@ th {
 .side-grid {
   display: grid;
   grid-template-columns: 1fr 1fr;
+  gap: 16px;
+  margin-top: 20px;
+}
+
+.section-grid {
+  display: grid;
   gap: 16px;
   margin-top: 20px;
 }

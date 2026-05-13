@@ -113,6 +113,14 @@ type AuditItem = {
   eventType: string;
   entityType: string;
   entityId: string;
+  orderId: string | null;
+  order: {
+    id: string;
+    planningDate: string;
+    runde: number;
+    description: string;
+    status: string;
+  } | null;
   message: string | null;
   createdAt: string;
   user: {
@@ -197,6 +205,7 @@ const importActions: ImportAction[] = [
 ];
 
 type ViewMode = "lkw-first" | "orders-first";
+type AppSection = "dashboard" | "planning" | "imports" | "lkw" | "drivers" | "audit" | "users";
 
 function todayDate(): string {
   return new Date().toISOString().slice(0, 10);
@@ -252,6 +261,7 @@ export default function HomePage() {
   const [statusFilter, setStatusFilter] = useState("");
   const [rundeFilter, setRundeFilter] = useState("");
   const [viewMode, setViewMode] = useState<ViewMode>("lkw-first");
+  const [activeSection, setActiveSection] = useState<AppSection>("planning");
   const [lkwManagementFilter, setLkwManagementFilter] = useState("");
   const [driverManagementFilter, setDriverManagementFilter] = useState("");
   const [auditFilter, setAuditFilter] = useState("");
@@ -419,6 +429,9 @@ export default function HomePage() {
         item.eventType,
         item.entityType,
         item.entityId,
+        item.order?.description,
+        item.order?.runde ? `Runde ${item.order.runde}` : null,
+        item.order?.status,
         item.message,
         item.user?.displayName,
         item.user?.email,
@@ -801,6 +814,15 @@ export default function HomePage() {
   }
 
   const canEditPlanning = ["ADMIN", "OPERATOR", "MANAGER"].includes(user.role);
+  const visibleSections: Array<{ key: AppSection; label: string }> = [
+    { key: "dashboard", label: "Dashboard" },
+    { key: "planning", label: "Tagesplanung" },
+    { key: "imports", label: "Imports" },
+    { key: "lkw", label: "LKW management" },
+    { key: "drivers", label: "Driver management" },
+    { key: "audit", label: "Audit Log" },
+    ...(user.role === "ADMIN" ? [{ key: "users" as AppSection, label: "User management" }] : []),
+  ];
 
   return (
     <main className="shell">
@@ -814,6 +836,19 @@ export default function HomePage() {
           <button type="button" className="secondary-button" onClick={handleLogout}>Logout</button>
         </div>
       </header>
+
+      <nav className="app-tabs" aria-label="Application sections">
+        {visibleSections.map((section) => (
+          <button
+            key={section.key}
+            type="button"
+            className={activeSection === section.key ? "" : "secondary-button"}
+            onClick={() => setActiveSection(section.key)}
+          >
+            {section.label}
+          </button>
+        ))}
+      </nav>
 
       <section className="toolbar">
         <label>
@@ -829,21 +864,24 @@ export default function HomePage() {
         {error ? <span className="error">{error}</span> : null}
       </section>
 
-      <section className="dashboard">
-        {metrics.map(([label, value]) => (
-          <div className="metric" key={label}>
-            <span>{label}</span>
-            <strong>{value}</strong>
-          </div>
-        ))}
-      </section>
+      {activeSection === "dashboard" ? (
+        <section className="dashboard">
+          {metrics.map(([label, value]) => (
+            <div className="metric" key={label}>
+              <span>{label}</span>
+              <strong>{value}</strong>
+            </div>
+          ))}
+        </section>
+      ) : null}
 
-      {planning?.holidays?.length ? (
+      {activeSection === "planning" && planning?.holidays?.length ? (
         <section className="warning-banner">
           Holiday warning: {planning.holidays.map((holiday) => `${holiday.name} (${holiday.region})`).join(", ")}
         </section>
       ) : null}
 
+      {activeSection === "planning" ? (
       <section className="filters-panel">
         <label>
           LKW
@@ -891,7 +929,9 @@ export default function HomePage() {
             : `${ordersFirstRows.length} visible / ${(planning?.rows.length || 0) + (planning?.unassignedOrders.length || 0)} total`}
         </span>
       </section>
+      ) : null}
 
+      {activeSection === "planning" ? (
       <section className="planner">
         <div className="planner-header">
           <div>
@@ -948,8 +988,8 @@ export default function HomePage() {
                     <th>Runde</th>
                     <th>Auftrag</th>
                     <th>City</th>
-                    <th>Time</th>
                     <th>Status</th>
+                    <th>Info</th>
                     {canEditPlanning ? <th>Action</th> : null}
                   </tr>
                 </thead>
@@ -964,12 +1004,12 @@ export default function HomePage() {
                       <td>{row.runde}</td>
                       <td>{row.order.description}</td>
                       <td>{[row.order.plz, row.order.city, row.order.country].filter(Boolean).join(" ") || "-"}</td>
-                      <td>{row.order.plannedTime || "-"}</td>
                       <td>
                         <span className={`status status-${(row.order.status || row.status).toLowerCase()}`}>
                           {row.order.status || row.status}
                         </span>
                       </td>
+                      <td>{row.order.problemReason || row.problemReason || row.order.info || "-"}</td>
                       {canEditPlanning ? (
                         <td className="single-action-cell">
                           <button type="button" onClick={() => setOrderStatus(row.order.id, "DONE")} disabled={Boolean(orderBusy)}>
@@ -1004,9 +1044,9 @@ export default function HomePage() {
                         <th>Runde</th>
                         <th>Auftrag</th>
                         <th>City</th>
-                        <th>Time</th>
-                        <th>Status</th>
-                        {canEditPlanning ? <th>Action</th> : null}
+                    <th>Status</th>
+                    <th>Info</th>
+                    {canEditPlanning ? <th>Action</th> : null}
                       </tr>
                     </thead>
                     <tbody>
@@ -1020,12 +1060,12 @@ export default function HomePage() {
                           <td>{row.runde}</td>
                           <td>{row.order.description}</td>
                           <td>{[row.order.plz, row.order.city, row.order.country].filter(Boolean).join(" ") || "-"}</td>
-                          <td>{row.order.plannedTime || "-"}</td>
                           <td>
                             <span className={`status status-${(row.order.status || row.status).toLowerCase()}`}>
                               {row.order.status || row.status}
                             </span>
                           </td>
+                          <td>{row.order.problemReason || row.problemReason || row.order.info || "-"}</td>
                           {canEditPlanning ? (
                             <td className="single-action-cell">
                               <button type="button" className="secondary-button" onClick={() => setOrderStatus(row.order.id, "PLANNED")} disabled={Boolean(orderBusy)}>
@@ -1160,8 +1200,10 @@ export default function HomePage() {
           )}
         </div>
       </section>
+      ) : null}
 
-      <section className="side-grid">
+      {activeSection === "imports" ? (
+        <section className="section-grid">
         <div className="list-panel imports-panel">
           <h2>Imports</h2>
           <div className="imports-grid">
@@ -1207,7 +1249,11 @@ export default function HomePage() {
             })}
           </div>
         </div>
+        </section>
+      ) : null}
 
+      {activeSection === "lkw" ? (
+        <section className="section-grid">
         <div className="list-panel management-panel">
           <div className="panel-header">
             <h2>LKW management</h2>
@@ -1247,6 +1293,11 @@ export default function HomePage() {
             </table>
           </div>
         </div>
+        </section>
+      ) : null}
+
+      {activeSection === "drivers" ? (
+        <section className="section-grid">
         <div className="list-panel management-panel">
           <div className="panel-header">
             <h2>Driver management</h2>
@@ -1284,6 +1335,11 @@ export default function HomePage() {
             </table>
           </div>
         </div>
+        </section>
+      ) : null}
+
+      {activeSection === "audit" ? (
+        <section className="section-grid">
         <div className="list-panel audit-panel management-panel">
           <div className="panel-header">
             <h2>Audit Log</h2>
@@ -1292,7 +1348,7 @@ export default function HomePage() {
           <input
             value={auditFilter}
             onChange={(event) => setAuditFilter(event.target.value)}
-            placeholder="Search event, entity, user"
+            placeholder="Search event, Auftrag, entity, user"
           />
           <div className="table-wrap compact-table">
             <table>
@@ -1300,6 +1356,7 @@ export default function HomePage() {
                 <tr>
                   <th>Time</th>
                   <th>Event</th>
+                  <th>Auftrag</th>
                   <th>Entity</th>
                   <th>User</th>
                   <th>Message</th>
@@ -1310,6 +1367,7 @@ export default function HomePage() {
                   <tr key={item.id}>
                     <td>{new Date(item.createdAt).toLocaleString()}</td>
                     <td>{item.eventType}</td>
+                    <td>{item.order ? `R${item.order.runde}: ${item.order.description}` : "-"}</td>
                     <td>{item.entityType}</td>
                     <td>{item.user?.displayName || "system"}</td>
                     <td>{item.message || "-"}</td>
@@ -1317,15 +1375,18 @@ export default function HomePage() {
                 ))}
                 {filteredAudit.length === 0 ? (
                   <tr>
-                    <td colSpan={5}>No audit events match the current filter.</td>
+                    <td colSpan={6}>No audit events match the current filter.</td>
                   </tr>
                 ) : null}
               </tbody>
             </table>
           </div>
         </div>
+        </section>
+      ) : null}
 
-        {user.role === "ADMIN" ? (
+        {activeSection === "users" && user.role === "ADMIN" ? (
+          <section className="section-grid">
           <div className="list-panel audit-panel management-panel">
             <div className="panel-header">
               <h2>User management</h2>
@@ -1406,8 +1467,8 @@ export default function HomePage() {
               </table>
             </div>
           </div>
+          </section>
         ) : null}
-      </section>
     </main>
   );
 }

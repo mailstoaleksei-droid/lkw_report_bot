@@ -48,6 +48,15 @@ export async function registerAuditRoutes(app: FastifyInstance, config: AppConfi
         before: true,
         after: true,
         createdAt: true,
+        order: {
+          select: {
+            id: true,
+            planningDate: true,
+            runde: true,
+            description: true,
+            status: true,
+          },
+        },
         user: {
           select: {
             id: true,
