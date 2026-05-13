@@ -214,6 +214,19 @@ label {
   gap: 8px;
 }
 
+.order-create-form {
+  border-bottom: 1px solid var(--line);
+  display: grid;
+  gap: 10px;
+  grid-template-columns: 110px minmax(220px, 2fr) repeat(6, minmax(120px, 1fr)) auto;
+  padding: 14px 18px;
+}
+
+.order-create-form input,
+.order-create-form select {
+  width: 100%;
+}
+
 .table-wrap {
   overflow: auto;
 }
@@ -415,6 +428,7 @@ th {
 
   .dashboard,
   .filters-panel,
+  .order-create-form,
   .user-create-form,
   .side-grid,
   .imports-grid {
@@ -429,6 +443,7 @@ th {
 
   .dashboard,
   .filters-panel,
+  .order-create-form,
   .user-create-form,
   .side-grid,
   .imports-grid {

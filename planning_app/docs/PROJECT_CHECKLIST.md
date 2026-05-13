@@ -171,6 +171,8 @@ Status legend:
 - [x] Orders-first mode.
   - Web UI can switch between LKW-first and Orders-first tables.
   - Orders-first view includes assigned and unassigned orders for the selected date.
+  - Operators/Admins can create a new order from the Tagesplanung view.
+  - Operators/Admins can assign or update LKW and driver from the Orders-first table.
 - [~] Filters: date, week, month, company, LKW, driver, status, Runde.
   - Date, LKW, driver, status, and Runde filters are implemented in the web UI.
   - Week, month, and company filters are pending.

@@ -26,12 +26,14 @@ type PlanningRow = {
   status: string;
   problemReason: string | null;
   lkw: {
+    id: string;
     number: string;
     status: string;
     type: string | null;
     company: string | null;
   } | null;
   driver: {
+    id: string;
     fullName: string;
     status: string;
     availability: Array<{ status: string; rawStatus: string | null; source: string }>;
@@ -41,6 +43,7 @@ type PlanningRow = {
     status: string;
   } | null;
   order: {
+    id: string;
     description: string;
     customer: string | null;
     plz: string | null;
@@ -204,10 +207,20 @@ export default function HomePage() {
   const [importResults, setImportResults] = useState<Record<string, ImportResult>>({});
   const [importBusy, setImportBusy] = useState<string | null>(null);
   const [userBusy, setUserBusy] = useState<string | null>(null);
+  const [orderBusy, setOrderBusy] = useState<string | null>(null);
   const [newUserEmail, setNewUserEmail] = useState("");
   const [newUserDisplayName, setNewUserDisplayName] = useState("");
   const [newUserPassword, setNewUserPassword] = useState("");
   const [newUserRole, setNewUserRole] = useState("VIEWER");
+  const [newOrderRunde, setNewOrderRunde] = useState("1");
+  const [newOrderDescription, setNewOrderDescription] = useState("");
+  const [newOrderCustomer, setNewOrderCustomer] = useState("");
+  const [newOrderPlz, setNewOrderPlz] = useState("");
+  const [newOrderCity, setNewOrderCity] = useState("");
+  const [newOrderCountry, setNewOrderCountry] = useState("");
+  const [newOrderTime, setNewOrderTime] = useState("");
+  const [newOrderInfo, setNewOrderInfo] = useState("");
+  const [assignmentDrafts, setAssignmentDrafts] = useState<Record<string, { lkwId: string; driverId: string }>>({});
   const [lkwFilter, setLkwFilter] = useState("");
   const [driverFilter, setDriverFilter] = useState("");
   const [statusFilter, setStatusFilter] = useState("");
@@ -265,9 +278,12 @@ export default function HomePage() {
   const ordersFirstRows = useMemo(() => {
     const assigned = (planning?.rows || []).map((row) => ({
       key: row.id,
+      orderId: row.order.id,
       runde: row.runde,
       description: row.order.description,
+      lkwId: row.lkw?.id || "",
       lkw: row.lkw?.number || "-",
+      driverId: row.driver?.id || "",
       driver: row.driver?.fullName || "-",
       city: [row.order.plz, row.order.city, row.order.country].filter(Boolean).join(" ") || "-",
       time: row.order.plannedTime || "-",
@@ -276,9 +292,12 @@ export default function HomePage() {
     }));
     const unassigned = (planning?.unassignedOrders || []).map((order) => ({
       key: order.id,
+      orderId: order.id,
       runde: order.runde,
       description: order.description,
+      lkwId: "",
       lkw: "-",
+      driverId: "",
       driver: "-",
       city: [order.plz, order.city, order.country].filter(Boolean).join(" ") || "-",
       time: order.plannedTime || "-",
@@ -296,6 +315,14 @@ export default function HomePage() {
       })
       .sort((a, b) => a.runde - b.runde || a.description.localeCompare(b.description));
   }, [planning, lkwFilter, driverFilter, statusFilter, rundeFilter]);
+
+  const planningLkw = useMemo(() => (
+    lkw.filter((item) => item.isActive && !["INACTIVE", "SOLD", "RETURNED"].includes(item.status))
+  ), [lkw]);
+
+  const planningDrivers = useMemo(() => (
+    drivers.filter((item) => item.isActive && !["INACTIVE", "DISMISSED"].includes(item.status))
+  ), [drivers]);
 
   const filteredManagementLkw = useMemo(() => {
     const needle = lkwManagementFilter.toLowerCase();
@@ -458,6 +485,77 @@ export default function HomePage() {
     }
   }
 
+  async function createOrder(event: FormEvent<HTMLFormElement>): Promise<void> {
+    event.preventDefault();
+    setError(null);
+    setOrderBusy("create");
+    try {
+      await apiFetch("/api/orders", {
+        method: "POST",
+        body: JSON.stringify({
+          planningDate: selectedDate,
+          runde: Number(newOrderRunde),
+          description: newOrderDescription,
+          customer: newOrderCustomer || null,
+          plz: newOrderPlz || null,
+          city: newOrderCity || null,
+          country: newOrderCountry || null,
+          plannedTime: newOrderTime || null,
+          info: newOrderInfo || null,
+        }),
+      });
+      setNewOrderDescription("");
+      setNewOrderCustomer("");
+      setNewOrderPlz("");
+      setNewOrderCity("");
+      setNewOrderCountry("");
+      setNewOrderTime("");
+      setNewOrderInfo("");
+      await loadDashboardData(selectedDate);
+    } catch (caught) {
+      setError(caught instanceof Error ? caught.message : "Order create failed");
+    } finally {
+      setOrderBusy(null);
+    }
+  }
+
+  async function saveAssignment(row: { orderId: string; lkwId: string; driverId: string }): Promise<void> {
+    setError(null);
+    setOrderBusy(row.orderId);
+    const draft = assignmentDrafts[row.orderId] || { lkwId: row.lkwId, driverId: row.driverId };
+    try {
+      await apiFetch("/api/assignments/upsert", {
+        method: "POST",
+        body: JSON.stringify({
+          orderId: row.orderId,
+          lkwId: draft.lkwId || null,
+          driverId: draft.driverId || null,
+        }),
+      });
+      await loadDashboardData(selectedDate);
+    } catch (caught) {
+      setError(caught instanceof Error ? caught.message : "Assignment save failed");
+    } finally {
+      setOrderBusy(null);
+    }
+  }
+
+  function updateAssignmentDraft(
+    orderId: string,
+    field: "lkwId" | "driverId",
+    value: string,
+    base: { lkwId: string; driverId: string },
+  ): void {
+    setAssignmentDrafts((current) => ({
+      ...current,
+      [orderId]: {
+        lkwId: current[orderId]?.lkwId ?? base.lkwId,
+        driverId: current[orderId]?.driverId ?? base.driverId,
+        [field]: value,
+      },
+    }));
+  }
+
   function exportTagesplanung(): void {
     const params = new URLSearchParams({ date: selectedDate });
     if (lkwFilter) params.set("lkw", lkwFilter);
@@ -493,6 +591,8 @@ export default function HomePage() {
       </main>
     );
   }
+
+  const canEditPlanning = ["ADMIN", "OPERATOR", "MANAGER"].includes(user.role);
 
   return (
     <main className="shell">
@@ -608,6 +708,24 @@ export default function HomePage() {
           </div>
         </div>
 
+        {canEditPlanning ? (
+          <form className="order-create-form" onSubmit={createOrder}>
+            <select value={newOrderRunde} onChange={(event) => setNewOrderRunde(event.target.value)}>
+              <option value="1">Runde 1</option>
+              <option value="2">Runde 2</option>
+              <option value="3">Runde 3</option>
+            </select>
+            <input value={newOrderDescription} onChange={(event) => setNewOrderDescription(event.target.value)} placeholder="Auftrag" required />
+            <input value={newOrderCustomer} onChange={(event) => setNewOrderCustomer(event.target.value)} placeholder="Customer" />
+            <input value={newOrderPlz} onChange={(event) => setNewOrderPlz(event.target.value)} placeholder="PLZ" />
+            <input value={newOrderCity} onChange={(event) => setNewOrderCity(event.target.value)} placeholder="City" />
+            <input value={newOrderCountry} onChange={(event) => setNewOrderCountry(event.target.value)} placeholder="Country" />
+            <input value={newOrderTime} onChange={(event) => setNewOrderTime(event.target.value)} placeholder="Time" />
+            <input value={newOrderInfo} onChange={(event) => setNewOrderInfo(event.target.value)} placeholder="Info" />
+            <button type="submit" disabled={Boolean(orderBusy)}>Create order</button>
+          </form>
+        ) : null}
+
         <div className="table-wrap">
           {viewMode === "lkw-first" ? (
             <table>
@@ -663,28 +781,57 @@ export default function HomePage() {
                   <th>Time</th>
                   <th>Status</th>
                   <th>Problem</th>
+                  {canEditPlanning ? <th>Action</th> : null}
                 </tr>
               </thead>
               <tbody>
-                {ordersFirstRows.map((row) => (
-                  <tr key={row.key} className={row.status === "PROBLEM" ? "problem-row" : ""}>
-                    <td>{row.runde}</td>
-                    <td>{row.description}</td>
-                    <td>{row.lkw}</td>
-                    <td>{row.driver}</td>
-                    <td>{row.city}</td>
-                    <td>{row.time}</td>
-                    <td>
-                      <span className={`status status-${row.status.toLowerCase()}`}>
-                        {row.status}
-                      </span>
-                    </td>
-                    <td>{row.problemReason || "-"}</td>
-                  </tr>
-                ))}
+                {ordersFirstRows.map((row) => {
+                  const draft = assignmentDrafts[row.orderId] || { lkwId: row.lkwId, driverId: row.driverId };
+                  return (
+                    <tr key={row.key} className={row.status === "PROBLEM" ? "problem-row" : ""}>
+                      <td>{row.runde}</td>
+                      <td>{row.description}</td>
+                      <td>
+                        {canEditPlanning ? (
+                          <select value={draft.lkwId} onChange={(event) => updateAssignmentDraft(row.orderId, "lkwId", event.target.value, row)}>
+                            <option value="">-</option>
+                            {planningLkw.map((item) => (
+                              <option value={item.id} key={item.id}>{item.number}</option>
+                            ))}
+                          </select>
+                        ) : row.lkw}
+                      </td>
+                      <td>
+                        {canEditPlanning ? (
+                          <select value={draft.driverId} onChange={(event) => updateAssignmentDraft(row.orderId, "driverId", event.target.value, row)}>
+                            <option value="">-</option>
+                            {planningDrivers.map((item) => (
+                              <option value={item.id} key={item.id}>{item.fullName}</option>
+                            ))}
+                          </select>
+                        ) : row.driver}
+                      </td>
+                      <td>{row.city}</td>
+                      <td>{row.time}</td>
+                      <td>
+                        <span className={`status status-${row.status.toLowerCase()}`}>
+                          {row.status}
+                        </span>
+                      </td>
+                      <td>{row.problemReason || "-"}</td>
+                      {canEditPlanning ? (
+                        <td>
+                          <button type="button" onClick={() => saveAssignment(row)} disabled={Boolean(orderBusy)}>
+                            Save
+                          </button>
+                        </td>
+                      ) : null}
+                    </tr>
+                  );
+                })}
                 {planning && ordersFirstRows.length === 0 ? (
                   <tr>
-                    <td colSpan={8}>No orders match the current filters.</td>
+                    <td colSpan={canEditPlanning ? 9 : 8}>No orders match the current filters.</td>
                   </tr>
                 ) : null}
               </tbody>
