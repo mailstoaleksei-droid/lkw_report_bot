@@ -912,8 +912,9 @@ export default function HomePage() {
                       <td>
                         <select
                           value={item.role}
-                          disabled={Boolean(userBusy)}
+                          disabled={Boolean(userBusy) || item.id === user.id}
                           onChange={(event) => updateManagedUser(item.id, { role: event.target.value })}
+                          title={item.id === user.id ? "Own role cannot be changed here" : "Change role"}
                         >
                           <option value="VIEWER">VIEWER</option>
                           <option value="OPERATOR">OPERATOR</option>
@@ -925,8 +926,9 @@ export default function HomePage() {
                         <input
                           type="checkbox"
                           checked={item.isActive}
-                          disabled={Boolean(userBusy)}
+                          disabled={Boolean(userBusy) || item.id === user.id}
                           onChange={(event) => updateManagedUser(item.id, { isActive: event.target.checked })}
+                          title={item.id === user.id ? "Own account cannot be deactivated here" : "Set active"}
                         />
                       </td>
                       <td>{item.lastLoginAt ? new Date(item.lastLoginAt).toLocaleString() : "-"}</td>

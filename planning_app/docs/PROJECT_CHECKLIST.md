@@ -191,6 +191,7 @@ Status legend:
   - Separate route/page and advanced filters are pending.
 - [~] User management page.
   - Admin UI can list users, create users with temporary passwords, change roles, and activate/deactivate users.
+  - Self role change and self deactivation are blocked by API and disabled in UI.
   - Password reset flow and separate route/page are pending.
 - [ ] Settings page.
 

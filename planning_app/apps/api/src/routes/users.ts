@@ -144,6 +144,9 @@ export async function registerUserRoutes(app: FastifyInstance, config: AppConfig
     if (!before) {
       return reply.code(404).send({ ok: false, error: "User not found" });
     }
+    if (params.data.id === user.id && input.role && input.role !== before.role) {
+      return reply.code(400).send({ ok: false, error: "Admin cannot change own role" });
+    }
     if (params.data.id === user.id && input.isActive === false) {
       return reply.code(400).send({ ok: false, error: "Admin cannot deactivate own account" });
     }
