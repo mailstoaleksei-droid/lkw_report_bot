@@ -2,12 +2,12 @@
 
 ## Purpose
 
-The planning app can export the selected Tagesplanung date as CSV for Excel.
+The planning app can export the selected Tagesplanung date as Excel-compatible `.xls`.
 
 ## Endpoint
 
 ```http
-GET /api/exports/tagesplanung.csv?date=2026-05-04
+GET /api/exports/tagesplanung.xls?date=2026-05-04
 ```
 
 The endpoint requires an authenticated user with at least `VIEWER` role.
@@ -32,7 +32,7 @@ The endpoint requires an authenticated user with at least `VIEWER` role.
 
 ## UI
 
-The web UI has an `Export CSV` button near the planning date filter.
+The web UI has an `Export Excel` button near the planning date filter.
 
 ## Logging
 

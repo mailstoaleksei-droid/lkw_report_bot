@@ -270,7 +270,7 @@ export default function HomePage() {
   }
 
   function exportTagesplanung(): void {
-    window.location.href = `${apiBaseUrl}/api/exports/tagesplanung.csv?date=${selectedDate}`;
+    window.location.href = `${apiBaseUrl}/api/exports/tagesplanung.xls?date=${selectedDate}`;
   }
 
   if (loading && !user) {
@@ -322,7 +322,7 @@ export default function HomePage() {
           Refresh
         </button>
         <button type="button" className="secondary-button" onClick={exportTagesplanung}>
-          Export CSV
+          Export Excel
         </button>
         {error ? <span className="error">{error}</span> : null}
       </section>

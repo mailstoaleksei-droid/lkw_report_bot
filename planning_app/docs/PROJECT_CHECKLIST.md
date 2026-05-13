@@ -72,7 +72,7 @@ Status legend:
   - `GET /api/audit-log` supports entity, order, assignment, user, event type, and limit filters.
 - [~] Add import endpoints.
 - [x] Add export endpoints.
-  - `GET /api/exports/tagesplanung.csv?date=YYYY-MM-DD` exports Tagesplanung rows for Excel.
+  - `GET /api/exports/tagesplanung.xls?date=YYYY-MM-DD` exports Tagesplanung rows for Excel.
 - [ ] Add holiday endpoints.
 
 ## 3. Database Model
@@ -183,7 +183,7 @@ Status legend:
 
 - [ ] PDF Tagesplan.
 - [x] Excel Tagesplan.
-  - MVP exports CSV with Excel-compatible UTF-8 BOM and semicolon separator.
+  - MVP exports Excel-compatible XML `.xls` without unsafe third-party XLSX dependencies.
 - [ ] PDF Wochenplan.
 - [ ] Excel Wochenplan.
 - [~] Export respects filters.

@@ -15,13 +15,22 @@ function dateRange(dateOnly: string): { start: Date; end: Date } {
   return { start, end };
 }
 
-function csvCell(value: unknown): string {
+function xmlCell(value: unknown): string {
   const text = value === null || value === undefined ? "" : String(value);
-  return `"${text.replace(/"/g, '""')}"`;
+  const escaped = text
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;");
+  return `<Cell><Data ss:Type="String">${escaped}</Data></Cell>`;
+}
+
+function xmlRow(values: unknown[]): string {
+  return `<Row>${values.map(xmlCell).join("")}</Row>`;
 }
 
 export async function registerExportRoutes(app: FastifyInstance, config: AppConfig): Promise<void> {
-  app.get("/api/exports/tagesplanung.csv", async (request, reply) => {
+  app.get("/api/exports/tagesplanung.xls", async (request, reply) => {
     const user = await requireUser(request, reply, config, "VIEWER");
     if (!user) return;
 
@@ -66,8 +75,8 @@ export async function registerExportRoutes(app: FastifyInstance, config: AppConf
       "Status",
       "Problem",
     ];
-    const csvRows = [
-      header.map(csvCell).join(";"),
+    const tableRows = [
+      xmlRow(header),
       ...rows.map((row) => [
         row.lkw?.number,
         row.lkw?.status,
@@ -84,22 +93,33 @@ export async function registerExportRoutes(app: FastifyInstance, config: AppConf
         row.order.info,
         row.order.status,
         row.order.problemReason || row.problemReason,
-      ].map(csvCell).join(";")),
+      ]).map(xmlRow),
     ];
-    const body = `\uFEFF${csvRows.join("\r\n")}\r\n`;
-    const fileName = `tagesplanung-${parsed.data.date}.csv`;
+    const body = `<?xml version="1.0" encoding="UTF-8"?>
+<?mso-application progid="Excel.Sheet"?>
+<Workbook xmlns="urn:schemas-microsoft-com:office:spreadsheet"
+ xmlns:o="urn:schemas-microsoft-com:office:office"
+ xmlns:x="urn:schemas-microsoft-com:office:excel"
+ xmlns:ss="urn:schemas-microsoft-com:office:spreadsheet">
+ <Worksheet ss:Name="Tagesplanung">
+  <Table>
+   ${tableRows.join("\n   ")}
+  </Table>
+ </Worksheet>
+</Workbook>`;
+    const fileName = `tagesplanung-${parsed.data.date}.xls`;
 
     await prisma.exportLog.create({
       data: {
         exportType: "tagesplanung",
-        format: "csv",
+        format: "xls",
         filters: { date: parsed.data.date },
         outputPath: fileName,
         createdById: user.id,
       },
     });
 
-    reply.header("Content-Type", "text/csv; charset=utf-8");
+    reply.header("Content-Type", "application/vnd.ms-excel; charset=utf-8");
     reply.header("Content-Disposition", `attachment; filename="${fileName}"`);
     return reply.send(body);
   });
