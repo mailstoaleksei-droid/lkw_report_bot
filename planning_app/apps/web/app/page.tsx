@@ -81,16 +81,27 @@ type PlanningDayResponse = {
 
 type LkwItem = {
   id: string;
+  externalId: string | null;
   number: string;
   type: string | null;
   status: string;
+  rawStatus: string | null;
+  soldDate: string | null;
+  returnedDate: string | null;
+  isActive: boolean;
   company: { name: string } | null;
 };
 
 type DriverItem = {
   id: string;
+  externalId: string | null;
   fullName: string;
+  surname: string | null;
+  phone: string | null;
   status: string;
+  rawStatus: string | null;
+  dismissedDate: string | null;
+  isActive: boolean;
   company: { name: string } | null;
 };
 
@@ -185,6 +196,8 @@ export default function HomePage() {
   const [statusFilter, setStatusFilter] = useState("");
   const [rundeFilter, setRundeFilter] = useState("");
   const [viewMode, setViewMode] = useState<ViewMode>("lkw-first");
+  const [lkwManagementFilter, setLkwManagementFilter] = useState("");
+  const [driverManagementFilter, setDriverManagementFilter] = useState("");
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
@@ -266,14 +279,45 @@ export default function HomePage() {
       .sort((a, b) => a.runde - b.runde || a.description.localeCompare(b.description));
   }, [planning, lkwFilter, driverFilter, statusFilter, rundeFilter]);
 
+  const filteredManagementLkw = useMemo(() => {
+    const needle = lkwManagementFilter.toLowerCase();
+    return lkw.filter((item) => {
+      if (!needle) return true;
+      return [
+        item.externalId,
+        item.number,
+        item.type,
+        item.status,
+        item.rawStatus,
+        item.company?.name,
+      ].some((value) => (value || "").toLowerCase().includes(needle));
+    });
+  }, [lkw, lkwManagementFilter]);
+
+  const filteredManagementDrivers = useMemo(() => {
+    const needle = driverManagementFilter.toLowerCase();
+    return drivers.filter((item) => {
+      if (!needle) return true;
+      return [
+        item.externalId,
+        item.fullName,
+        item.surname,
+        item.phone,
+        item.status,
+        item.rawStatus,
+        item.company?.name,
+      ].some((value) => (value || "").toLowerCase().includes(needle));
+    });
+  }, [drivers, driverManagementFilter]);
+
   async function loadDashboardData(date: string): Promise<void> {
     setError(null);
     setLoading(true);
     try {
       const [planningResult, lkwResult, driversResult, auditResult] = await Promise.all([
         apiFetch<PlanningDayResponse>(`/api/planning/day?date=${date}`),
-        apiFetch<{ ok: true; items: LkwItem[] }>("/api/lkw?activeOnly=true&limit=8"),
-        apiFetch<{ ok: true; items: DriverItem[] }>("/api/drivers?activeOnly=true&limit=8"),
+        apiFetch<{ ok: true; items: LkwItem[] }>("/api/lkw?limit=500"),
+        apiFetch<{ ok: true; items: DriverItem[] }>("/api/drivers?limit=500"),
         apiFetch<{ ok: true; items: AuditItem[] }>("/api/audit-log?limit=12"),
       ]);
       setPlanning(planningResult);
@@ -616,23 +660,81 @@ export default function HomePage() {
           </div>
         </div>
 
-        <div className="list-panel">
-          <h2>Active LKW</h2>
-          {lkw.map((item) => (
-            <div className="list-row" key={item.id}>
-              <strong>{item.number}</strong>
-              <span>{item.type || "-"} / {item.company?.name || "-"}</span>
-            </div>
-          ))}
+        <div className="list-panel management-panel">
+          <div className="panel-header">
+            <h2>LKW management</h2>
+            <span className="muted">{filteredManagementLkw.length} / {lkw.length}</span>
+          </div>
+          <input
+            value={lkwManagementFilter}
+            onChange={(event) => setLkwManagementFilter(event.target.value)}
+            placeholder="Search LKW, status, company"
+          />
+          <div className="table-wrap compact-table">
+            <table>
+              <thead>
+                <tr>
+                  <th>ID</th>
+                  <th>LKW</th>
+                  <th>Type</th>
+                  <th>Company</th>
+                  <th>Status</th>
+                  <th>Sold</th>
+                  <th>Returned</th>
+                </tr>
+              </thead>
+              <tbody>
+                {filteredManagementLkw.map((item) => (
+                  <tr key={item.id}>
+                    <td>{item.externalId || "-"}</td>
+                    <td>{item.number}</td>
+                    <td>{item.type || "-"}</td>
+                    <td>{item.company?.name || "-"}</td>
+                    <td>{item.status}</td>
+                    <td>{item.soldDate ? item.soldDate.slice(0, 10) : "-"}</td>
+                    <td>{item.returnedDate ? item.returnedDate.slice(0, 10) : "-"}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
         </div>
-        <div className="list-panel">
-          <h2>Active Drivers</h2>
-          {drivers.map((item) => (
-            <div className="list-row" key={item.id}>
-              <strong>{item.fullName}</strong>
-              <span>{item.company?.name || "-"} / {item.status}</span>
-            </div>
-          ))}
+        <div className="list-panel management-panel">
+          <div className="panel-header">
+            <h2>Driver management</h2>
+            <span className="muted">{filteredManagementDrivers.length} / {drivers.length}</span>
+          </div>
+          <input
+            value={driverManagementFilter}
+            onChange={(event) => setDriverManagementFilter(event.target.value)}
+            placeholder="Search driver, phone, status, company"
+          />
+          <div className="table-wrap compact-table">
+            <table>
+              <thead>
+                <tr>
+                  <th>ID</th>
+                  <th>Driver</th>
+                  <th>Phone</th>
+                  <th>Company</th>
+                  <th>Status</th>
+                  <th>Dismissed</th>
+                </tr>
+              </thead>
+              <tbody>
+                {filteredManagementDrivers.map((item) => (
+                  <tr key={item.id}>
+                    <td>{item.externalId || "-"}</td>
+                    <td>{item.fullName}</td>
+                    <td>{item.phone || "-"}</td>
+                    <td>{item.company?.name || "-"}</td>
+                    <td>{item.status}</td>
+                    <td>{item.dismissedDate ? item.dismissedDate.slice(0, 10) : "-"}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
         </div>
         <div className="list-panel audit-panel">
           <h2>Audit Log</h2>

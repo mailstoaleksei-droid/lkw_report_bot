@@ -178,8 +178,12 @@ Status legend:
   - Problem rows are highlighted and problem status is shown.
 - [x] Holiday warning banner.
   - Web UI shows a yellow warning banner when the selected date is a Germany/Hamburg holiday.
-- [ ] LKW management page.
-- [ ] Driver management page.
+- [~] LKW management page.
+  - Web UI shows a searchable LKW management table from the planning database.
+  - Edit/create actions are pending.
+- [~] Driver management page.
+  - Web UI shows a searchable driver management table from the planning database.
+  - Edit/create actions are pending.
 - [~] Import page with preview.
   - Root UI now includes import cards for reporting master data, weekly schedules, and driver availability.
 - [ ] Audit Log page.

@@ -326,6 +326,32 @@ th {
   margin-bottom: 12px;
 }
 
+.panel-header {
+  align-items: center;
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.management-panel {
+  display: grid;
+  gap: 12px;
+}
+
+.compact-table {
+  max-height: 460px;
+}
+
+.compact-table table {
+  font-size: 13px;
+  min-width: 760px;
+}
+
+.compact-table td,
+.compact-table th {
+  padding: 8px 10px;
+}
+
 .list-row {
   border-top: 1px solid var(--line);
   display: grid;
