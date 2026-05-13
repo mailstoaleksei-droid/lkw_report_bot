@@ -186,7 +186,9 @@ Status legend:
   - Edit/create actions are pending.
 - [~] Import page with preview.
   - Root UI now includes import cards for reporting master data, weekly schedules, and driver availability.
-- [ ] Audit Log page.
+- [~] Audit Log page.
+  - Web UI shows the latest 200 audit events in a searchable table.
+  - Separate route/page and advanced filters are pending.
 - [ ] User management page.
 - [ ] Settings page.
 

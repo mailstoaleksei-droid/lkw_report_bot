@@ -198,6 +198,7 @@ export default function HomePage() {
   const [viewMode, setViewMode] = useState<ViewMode>("lkw-first");
   const [lkwManagementFilter, setLkwManagementFilter] = useState("");
   const [driverManagementFilter, setDriverManagementFilter] = useState("");
+  const [auditFilter, setAuditFilter] = useState("");
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
@@ -310,6 +311,22 @@ export default function HomePage() {
     });
   }, [drivers, driverManagementFilter]);
 
+  const filteredAudit = useMemo(() => {
+    const needle = auditFilter.toLowerCase();
+    return audit.filter((item) => {
+      if (!needle) return true;
+      return [
+        item.eventType,
+        item.entityType,
+        item.entityId,
+        item.message,
+        item.user?.displayName,
+        item.user?.email,
+        item.user?.role,
+      ].some((value) => (value || "").toLowerCase().includes(needle));
+    });
+  }, [audit, auditFilter]);
+
   async function loadDashboardData(date: string): Promise<void> {
     setError(null);
     setLoading(true);
@@ -318,7 +335,7 @@ export default function HomePage() {
         apiFetch<PlanningDayResponse>(`/api/planning/day?date=${date}`),
         apiFetch<{ ok: true; items: LkwItem[] }>("/api/lkw?limit=500"),
         apiFetch<{ ok: true; items: DriverItem[] }>("/api/drivers?limit=500"),
-        apiFetch<{ ok: true; items: AuditItem[] }>("/api/audit-log?limit=12"),
+        apiFetch<{ ok: true; items: AuditItem[] }>("/api/audit-log?limit=200"),
       ]);
       setPlanning(planningResult);
       setLkw(lkwResult.items);
@@ -736,18 +753,45 @@ export default function HomePage() {
             </table>
           </div>
         </div>
-        <div className="list-panel audit-panel">
-          <h2>Audit Log</h2>
-          {audit.map((item) => (
-            <div className="list-row" key={item.id}>
-              <strong>{item.message || item.eventType}</strong>
-              <span>
-                {item.eventType} / {item.entityType} / {item.user?.displayName || "system"}
-              </span>
-              <span>{new Date(item.createdAt).toLocaleString()}</span>
-            </div>
-          ))}
-          {audit.length === 0 ? <p className="muted">No audit events loaded.</p> : null}
+        <div className="list-panel audit-panel management-panel">
+          <div className="panel-header">
+            <h2>Audit Log</h2>
+            <span className="muted">{filteredAudit.length} / {audit.length}</span>
+          </div>
+          <input
+            value={auditFilter}
+            onChange={(event) => setAuditFilter(event.target.value)}
+            placeholder="Search event, entity, user"
+          />
+          <div className="table-wrap compact-table">
+            <table>
+              <thead>
+                <tr>
+                  <th>Time</th>
+                  <th>Event</th>
+                  <th>Entity</th>
+                  <th>User</th>
+                  <th>Message</th>
+                </tr>
+              </thead>
+              <tbody>
+                {filteredAudit.map((item) => (
+                  <tr key={item.id}>
+                    <td>{new Date(item.createdAt).toLocaleString()}</td>
+                    <td>{item.eventType}</td>
+                    <td>{item.entityType}</td>
+                    <td>{item.user?.displayName || "system"}</td>
+                    <td>{item.message || "-"}</td>
+                  </tr>
+                ))}
+                {filteredAudit.length === 0 ? (
+                  <tr>
+                    <td colSpan={5}>No audit events match the current filter.</td>
+                  </tr>
+                ) : null}
+              </tbody>
+            </table>
+          </div>
         </div>
       </section>
     </main>
