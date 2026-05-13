@@ -334,8 +334,17 @@ th {
 }
 
 .management-panel {
+  align-content: start;
   display: grid;
   gap: 12px;
+}
+
+.management-panel input {
+  align-self: start;
+  height: 40px;
+  max-height: 40px;
+  min-height: 40px;
+  resize: none;
 }
 
 .compact-table {
