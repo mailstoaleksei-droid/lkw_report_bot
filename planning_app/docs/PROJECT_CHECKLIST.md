@@ -68,7 +68,8 @@ Status legend:
   - `POST /api/assignments/upsert` creates or updates one active assignment per order.
 - [x] Add planning query endpoints.
   - `GET /api/planning/day?date=YYYY-MM-DD` returns counters, LKW-first rows, driver availability, and unassigned orders.
-- [ ] Add audit log endpoints.
+- [x] Add audit log endpoints.
+  - `GET /api/audit-log` supports entity, order, assignment, user, event type, and limit filters.
 - [~] Add import endpoints.
 - [ ] Add export endpoints.
 - [ ] Add holiday endpoints.

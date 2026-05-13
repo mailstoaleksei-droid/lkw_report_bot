@@ -5,6 +5,7 @@ import { loadConfig } from "./config.js";
 import { closePrisma } from "./prisma.js";
 import { registerHealthRoutes } from "./routes/health.js";
 import { registerAuthRoutes } from "./routes/auth.js";
+import { registerAuditRoutes } from "./routes/audit.js";
 import { registerAssignmentRoutes } from "./routes/assignments.js";
 import { registerDriverRoutes } from "./routes/drivers.js";
 import { registerImportRoutes } from "./routes/imports.js";
@@ -32,6 +33,7 @@ await registerDriverRoutes(app, config);
 await registerOrderRoutes(app, config);
 await registerAssignmentRoutes(app, config);
 await registerPlanningRoutes(app, config);
+await registerAuditRoutes(app, config);
 
 for (const signal of ["SIGINT", "SIGTERM"] as const) {
   process.on(signal, async () => {
