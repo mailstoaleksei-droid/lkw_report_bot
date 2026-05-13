@@ -146,6 +146,16 @@ label {
   margin: 0 0 20px;
 }
 
+.warning-banner {
+  background: #fff4ce;
+  border: 1px solid #e3b341;
+  border-radius: 8px;
+  color: #4a3500;
+  font-weight: 700;
+  margin: 0 0 20px;
+  padding: 14px 16px;
+}
+
 .filters-panel {
   align-items: end;
   background: var(--panel);

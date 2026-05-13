@@ -73,7 +73,8 @@ Status legend:
 - [~] Add import endpoints.
 - [x] Add export endpoints.
   - `GET /api/exports/tagesplanung.xls?date=YYYY-MM-DD` exports Tagesplanung rows for Excel.
-- [ ] Add holiday endpoints.
+- [~] Add holiday endpoints.
+  - Planning day response now includes computed Germany/Hamburg holiday warnings.
 
 ## 3. Database Model
 
@@ -151,7 +152,8 @@ Status legend:
 - [x] Mark unavailable driver assignment as Problem.
   - Current import marks existing assignments and linked orders as `PROBLEM` when the assigned driver is unavailable.
   - Assignment write API checks imported daily driver availability.
-- [ ] Holiday warning for Germany/Hamburg.
+- [x] Holiday warning for Germany/Hamburg.
+  - Planning day response returns computed DE/HH holiday warnings for the selected date.
 - [ ] Do not block saving on Problem in MVP.
 
 ## 6. Frontend
@@ -171,7 +173,8 @@ Status legend:
   - Week, month, and company filters are pending.
 - [x] Conflict/problem indicators.
   - Problem rows are highlighted and problem status is shown.
-- [ ] Holiday warning banner.
+- [x] Holiday warning banner.
+  - Web UI shows a yellow warning banner when the selected date is a Germany/Hamburg holiday.
 - [ ] LKW management page.
 - [ ] Driver management page.
 - [~] Import page with preview.

@@ -3,6 +3,7 @@ import type { FastifyInstance } from "fastify";
 import { z } from "zod";
 import { requireUser } from "../auth/guards.js";
 import type { AppConfig } from "../config.js";
+import { getGermanHamburgHolidays } from "../domain/holidays.js";
 import { prisma } from "../prisma.js";
 
 const dayQuerySchema = z.object({
@@ -93,6 +94,7 @@ export async function registerPlanningRoutes(app: FastifyInstance, config: AppCo
           ? Math.round((assignedLkwIds.size / totalPlanningLkw) * 1000) / 10
           : 0,
       },
+      holidays: getGermanHamburgHolidays(parsed.data.date),
       rows: assignments.map((assignment) => ({
         id: assignment.id,
         runde: assignment.runde,

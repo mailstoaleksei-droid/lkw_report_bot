@@ -57,6 +57,12 @@ type PlanningDayResponse = {
   ok: true;
   date: string;
   counters: MetricCounters;
+  holidays: Array<{
+    date: string;
+    name: string;
+    region: string;
+    isNational: boolean;
+  }>;
   rows: PlanningRow[];
   unassignedOrders: Array<{
     id: string;
@@ -355,6 +361,12 @@ export default function HomePage() {
           </div>
         ))}
       </section>
+
+      {planning?.holidays?.length ? (
+        <section className="warning-banner">
+          Holiday warning: {planning.holidays.map((holiday) => `${holiday.name} (${holiday.region})`).join(", ")}
+        </section>
+      ) : null}
 
       <section className="filters-panel">
         <label>
