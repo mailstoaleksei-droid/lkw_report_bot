@@ -5,10 +5,12 @@ import { loadConfig } from "./config.js";
 import { closePrisma } from "./prisma.js";
 import { registerHealthRoutes } from "./routes/health.js";
 import { registerAuthRoutes } from "./routes/auth.js";
+import { registerAssignmentRoutes } from "./routes/assignments.js";
 import { registerDriverRoutes } from "./routes/drivers.js";
 import { registerImportRoutes } from "./routes/imports.js";
 import { registerLkwRoutes } from "./routes/lkw.js";
 import { registerMetaRoutes } from "./routes/meta.js";
+import { registerOrderRoutes } from "./routes/orders.js";
 import { registerPlanningRoutes } from "./routes/planning.js";
 
 const app = Fastify({ logger: true });
@@ -27,6 +29,8 @@ await registerAuthRoutes(app, config);
 await registerImportRoutes(app);
 await registerLkwRoutes(app, config);
 await registerDriverRoutes(app, config);
+await registerOrderRoutes(app, config);
+await registerAssignmentRoutes(app, config);
 await registerPlanningRoutes(app, config);
 
 for (const signal of ["SIGINT", "SIGTERM"] as const) {

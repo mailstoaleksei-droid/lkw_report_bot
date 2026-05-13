@@ -62,8 +62,10 @@ Status legend:
   - `GET /api/lkw` supports read filters for the planning UI.
 - [x] Add driver endpoints.
   - `GET /api/drivers` supports read filters for the planning UI.
-- [ ] Add order endpoints.
-- [ ] Add assignment endpoints.
+- [x] Add order endpoints.
+  - `POST /api/orders`, `PATCH /api/orders/:id`, and `POST /api/orders/:id/cancel`.
+- [x] Add assignment endpoints.
+  - `POST /api/assignments/upsert` creates or updates one active assignment per order.
 - [x] Add planning query endpoints.
   - `GET /api/planning/day?date=YYYY-MM-DD` returns counters, LKW-first rows, driver availability, and unassigned orders.
 - [ ] Add audit log endpoints.
@@ -138,13 +140,15 @@ Status legend:
 - [ ] Hide sold/returned/inactive LKW from normal planning on selected date.
 - [ ] Show workshop LKW as blocked/problem when needed.
 - [ ] Allow multiple Runde per LKW per day.
-- [ ] Mark same LKW same Runde conflict as Problem.
+- [x] Mark same LKW same Runde conflict as Problem.
+  - Assignment write API checks same date/Runde LKW conflicts.
 - [ ] Normalize driver statuses.
 - [ ] Hide dismissed drivers after dismissal date.
 - [x] Check daily vacation/sick availability.
   - Imported reporting weekly U/K rows are expanded into daily `DriverAvailability` rows.
 - [x] Mark unavailable driver assignment as Problem.
   - Current import marks existing assignments and linked orders as `PROBLEM` when the assigned driver is unavailable.
+  - Assignment write API checks imported daily driver availability.
 - [ ] Holiday warning for Germany/Hamburg.
 - [ ] Do not block saving on Problem in MVP.
 
