@@ -1,13 +1,221 @@
-const counters = [
-  ["Orders today", "0"],
-  ["Assigned LKW", "0"],
-  ["Free LKW", "0"],
-  ["Open orders", "0"],
-  ["LKW usage", "0%"],
-  ["Problems", "0"],
-];
+"use client";
+
+import { FormEvent, useEffect, useMemo, useState } from "react";
+
+const apiBaseUrl = process.env.NEXT_PUBLIC_API_BASE_URL || "http://localhost:4000";
+
+type User = {
+  id: string;
+  email: string;
+  displayName: string;
+  role: string;
+};
+
+type MetricCounters = {
+  ordersToday: number;
+  assignedLkw: number;
+  freeLkw: number;
+  openOrders: number;
+  problemOrders: number;
+  lkwUsagePercent: number;
+};
+
+type PlanningRow = {
+  id: string;
+  runde: number;
+  status: string;
+  problemReason: string | null;
+  lkw: {
+    number: string;
+    status: string;
+    type: string | null;
+    company: string | null;
+  } | null;
+  driver: {
+    fullName: string;
+    status: string;
+    availability: Array<{ status: string; rawStatus: string | null; source: string }>;
+  } | null;
+  chassis: {
+    number: string;
+    status: string;
+  } | null;
+  order: {
+    description: string;
+    customer: string | null;
+    plz: string | null;
+    city: string | null;
+    country: string | null;
+    plannedTime: string | null;
+    info: string | null;
+    status: string;
+    problemReason: string | null;
+  };
+};
+
+type PlanningDayResponse = {
+  ok: true;
+  date: string;
+  counters: MetricCounters;
+  rows: PlanningRow[];
+  unassignedOrders: Array<{
+    id: string;
+    runde: number;
+    description: string;
+    status: string;
+    problemReason: string | null;
+  }>;
+};
+
+type LkwItem = {
+  id: string;
+  number: string;
+  type: string | null;
+  status: string;
+  company: { name: string } | null;
+};
+
+type DriverItem = {
+  id: string;
+  fullName: string;
+  status: string;
+  company: { name: string } | null;
+};
+
+function todayDate(): string {
+  return new Date().toISOString().slice(0, 10);
+}
+
+async function apiFetch<T>(path: string, options: RequestInit = {}): Promise<T> {
+  const response = await fetch(`${apiBaseUrl}${path}`, {
+    ...options,
+    credentials: "include",
+    headers: {
+      "Content-Type": "application/json",
+      ...options.headers,
+    },
+  });
+
+  const data = await response.json().catch(() => null);
+  if (!response.ok) {
+    throw new Error(data?.error || "Request failed");
+  }
+  return data as T;
+}
 
 export default function HomePage() {
+  const [user, setUser] = useState<User | null>(null);
+  const [email, setEmail] = useState("");
+  const [password, setPassword] = useState("");
+  const [selectedDate, setSelectedDate] = useState("2026-05-04");
+  const [planning, setPlanning] = useState<PlanningDayResponse | null>(null);
+  const [lkw, setLkw] = useState<LkwItem[]>([]);
+  const [drivers, setDrivers] = useState<DriverItem[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    apiFetch<{ ok: true; user: User }>("/api/auth/me")
+      .then((result) => setUser(result.user))
+      .catch(() => setUser(null))
+      .finally(() => setLoading(false));
+  }, []);
+
+  useEffect(() => {
+    if (!user) return;
+    loadDashboardData(selectedDate);
+  }, [user, selectedDate]);
+
+  const metrics = useMemo(() => {
+    const counters = planning?.counters || {
+      ordersToday: 0,
+      assignedLkw: 0,
+      freeLkw: 0,
+      openOrders: 0,
+      problemOrders: 0,
+      lkwUsagePercent: 0,
+    };
+
+    return [
+      ["Orders today", String(counters.ordersToday)],
+      ["Assigned LKW", String(counters.assignedLkw)],
+      ["Free LKW", String(counters.freeLkw)],
+      ["Open orders", String(counters.openOrders)],
+      ["LKW usage", `${counters.lkwUsagePercent}%`],
+      ["Problems", String(counters.problemOrders)],
+    ];
+  }, [planning]);
+
+  async function loadDashboardData(date: string): Promise<void> {
+    setError(null);
+    setLoading(true);
+    try {
+      const [planningResult, lkwResult, driversResult] = await Promise.all([
+        apiFetch<PlanningDayResponse>(`/api/planning/day?date=${date}`),
+        apiFetch<{ ok: true; items: LkwItem[] }>("/api/lkw?activeOnly=true&limit=8"),
+        apiFetch<{ ok: true; items: DriverItem[] }>("/api/drivers?activeOnly=true&limit=8"),
+      ]);
+      setPlanning(planningResult);
+      setLkw(lkwResult.items);
+      setDrivers(driversResult.items);
+    } catch (caught) {
+      setError(caught instanceof Error ? caught.message : "Failed to load data");
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  async function handleLogin(event: FormEvent<HTMLFormElement>): Promise<void> {
+    event.preventDefault();
+    setError(null);
+    setLoading(true);
+    try {
+      const result = await apiFetch<{ ok: true; user: User }>("/api/auth/login", {
+        method: "POST",
+        body: JSON.stringify({ email, password }),
+      });
+      setUser(result.user);
+      setPassword("");
+    } catch (caught) {
+      setError(caught instanceof Error ? caught.message : "Login failed");
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  async function handleLogout(): Promise<void> {
+    await apiFetch("/api/auth/logout", { method: "POST" }).catch(() => null);
+    setUser(null);
+    setPlanning(null);
+  }
+
+  if (loading && !user) {
+    return <main className="shell"><p>Loading...</p></main>;
+  }
+
+  if (!user) {
+    return (
+      <main className="login-shell">
+        <form className="login-panel" onSubmit={handleLogin}>
+          <div>
+            <p className="eyebrow">Internal logistics</p>
+            <h1>LKW Planning</h1>
+          </div>
+          <label>
+            Email
+            <input value={email} onChange={(event) => setEmail(event.target.value)} type="email" required />
+          </label>
+          <label>
+            Password
+            <input value={password} onChange={(event) => setPassword(event.target.value)} type="password" required />
+          </label>
+          {error ? <p className="error">{error}</p> : null}
+          <button type="submit" disabled={loading}>{loading ? "Signing in..." : "Sign in"}</button>
+        </form>
+      </main>
+    );
+  }
+
   return (
     <main className="shell">
       <header className="topbar">
@@ -15,16 +223,25 @@ export default function HomePage() {
           <p className="eyebrow">Internal logistics</p>
           <h1>LKW Planning</h1>
         </div>
-        <nav>
-          <a href="#dashboard">Dashboard</a>
-          <a href="#planning">Tagesplanung</a>
-          <a href="#imports">Imports</a>
-          <a href="#audit">Audit</a>
-        </nav>
+        <div className="userbar">
+          <span>{user.displayName} / {user.role}</span>
+          <button type="button" className="secondary-button" onClick={handleLogout}>Logout</button>
+        </div>
       </header>
 
-      <section id="dashboard" className="dashboard">
-        {counters.map(([label, value]) => (
+      <section className="toolbar">
+        <label>
+          Planning date
+          <input type="date" value={selectedDate || todayDate()} onChange={(event) => setSelectedDate(event.target.value)} />
+        </label>
+        <button type="button" onClick={() => loadDashboardData(selectedDate)} disabled={loading}>
+          Refresh
+        </button>
+        {error ? <span className="error">{error}</span> : null}
+      </section>
+
+      <section className="dashboard">
+        {metrics.map(([label, value]) => (
           <div className="metric" key={label}>
             <span>{label}</span>
             <strong>{value}</strong>
@@ -32,41 +249,83 @@ export default function HomePage() {
         ))}
       </section>
 
-      <section id="planning" className="planner">
+      <section className="planner">
         <div className="planner-header">
           <div>
             <h2>Tagesplanung</h2>
-            <p>Excel-style planning view prepared for Orders-first and LKW-first modes.</p>
+            <p>LKW-first view for {selectedDate}. Data is read from the isolated planning database.</p>
           </div>
           <div className="mode-switch">
             <button type="button">LKW-first</button>
-            <button type="button">Orders-first</button>
+            <button type="button" className="secondary-button">Orders-first</button>
           </div>
         </div>
 
-        <table>
-          <thead>
-            <tr>
-              <th>LKW</th>
-              <th>LKW status</th>
-              <th>Driver</th>
-              <th>Chassis</th>
-              <th>Runde</th>
-              <th>Auftrag</th>
-              <th>City</th>
-              <th>Time</th>
-              <th>Status</th>
-              <th>Audit</th>
-            </tr>
-          </thead>
-          <tbody>
-            <tr>
-              <td colSpan={10}>No planning data loaded yet.</td>
-            </tr>
-          </tbody>
-        </table>
+        <div className="table-wrap">
+          <table>
+            <thead>
+              <tr>
+                <th>LKW</th>
+                <th>LKW status</th>
+                <th>Driver</th>
+                <th>Driver check</th>
+                <th>Chassis</th>
+                <th>Runde</th>
+                <th>Auftrag</th>
+                <th>City</th>
+                <th>Time</th>
+                <th>Status</th>
+              </tr>
+            </thead>
+            <tbody>
+              {(planning?.rows || []).map((row) => (
+                <tr key={row.id} className={row.status === "PROBLEM" || row.order.status === "PROBLEM" ? "problem-row" : ""}>
+                  <td>{row.lkw?.number || "-"}</td>
+                  <td>{row.lkw?.status || "-"}</td>
+                  <td>{row.driver?.fullName || "-"}</td>
+                  <td>{row.driver?.availability?.[0]?.status || "OK"}</td>
+                  <td>{row.chassis?.number || "-"}</td>
+                  <td>{row.runde}</td>
+                  <td>{row.order.description}</td>
+                  <td>{[row.order.plz, row.order.city, row.order.country].filter(Boolean).join(" ") || "-"}</td>
+                  <td>{row.order.plannedTime || "-"}</td>
+                  <td>
+                    <span className={`status status-${(row.order.status || row.status).toLowerCase()}`}>
+                      {row.order.status || row.status}
+                    </span>
+                  </td>
+                </tr>
+              ))}
+              {planning && planning.rows.length === 0 ? (
+                <tr>
+                  <td colSpan={10}>No planning rows for this date.</td>
+                </tr>
+              ) : null}
+            </tbody>
+          </table>
+        </div>
+      </section>
+
+      <section className="side-grid">
+        <div className="list-panel">
+          <h2>Active LKW</h2>
+          {lkw.map((item) => (
+            <div className="list-row" key={item.id}>
+              <strong>{item.number}</strong>
+              <span>{item.type || "-"} / {item.company?.name || "-"}</span>
+            </div>
+          ))}
+        </div>
+        <div className="list-panel">
+          <h2>Active Drivers</h2>
+          {drivers.map((item) => (
+            <div className="list-row" key={item.id}>
+              <strong>{item.fullName}</strong>
+              <span>{item.company?.name || "-"} / {item.status}</span>
+            </div>
+          ))}
+        </div>
       </section>
     </main>
   );
 }
-

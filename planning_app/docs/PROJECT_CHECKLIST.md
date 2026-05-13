@@ -151,13 +151,19 @@ Status legend:
 ## 6. Frontend
 
 - [x] Initial Next.js shell added.
-- [ ] Login page.
-- [ ] Dashboard with real counters.
-- [ ] Tagesplanung page.
-- [ ] LKW-first table starting with LKW column.
+- [x] Login page.
+  - Root page now shows a login form and uses the API session cookie.
+- [x] Dashboard with real counters.
+  - Counters are loaded from `GET /api/planning/day`.
+- [x] Tagesplanung page.
+  - Root page includes the MVP Tagesplanung read view.
+- [x] LKW-first table starting with LKW column.
+  - The first table column is LKW.
 - [ ] Orders-first mode.
-- [ ] Filters: date, week, month, company, LKW, driver, status, Runde.
-- [ ] Conflict/problem indicators.
+- [~] Filters: date, week, month, company, LKW, driver, status, Runde.
+  - Date filter is implemented; other filters are pending.
+- [x] Conflict/problem indicators.
+  - Problem rows are highlighted and problem status is shown.
 - [ ] Holiday warning banner.
 - [ ] LKW management page.
 - [ ] Driver management page.
