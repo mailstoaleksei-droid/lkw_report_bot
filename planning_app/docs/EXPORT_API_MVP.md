@@ -12,6 +12,20 @@ GET /api/exports/tagesplanung.xls?date=2026-05-04
 
 The endpoint requires an authenticated user with at least `VIEWER` role.
 
+Optional filters:
+
+```http
+GET /api/exports/tagesplanung.xls?date=2026-05-04&lkw=GR-OO&driver=Alex&status=PLANNED&runde=1
+```
+
+Supported export filters:
+
+- date
+- LKW number contains
+- driver name contains
+- status exact match
+- Runde exact match
+
 ## Exported Columns
 
 - LKW
@@ -32,7 +46,7 @@ The endpoint requires an authenticated user with at least `VIEWER` role.
 
 ## UI
 
-The web UI has an `Export Excel` button near the planning date filter.
+The web UI has an `Export Excel` button near the planning date filter. The export uses the current LKW, driver, status, and Runde filters from the Tagesplanung view.
 
 ## Logging
 

@@ -6,6 +6,10 @@ import { prisma } from "../prisma.js";
 
 const exportQuerySchema = z.object({
   date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
+  lkw: z.string().trim().optional(),
+  driver: z.string().trim().optional(),
+  status: z.string().trim().optional(),
+  runde: z.string().regex(/^\d+$/).optional(),
 });
 
 function dateRange(dateOnly: string): { start: Date; end: Date } {
@@ -29,6 +33,10 @@ function xmlRow(values: unknown[]): string {
   return `<Row>${values.map(xmlCell).join("")}</Row>`;
 }
 
+function includesFilter(value: string | null | undefined, filter: string | undefined): boolean {
+  return !filter || (value || "").toLowerCase().includes(filter.toLowerCase());
+}
+
 export async function registerExportRoutes(app: FastifyInstance, config: AppConfig): Promise<void> {
   app.get("/api/exports/tagesplanung.xls", async (request, reply) => {
     const user = await requireUser(request, reply, config, "VIEWER");
@@ -39,7 +47,8 @@ export async function registerExportRoutes(app: FastifyInstance, config: AppConf
       return reply.code(400).send({ ok: false, error: "Invalid export query" });
     }
 
-    const { start, end } = dateRange(parsed.data.date);
+    const query = parsed.data;
+    const { start, end } = dateRange(query.date);
     const rows = await prisma.assignment.findMany({
       where: {
         planningDate: { gte: start, lt: end },
@@ -56,6 +65,14 @@ export async function registerExportRoutes(app: FastifyInstance, config: AppConf
         driver: true,
         chassis: true,
       },
+    });
+    const filteredRows = rows.filter((row) => {
+      const statusValue = row.order.status || row.status;
+      const lkwMatch = includesFilter(row.lkw?.number, query.lkw);
+      const driverMatch = includesFilter(row.driver?.fullName, query.driver);
+      const statusMatch = !query.status || statusValue === query.status;
+      const rundeMatch = !query.runde || String(row.runde) === query.runde;
+      return lkwMatch && driverMatch && statusMatch && rundeMatch;
     });
 
     const header = [
@@ -77,7 +94,7 @@ export async function registerExportRoutes(app: FastifyInstance, config: AppConf
     ];
     const tableRows = [
       xmlRow(header),
-      ...rows.map((row) => [
+      ...filteredRows.map((row) => [
         row.lkw?.number,
         row.lkw?.status,
         row.driver?.fullName,
@@ -107,13 +124,19 @@ export async function registerExportRoutes(app: FastifyInstance, config: AppConf
   </Table>
  </Worksheet>
 </Workbook>`;
-    const fileName = `tagesplanung-${parsed.data.date}.xls`;
+    const fileName = `tagesplanung-${query.date}.xls`;
 
     await prisma.exportLog.create({
       data: {
         exportType: "tagesplanung",
         format: "xls",
-        filters: { date: parsed.data.date },
+        filters: {
+          date: query.date,
+          lkw: query.lkw || null,
+          driver: query.driver || null,
+          status: query.status || null,
+          runde: query.runde || null,
+        },
         outputPath: fileName,
         createdById: user.id,
       },

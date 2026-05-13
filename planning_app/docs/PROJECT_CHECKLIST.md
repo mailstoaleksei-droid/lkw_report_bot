@@ -189,7 +189,8 @@ Status legend:
 - [ ] Excel Wochenplan.
 - [~] Export respects filters.
   - Date filter is supported by the export endpoint.
-  - LKW, driver, status, and Runde filters are currently UI-only and must be added to the export endpoint.
+  - LKW, driver, status, and Runde filters are supported by the Excel export endpoint.
+  - Week, month, and company export filters are pending.
 - [x] Export log records created.
 
 ## 8. Operations

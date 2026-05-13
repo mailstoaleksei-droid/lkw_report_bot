@@ -285,7 +285,12 @@ export default function HomePage() {
   }
 
   function exportTagesplanung(): void {
-    window.location.href = `${apiBaseUrl}/api/exports/tagesplanung.xls?date=${selectedDate}`;
+    const params = new URLSearchParams({ date: selectedDate });
+    if (lkwFilter) params.set("lkw", lkwFilter);
+    if (driverFilter) params.set("driver", driverFilter);
+    if (statusFilter) params.set("status", statusFilter);
+    if (rundeFilter) params.set("runde", rundeFilter);
+    window.location.href = `${apiBaseUrl}/api/exports/tagesplanung.xls?${params.toString()}`;
   }
 
   if (loading && !user) {
