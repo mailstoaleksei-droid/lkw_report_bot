@@ -76,6 +76,7 @@ model User {
   id             String     @id @default(uuid())
   email          String     @unique
   passwordHash   String
+  mustChangePassword Boolean @default(false)
   displayName    String
   role           RoleName   @default(VIEWER)
   isActive       Boolean    @default(true)

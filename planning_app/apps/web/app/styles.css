@@ -518,6 +518,17 @@ th {
   width: 100%;
 }
 
+.reset-password-row {
+  display: grid;
+  gap: 6px;
+  grid-template-columns: minmax(180px, 1fr) auto auto auto;
+}
+
+.reset-password-row input {
+  height: 40px;
+  min-height: 40px;
+}
+
 .compact-table input[type="checkbox"] {
   min-height: auto;
   width: 18px;

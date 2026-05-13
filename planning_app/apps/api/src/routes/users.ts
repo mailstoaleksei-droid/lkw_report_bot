@@ -19,11 +19,16 @@ const userUpdateSchema = z.object({
   isActive: z.boolean().optional(),
 });
 
+const passwordResetSchema = z.object({
+  password: z.string().min(10),
+});
+
 function publicUser(user: {
   id: string;
   email: string;
   displayName: string;
   role: RoleName;
+  mustChangePassword: boolean;
   isActive: boolean;
   lastLoginAt: Date | null;
   createdAt: Date;
@@ -34,6 +39,7 @@ function publicUser(user: {
     email: user.email,
     displayName: user.displayName,
     role: user.role,
+    mustChangePassword: user.mustChangePassword,
     isActive: user.isActive,
     lastLoginAt: user.lastLoginAt,
     createdAt: user.createdAt,
@@ -54,6 +60,7 @@ export async function registerUserRoutes(app: FastifyInstance, config: AppConfig
         email: true,
         displayName: true,
         role: true,
+        mustChangePassword: true,
         isActive: true,
         lastLoginAt: true,
         createdAt: true,
@@ -87,12 +94,14 @@ export async function registerUserRoutes(app: FastifyInstance, config: AppConfig
           displayName: input.displayName,
           role: input.role,
           passwordHash: await hashPassword(input.password),
+          mustChangePassword: true,
         },
         select: {
           id: true,
           email: true,
           displayName: true,
           role: true,
+          mustChangePassword: true,
           isActive: true,
           lastLoginAt: true,
           createdAt: true,
@@ -135,6 +144,7 @@ export async function registerUserRoutes(app: FastifyInstance, config: AppConfig
         email: true,
         displayName: true,
         role: true,
+        mustChangePassword: true,
         isActive: true,
         lastLoginAt: true,
         createdAt: true,
@@ -164,6 +174,7 @@ export async function registerUserRoutes(app: FastifyInstance, config: AppConfig
           email: true,
           displayName: true,
           role: true,
+          mustChangePassword: true,
           isActive: true,
           lastLoginAt: true,
           createdAt: true,
@@ -180,6 +191,72 @@ export async function registerUserRoutes(app: FastifyInstance, config: AppConfig
           entityId: saved.id,
           userId: user.id,
           message: input.role && input.role !== before.role ? "User role changed" : "User updated",
+          before: publicUser(before),
+          after: publicUser(saved),
+        },
+      });
+
+      return saved;
+    });
+
+    return { ok: true, user: publicUser(updated) };
+  });
+
+  app.post("/api/users/:id/reset-password", async (request, reply) => {
+    const user = await requireUser(request, reply, config, "ADMIN");
+    if (!user) return;
+
+    const params = z.object({ id: z.string().uuid() }).safeParse(request.params);
+    const parsed = passwordResetSchema.safeParse(request.body);
+    if (!params.success || !parsed.success) {
+      return reply.code(400).send({ ok: false, error: "Invalid password reset payload" });
+    }
+
+    const before = await prisma.user.findFirst({
+      where: { id: params.data.id, deletedAt: null },
+      select: {
+        id: true,
+        email: true,
+        displayName: true,
+        role: true,
+        mustChangePassword: true,
+        isActive: true,
+        lastLoginAt: true,
+        createdAt: true,
+        updatedAt: true,
+      },
+    });
+    if (!before) {
+      return reply.code(404).send({ ok: false, error: "User not found" });
+    }
+
+    const updated = await prisma.$transaction(async (tx) => {
+      const saved = await tx.user.update({
+        where: { id: params.data.id },
+        data: {
+          passwordHash: await hashPassword(parsed.data.password),
+          mustChangePassword: true,
+        },
+        select: {
+          id: true,
+          email: true,
+          displayName: true,
+          role: true,
+          mustChangePassword: true,
+          isActive: true,
+          lastLoginAt: true,
+          createdAt: true,
+          updatedAt: true,
+        },
+      });
+
+      await tx.auditLog.create({
+        data: {
+          eventType: AuditEventType.STATUS_CHANGED,
+          entityType: "User",
+          entityId: saved.id,
+          userId: user.id,
+          message: "User password reset; temporary password requires change on next login",
           before: publicUser(before),
           after: publicUser(saved),
         },

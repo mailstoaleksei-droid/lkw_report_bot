@@ -9,6 +9,7 @@ type User = {
   email: string;
   displayName: string;
   role: string;
+  mustChangePassword: boolean;
 };
 
 type MetricCounters = {
@@ -149,6 +150,7 @@ type ManagedUser = {
   email: string;
   displayName: string;
   role: string;
+  mustChangePassword: boolean;
   isActive: boolean;
   lastLoginAt: string | null;
   createdAt: string;
@@ -236,6 +238,9 @@ export default function HomePage() {
   const [user, setUser] = useState<User | null>(null);
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
+  const [currentPassword, setCurrentPassword] = useState("");
+  const [newPassword, setNewPassword] = useState("");
+  const [confirmNewPassword, setConfirmNewPassword] = useState("");
   const [selectedDate, setSelectedDate] = useState("2026-05-04");
   const [planning, setPlanning] = useState<PlanningDayResponse | null>(null);
   const [lkw, setLkw] = useState<LkwItem[]>([]);
@@ -251,6 +256,9 @@ export default function HomePage() {
   const [newUserPassword, setNewUserPassword] = useState("");
   const [showNewUserPassword, setShowNewUserPassword] = useState(false);
   const [newUserRole, setNewUserRole] = useState("VIEWER");
+  const [resetPasswordUserId, setResetPasswordUserId] = useState<string | null>(null);
+  const [resetPassword, setResetPassword] = useState("");
+  const [showResetPassword, setShowResetPassword] = useState(false);
   const [newOrderRunde, setNewOrderRunde] = useState("1");
   const [newOrderDescription, setNewOrderDescription] = useState("");
   const [newOrderCustomer, setNewOrderCustomer] = useState("");
@@ -497,6 +505,33 @@ export default function HomePage() {
     await apiFetch("/api/auth/logout", { method: "POST" }).catch(() => null);
     setUser(null);
     setPlanning(null);
+    setCurrentPassword("");
+    setNewPassword("");
+    setConfirmNewPassword("");
+  }
+
+  async function changeOwnPassword(event: FormEvent<HTMLFormElement>): Promise<void> {
+    event.preventDefault();
+    setError(null);
+    if (newPassword !== confirmNewPassword) {
+      setError("New passwords do not match");
+      return;
+    }
+    setLoading(true);
+    try {
+      const result = await apiFetch<{ ok: true; user: User }>("/api/auth/change-password", {
+        method: "POST",
+        body: JSON.stringify({ currentPassword, newPassword }),
+      });
+      setUser(result.user);
+      setCurrentPassword("");
+      setNewPassword("");
+      setConfirmNewPassword("");
+    } catch (caught) {
+      setError(caught instanceof Error ? caught.message : "Password change failed");
+    } finally {
+      setLoading(false);
+    }
   }
 
   async function runImportAction(action: ImportAction, mode: "preview" | "execute"): Promise<void> {
@@ -539,6 +574,7 @@ export default function HomePage() {
       setNewUserEmail("");
       setNewUserDisplayName("");
       setNewUserPassword("");
+      setShowNewUserPassword(false);
       setNewUserRole("VIEWER");
       await loadDashboardData(selectedDate);
     } catch (caught) {
@@ -559,6 +595,25 @@ export default function HomePage() {
       await loadDashboardData(selectedDate);
     } catch (caught) {
       setError(caught instanceof Error ? caught.message : "User update failed");
+    } finally {
+      setUserBusy(null);
+    }
+  }
+
+  async function resetManagedUserPassword(id: string): Promise<void> {
+    setError(null);
+    setUserBusy(id);
+    try {
+      await apiFetch(`/api/users/${id}/reset-password`, {
+        method: "POST",
+        body: JSON.stringify({ password: resetPassword }),
+      });
+      setResetPasswordUserId(null);
+      setResetPassword("");
+      setShowResetPassword(false);
+      await loadDashboardData(selectedDate);
+    } catch (caught) {
+      setError(caught instanceof Error ? caught.message : "Password reset failed");
     } finally {
       setUserBusy(null);
     }
@@ -818,6 +873,35 @@ export default function HomePage() {
           </label>
           {error ? <p className="error">{error}</p> : null}
           <button type="submit" disabled={loading}>{loading ? "Signing in..." : "Sign in"}</button>
+        </form>
+      </main>
+    );
+  }
+
+  if (user.mustChangePassword) {
+    return (
+      <main className="login-shell">
+        <form className="login-panel" onSubmit={changeOwnPassword}>
+          <div>
+            <p className="eyebrow">Internal logistics</p>
+            <h1>Change password</h1>
+            <p className="muted">Temporary password must be changed before using the app.</p>
+          </div>
+          <label>
+            Current temporary password
+            <input value={currentPassword} onChange={(event) => setCurrentPassword(event.target.value)} type="password" required />
+          </label>
+          <label>
+            New password
+            <input value={newPassword} onChange={(event) => setNewPassword(event.target.value)} type="password" minLength={10} required />
+          </label>
+          <label>
+            Confirm new password
+            <input value={confirmNewPassword} onChange={(event) => setConfirmNewPassword(event.target.value)} type="password" minLength={10} required />
+          </label>
+          {error ? <p className="error">{error}</p> : null}
+          <button type="submit" disabled={loading}>{loading ? "Saving..." : "Save new password"}</button>
+          <button type="button" className="secondary-button" onClick={handleLogout}>Logout</button>
         </form>
       </main>
     );
@@ -1450,6 +1534,7 @@ export default function HomePage() {
                     <th>Name</th>
                     <th>Email</th>
                     <th>Role</th>
+                    <th>Password</th>
                     <th>Active</th>
                     <th>Last login</th>
                   </tr>
@@ -1471,6 +1556,50 @@ export default function HomePage() {
                           <option value="MANAGER">MANAGER</option>
                           <option value="ADMIN">ADMIN</option>
                         </select>
+                      </td>
+                      <td>
+                        {resetPasswordUserId === item.id ? (
+                          <div className="reset-password-row">
+                            <input
+                              type={showResetPassword ? "text" : "password"}
+                              value={resetPassword}
+                              onChange={(event) => setResetPassword(event.target.value)}
+                              placeholder="New temporary password"
+                              minLength={10}
+                            />
+                            <button type="button" className="secondary-button" onClick={() => setShowResetPassword((current) => !current)}>
+                              {showResetPassword ? "Hide" : "Show"}
+                            </button>
+                            <button type="button" onClick={() => resetManagedUserPassword(item.id)} disabled={Boolean(userBusy) || resetPassword.length < 10}>
+                              Save
+                            </button>
+                            <button
+                              type="button"
+                              className="secondary-button"
+                              onClick={() => {
+                                setResetPasswordUserId(null);
+                                setResetPassword("");
+                                setShowResetPassword(false);
+                              }}
+                            >
+                              Cancel
+                            </button>
+                          </div>
+                        ) : (
+                          <button
+                            type="button"
+                            className="secondary-button"
+                            disabled={Boolean(userBusy)}
+                            onClick={() => {
+                              setResetPasswordUserId(item.id);
+                              setResetPassword("");
+                              setShowResetPassword(false);
+                            }}
+                          >
+                            Reset password
+                          </button>
+                        )}
+                        {item.mustChangePassword ? <span className="muted"> Temporary password active</span> : null}
                       </td>
                       <td>
                         <input

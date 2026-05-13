@@ -60,6 +60,8 @@ Status legend:
 - [x] Add user management endpoints.
   - Admin-only list/create/update endpoints are implemented.
   - API blocks self role downgrade and self deactivation.
+  - Admin can reset a user's password to a new temporary password.
+  - New and reset temporary passwords force the user to create a new password after login.
 - [x] Add LKW endpoints.
   - `GET /api/lkw` supports read filters for the planning UI.
 - [x] Add driver endpoints.
@@ -215,8 +217,10 @@ Status legend:
 - [~] User management page.
   - Admin UI can list users, create users with temporary passwords, change roles, and activate/deactivate users.
   - Admin can toggle visibility for the temporary password while creating a user.
+  - Admin can reset a user's password and toggle visibility for the new temporary password.
+  - Users with a temporary password are forced into a change-password screen before using the app.
   - Self role change and self deactivation are blocked by API and disabled in UI.
-  - Password reset flow and separate route/page are pending.
+  - Separate route/page is pending.
 - [ ] Settings page.
 
 ## 7. Exports
