@@ -17,8 +17,46 @@ type ProblemCheck = {
   problemReason: string | null;
 };
 
+type AssignmentAuditSnapshot = {
+  lkw: string;
+  driver: string;
+  status: string;
+  problemReason: string | null;
+};
+
 function dateOnly(value: Date): Date {
   return new Date(value.toISOString().slice(0, 10) + "T00:00:00.000Z");
+}
+
+async function assignmentAuditSnapshot(
+  tx: Prisma.TransactionClient,
+  assignment: { lkwId: string | null; driverId: string | null; status: OrderStatus; problemReason: string | null } | null,
+): Promise<AssignmentAuditSnapshot> {
+  if (!assignment) {
+    return { lkw: "-", driver: "-", status: "-", problemReason: null };
+  }
+  const [lkw, driver] = await Promise.all([
+    assignment.lkwId ? tx.lkw.findUnique({ where: { id: assignment.lkwId }, select: { number: true } }) : null,
+    assignment.driverId ? tx.driver.findUnique({ where: { id: assignment.driverId }, select: { fullName: true } }) : null,
+  ]);
+  return {
+    lkw: lkw?.number || "-",
+    driver: driver?.fullName || "-",
+    status: assignment.status,
+    problemReason: assignment.problemReason,
+  };
+}
+
+function summarizeAssignmentChanges(before: AssignmentAuditSnapshot, after: AssignmentAuditSnapshot): string {
+  const changes = [
+    before.lkw !== after.lkw ? `LKW: ${before.lkw} -> ${after.lkw}` : null,
+    before.driver !== after.driver ? `driver: ${before.driver} -> ${after.driver}` : null,
+    before.status !== after.status ? `status: ${before.status} -> ${after.status}` : null,
+    (before.problemReason || "-") !== (after.problemReason || "-")
+      ? `problem: ${before.problemReason || "-"} -> ${after.problemReason || "-"}`
+      : null,
+  ].filter(Boolean);
+  return changes.length > 0 ? `Assignment updated: ${changes.join("; ")}` : "Assignment updated";
 }
 
 async function checkAssignmentProblems(
@@ -124,6 +162,7 @@ export async function registerAssignmentRoutes(app: FastifyInstance, config: App
       const before = await tx.assignment.findFirst({
         where: { orderId: input.orderId, deletedAt: null },
       });
+      const beforeSnapshot = await assignmentAuditSnapshot(tx, before);
       const check = await checkAssignmentProblems(tx, input);
 
       const assignment = before
@@ -151,6 +190,7 @@ export async function registerAssignmentRoutes(app: FastifyInstance, config: App
             problemReason: check.problemReason,
           },
         });
+      const afterSnapshot = await assignmentAuditSnapshot(tx, assignment);
 
       const updatedOrder = await tx.order.update({
         where: { id: input.orderId },
@@ -168,7 +208,7 @@ export async function registerAssignmentRoutes(app: FastifyInstance, config: App
           orderId: input.orderId,
           assignmentId: assignment.id,
           userId: user.id,
-          message: before ? "Assignment updated" : "Assignment created",
+          message: before ? summarizeAssignmentChanges(beforeSnapshot, afterSnapshot) : `Assignment created: LKW ${afterSnapshot.lkw}; driver ${afterSnapshot.driver}`,
           before: before || undefined,
           after: assignment,
         },
@@ -183,7 +223,7 @@ export async function registerAssignmentRoutes(app: FastifyInstance, config: App
             orderId: input.orderId,
             assignmentId: assignment.id,
             userId: user.id,
-            message: "Driver assigned",
+            message: `Driver assigned: ${afterSnapshot.driver}`,
             after: assignment,
           },
         });

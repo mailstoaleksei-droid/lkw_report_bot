@@ -27,6 +27,31 @@ function toPlanningDate(value: string): Date {
   return new Date(`${value}T00:00:00.000Z`);
 }
 
+function normalizeAuditValue(value: unknown): string {
+  if (value === null || value === undefined || value === "") return "-";
+  if (value instanceof Date) return value.toISOString().slice(0, 10);
+  return String(value);
+}
+
+function summarizeOrderChanges(before: Record<string, unknown>, after: Record<string, unknown>): string {
+  const labels: Record<string, string> = {
+    planningDate: "date",
+    runde: "Runde",
+    description: "Auftrag",
+    customer: "customer",
+    plz: "PLZ",
+    city: "city",
+    country: "country",
+    plannedTime: "time",
+    info: "info",
+    status: "status",
+  };
+  const changes = Object.entries(labels)
+    .filter(([field]) => normalizeAuditValue(before[field]) !== normalizeAuditValue(after[field]))
+    .map(([field, label]) => `${label}: ${normalizeAuditValue(before[field])} -> ${normalizeAuditValue(after[field])}`);
+  return changes.length > 0 ? `Order updated: ${changes.join("; ")}` : "Order updated";
+}
+
 export async function registerOrderRoutes(app: FastifyInstance, config: AppConfig): Promise<void> {
   app.post("/api/orders", async (request, reply) => {
     const user = await requireUser(request, reply, config, "OPERATOR");
@@ -124,7 +149,7 @@ export async function registerOrderRoutes(app: FastifyInstance, config: AppConfi
           entityId: saved.id,
           orderId: saved.id,
           userId: user.id,
-          message: "Order updated",
+          message: summarizeOrderChanges(before, saved),
           before,
           after: saved,
         },
@@ -217,7 +242,7 @@ export async function registerOrderRoutes(app: FastifyInstance, config: AppConfi
           entityId: saved.id,
           orderId: saved.id,
           userId: user.id,
-          message: "Order cancelled",
+          message: summarizeOrderChanges(before, saved),
           before,
           after: saved,
         },

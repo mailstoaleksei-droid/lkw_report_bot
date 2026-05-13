@@ -169,6 +169,8 @@ Status legend:
   - Root page includes the MVP Tagesplanung read view.
 - [x] LKW-first table starting with LKW column.
   - The first table column is LKW.
+  - Operators/Admins can mark a row as assigned from the right-side action column.
+  - Assigned rows move into the `Assigned orders` block and can be returned to active planning.
 - [x] Orders-first mode.
   - Web UI can switch between LKW-first and Orders-first tables.
   - Orders-first view includes assigned and unassigned orders for the selected date.
@@ -177,8 +179,8 @@ Status legend:
   - Orders-first dropdowns hide LKW and drivers already assigned in the same Runde.
   - Selecting a LKW auto-fills the driver when a same-date LKW-driver pairing is already known.
   - Orders can be edited inline, including Runde, Auftrag, customer, PLZ/city/country, time, and info.
-  - Orders can be marked Done, cancelled, or soft-deleted from the Orders-first table.
-  - Orders-first action buttons are placed next to Auftrag and edit column widths are fixed to prevent layout jumps.
+  - Orders can be edited and soft-deleted from the Orders-first table.
+  - Orders-first action column is at the right edge and includes `Save` and `Delete`.
 - [~] Filters: date, week, month, company, LKW, driver, status, Runde.
   - Date, LKW, driver, status, and Runde filters are implemented in the web UI.
   - Week, month, and company filters are pending.
@@ -196,6 +198,7 @@ Status legend:
   - Root UI now includes import cards for reporting master data, weekly schedules, and driver availability.
 - [~] Audit Log page.
   - Web UI shows the latest 200 audit events in a searchable table.
+  - Order and assignment audit messages now include field-level before/after change summaries for new changes.
   - Separate route/page and advanced filters are pending.
 - [~] User management page.
   - Admin UI can list users, create users with temporary passwords, change roles, and activate/deactivate users.
