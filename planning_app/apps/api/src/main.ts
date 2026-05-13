@@ -8,6 +8,7 @@ import { registerAuthRoutes } from "./routes/auth.js";
 import { registerAuditRoutes } from "./routes/audit.js";
 import { registerAssignmentRoutes } from "./routes/assignments.js";
 import { registerDriverRoutes } from "./routes/drivers.js";
+import { registerExportRoutes } from "./routes/exports.js";
 import { registerImportRoutes } from "./routes/imports.js";
 import { registerLkwRoutes } from "./routes/lkw.js";
 import { registerMetaRoutes } from "./routes/meta.js";
@@ -34,6 +35,7 @@ await registerOrderRoutes(app, config);
 await registerAssignmentRoutes(app, config);
 await registerPlanningRoutes(app, config);
 await registerAuditRoutes(app, config);
+await registerExportRoutes(app, config);
 
 for (const signal of ["SIGINT", "SIGTERM"] as const) {
   process.on(signal, async () => {

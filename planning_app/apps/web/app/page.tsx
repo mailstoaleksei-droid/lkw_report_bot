@@ -269,6 +269,10 @@ export default function HomePage() {
     }
   }
 
+  function exportTagesplanung(): void {
+    window.location.href = `${apiBaseUrl}/api/exports/tagesplanung.csv?date=${selectedDate}`;
+  }
+
   if (loading && !user) {
     return <main className="shell"><p>Loading...</p></main>;
   }
@@ -316,6 +320,9 @@ export default function HomePage() {
         </label>
         <button type="button" onClick={() => loadDashboardData(selectedDate)} disabled={loading}>
           Refresh
+        </button>
+        <button type="button" className="secondary-button" onClick={exportTagesplanung}>
+          Export CSV
         </button>
         {error ? <span className="error">{error}</span> : null}
       </section>
