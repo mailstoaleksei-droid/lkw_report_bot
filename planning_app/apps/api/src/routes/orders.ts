@@ -109,6 +109,14 @@ export async function registerOrderRoutes(app: FastifyInstance, config: AppConfi
           ...(input.status ? { status: input.status } : {}),
         },
       });
+      await tx.assignment.updateMany({
+        where: { orderId: saved.id, deletedAt: null },
+        data: {
+          planningDate: saved.planningDate,
+          runde: saved.runde,
+          ...(input.status ? { status: input.status } : {}),
+        },
+      });
       await tx.auditLog.create({
         data: {
           eventType: AuditEventType.ORDER_UPDATED,
@@ -125,6 +133,56 @@ export async function registerOrderRoutes(app: FastifyInstance, config: AppConfi
     });
 
     return { ok: true, order };
+  });
+
+  app.delete("/api/orders/:id", async (request, reply) => {
+    const user = await requireUser(request, reply, config, "OPERATOR");
+    if (!user) return;
+
+    const params = z.object({ id: z.string().uuid() }).safeParse(request.params);
+    if (!params.success) {
+      return reply.code(400).send({ ok: false, error: "Invalid order id" });
+    }
+
+    const before = await prisma.order.findFirst({
+      where: { id: params.data.id, deletedAt: null },
+    });
+    if (!before) {
+      return reply.code(404).send({ ok: false, error: "Order not found" });
+    }
+
+    const deleted = await prisma.$transaction(async (tx) => {
+      const now = new Date();
+      const saved = await tx.order.update({
+        where: { id: params.data.id },
+        data: {
+          status: OrderStatus.CANCELLED,
+          deletedAt: now,
+        },
+      });
+      await tx.assignment.updateMany({
+        where: { orderId: saved.id, deletedAt: null },
+        data: {
+          status: OrderStatus.CANCELLED,
+          deletedAt: now,
+        },
+      });
+      await tx.auditLog.create({
+        data: {
+          eventType: AuditEventType.ORDER_DELETED,
+          entityType: "Order",
+          entityId: saved.id,
+          orderId: saved.id,
+          userId: user.id,
+          message: "Order soft-deleted",
+          before,
+          after: saved,
+        },
+      });
+      return saved;
+    });
+
+    return { ok: true, order: deleted };
   });
 
   app.post("/api/orders/:id/cancel", async (request, reply) => {

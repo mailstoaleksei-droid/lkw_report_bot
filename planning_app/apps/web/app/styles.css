@@ -128,6 +128,14 @@ label {
   background: #d9e2ee;
 }
 
+.danger-button {
+  background: #b42318;
+}
+
+.danger-button:hover {
+  background: #912018;
+}
+
 .toolbar {
   align-items: end;
   background: var(--panel);
@@ -227,6 +235,24 @@ label {
   width: 100%;
 }
 
+.city-edit {
+  display: grid;
+  gap: 6px;
+  grid-template-columns: 70px minmax(110px, 1fr) 70px;
+}
+
+.action-cell {
+  display: grid;
+  gap: 6px;
+  grid-template-columns: repeat(2, minmax(92px, 1fr));
+  min-width: 200px;
+}
+
+.action-cell button {
+  min-height: 34px;
+  padding: 6px 8px;
+}
+
 .table-wrap {
   overflow: auto;
 }
@@ -234,7 +260,7 @@ label {
 table {
   border-collapse: collapse;
   font-size: 14px;
-  min-width: 1120px;
+  min-width: 1280px;
   width: 100%;
 }
 

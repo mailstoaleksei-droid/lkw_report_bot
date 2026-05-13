@@ -120,6 +120,7 @@ Status legend:
   - Docker API preview and execute endpoints verified on 2026-05-13.
 - [ ] Direct Excel `Urlaub` import fallback, if reporting DB ETL is unavailable.
 - [ ] Import from Excel daily Tagesplan source.
+- [ ] Import `Kalender` LKW-driver pairings from `LKW_Fahrer_Data.xlsm`.
 - [x] Identify exact source sheet for daily Tagesplan.
   - Source workbook: `Dispo 2026 Wochenplanung_.xlsm`.
   - Each date sheet is one planning date, for example `04.05`.
@@ -173,6 +174,10 @@ Status legend:
   - Orders-first view includes assigned and unassigned orders for the selected date.
   - Operators/Admins can create a new order from the Tagesplanung view.
   - Operators/Admins can assign or update LKW and driver from the Orders-first table.
+  - Orders-first dropdowns hide LKW and drivers already assigned in the same Runde.
+  - Selecting a LKW auto-fills the driver when a same-date LKW-driver pairing is already known.
+  - Orders can be edited inline, including Runde, Auftrag, customer, PLZ/city/country, time, and info.
+  - Orders can be marked Done, cancelled, or soft-deleted from the Orders-first table.
 - [~] Filters: date, week, month, company, LKW, driver, status, Runde.
   - Date, LKW, driver, status, and Runde filters are implemented in the web UI.
   - Week, month, and company filters are pending.
