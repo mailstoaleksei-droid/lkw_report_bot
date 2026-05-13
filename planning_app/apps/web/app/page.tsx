@@ -96,6 +96,44 @@ type AuditItem = {
   } | null;
 };
 
+type ImportAction = {
+  key: string;
+  title: string;
+  previewPath: string;
+  executePath: string;
+};
+
+type ImportResult = {
+  ok?: boolean;
+  source?: string;
+  scope?: Record<string, unknown>;
+  counts?: Record<string, unknown>;
+  applied?: Record<string, unknown>;
+  issues?: unknown[];
+  error?: string;
+};
+
+const importActions: ImportAction[] = [
+  {
+    key: "master",
+    title: "Master data",
+    previewPath: "/api/imports/reporting-master-data/preview",
+    executePath: "/api/imports/reporting-master-data/execute",
+  },
+  {
+    key: "schedules",
+    title: "Weekly schedules",
+    previewPath: "/api/imports/reporting-schedules/preview",
+    executePath: "/api/imports/reporting-schedules/execute",
+  },
+  {
+    key: "availability",
+    title: "Driver availability",
+    previewPath: "/api/imports/reporting-driver-availability/preview",
+    executePath: "/api/imports/reporting-driver-availability/execute",
+  },
+];
+
 function todayDate(): string {
   return new Date().toISOString().slice(0, 10);
 }
@@ -126,6 +164,8 @@ export default function HomePage() {
   const [lkw, setLkw] = useState<LkwItem[]>([]);
   const [drivers, setDrivers] = useState<DriverItem[]>([]);
   const [audit, setAudit] = useState<AuditItem[]>([]);
+  const [importResults, setImportResults] = useState<Record<string, ImportResult>>({});
+  const [importBusy, setImportBusy] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
@@ -204,6 +244,29 @@ export default function HomePage() {
     await apiFetch("/api/auth/logout", { method: "POST" }).catch(() => null);
     setUser(null);
     setPlanning(null);
+  }
+
+  async function runImportAction(action: ImportAction, mode: "preview" | "execute"): Promise<void> {
+    setError(null);
+    setImportBusy(`${action.key}:${mode}`);
+    try {
+      const path = mode === "preview" ? action.previewPath : action.executePath;
+      const result = await apiFetch<ImportResult>(path, {
+        method: mode === "preview" ? "GET" : "POST",
+        body: mode === "preview" ? undefined : "{}",
+      });
+      setImportResults((current) => ({ ...current, [action.key]: result }));
+      if (mode === "execute") {
+        await loadDashboardData(selectedDate);
+      }
+    } catch (caught) {
+      setImportResults((current) => ({
+        ...current,
+        [action.key]: { ok: false, error: caught instanceof Error ? caught.message : "Import failed" },
+      }));
+    } finally {
+      setImportBusy(null);
+    }
   }
 
   if (loading && !user) {
@@ -324,6 +387,52 @@ export default function HomePage() {
       </section>
 
       <section className="side-grid">
+        <div className="list-panel imports-panel">
+          <h2>Imports</h2>
+          <div className="imports-grid">
+            {importActions.map((action) => {
+              const result = importResults[action.key];
+              return (
+                <div className="import-card" key={action.key}>
+                  <div>
+                    <strong>{action.title}</strong>
+                    <span>Reporting DB source</span>
+                  </div>
+                  <div className="import-buttons">
+                    <button
+                      type="button"
+                      className="secondary-button"
+                      disabled={Boolean(importBusy)}
+                      onClick={() => runImportAction(action, "preview")}
+                    >
+                      Preview
+                    </button>
+                    <button
+                      type="button"
+                      disabled={Boolean(importBusy)}
+                      onClick={() => runImportAction(action, "execute")}
+                    >
+                      Execute
+                    </button>
+                  </div>
+                  {result ? (
+                    <pre className={result.ok === false ? "import-result import-error" : "import-result"}>
+                      {JSON.stringify({
+                        ok: result.ok,
+                        scope: result.scope,
+                        counts: result.counts,
+                        applied: result.applied,
+                        issues: result.issues?.length,
+                        error: result.error,
+                      }, null, 2)}
+                    </pre>
+                  ) : null}
+                </div>
+              );
+            })}
+          </div>
+        </div>
+
         <div className="list-panel">
           <h2>Active LKW</h2>
           {lkw.map((item) => (

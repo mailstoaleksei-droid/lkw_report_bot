@@ -172,7 +172,8 @@ Status legend:
 - [ ] Holiday warning banner.
 - [ ] LKW management page.
 - [ ] Driver management page.
-- [ ] Import page with preview.
+- [~] Import page with preview.
+  - Root UI now includes import cards for reporting master data, weekly schedules, and driver availability.
 - [ ] Audit Log page.
 - [ ] User management page.
 - [ ] Settings page.
