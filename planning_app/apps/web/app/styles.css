@@ -238,14 +238,15 @@ label {
 .city-edit {
   display: grid;
   gap: 6px;
-  grid-template-columns: 70px minmax(110px, 1fr) 70px;
+  grid-template-columns: 72px 128px 72px;
+  width: 288px;
 }
 
 .action-cell {
   display: grid;
   gap: 6px;
   grid-template-columns: repeat(2, minmax(92px, 1fr));
-  min-width: 200px;
+  width: 204px;
 }
 
 .action-cell button {
@@ -262,6 +263,65 @@ table {
   font-size: 14px;
   min-width: 1280px;
   width: 100%;
+}
+
+.orders-table {
+  table-layout: fixed;
+  min-width: 1560px;
+}
+
+.orders-table th:nth-child(1),
+.orders-table td:nth-child(1) {
+  width: 90px;
+}
+
+.orders-table th:nth-child(2),
+.orders-table td:nth-child(2) {
+  width: 250px;
+}
+
+.orders-table th:nth-child(3),
+.orders-table td:nth-child(3) {
+  width: 228px;
+}
+
+.orders-table th:nth-child(4),
+.orders-table td:nth-child(4) {
+  width: 210px;
+}
+
+.orders-table th:nth-child(5),
+.orders-table td:nth-child(5) {
+  width: 280px;
+}
+
+.orders-table th:nth-child(6),
+.orders-table td:nth-child(6) {
+  width: 190px;
+}
+
+.orders-table th:nth-child(7),
+.orders-table td:nth-child(7) {
+  width: 310px;
+}
+
+.orders-table th:nth-child(8),
+.orders-table td:nth-child(8) {
+  width: 130px;
+}
+
+.orders-table th:nth-child(9),
+.orders-table td:nth-child(9) {
+  width: 170px;
+}
+
+.orders-table select,
+.orders-table input {
+  width: 100%;
+}
+
+.time-input {
+  max-width: 112px;
 }
 
 th,

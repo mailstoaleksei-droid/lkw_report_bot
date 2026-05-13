@@ -178,6 +178,7 @@ Status legend:
   - Selecting a LKW auto-fills the driver when a same-date LKW-driver pairing is already known.
   - Orders can be edited inline, including Runde, Auftrag, customer, PLZ/city/country, time, and info.
   - Orders can be marked Done, cancelled, or soft-deleted from the Orders-first table.
+  - Orders-first action buttons are placed next to Auftrag and edit column widths are fixed to prevent layout jumps.
 - [~] Filters: date, week, month, company, LKW, driver, status, Runde.
   - Date, LKW, driver, status, and Runde filters are implemented in the web UI.
   - Week, month, and company filters are pending.

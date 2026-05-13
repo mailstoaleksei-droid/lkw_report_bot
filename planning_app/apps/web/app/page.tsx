@@ -910,11 +910,12 @@ export default function HomePage() {
               </tbody>
             </table>
           ) : (
-            <table>
+            <table className="orders-table">
               <thead>
                 <tr>
                   <th>Runde</th>
                   <th>Auftrag</th>
+                  {canEditPlanning ? <th>Action</th> : null}
                   <th>LKW</th>
                   <th>Driver</th>
                   <th>Customer</th>
@@ -923,7 +924,6 @@ export default function HomePage() {
                   <th>Info</th>
                   <th>Status</th>
                   <th>Problem</th>
-                  {canEditPlanning ? <th>Action</th> : null}
                 </tr>
               </thead>
               <tbody>
@@ -956,6 +956,25 @@ export default function HomePage() {
                           <input value={orderDraft.description} onChange={(event) => updateOrderDraft(row.orderId, "description", event.target.value, row)} />
                         ) : row.description}
                       </td>
+                      {canEditPlanning ? (
+                        <td className="action-cell">
+                          <button type="button" onClick={() => saveOrder(row)} disabled={Boolean(orderBusy)}>
+                            Save order
+                          </button>
+                          <button type="button" onClick={() => saveAssignment(row)} disabled={Boolean(orderBusy)}>
+                            Save assign
+                          </button>
+                          <button type="button" className="secondary-button" onClick={() => setOrderStatus(row.orderId, "DONE")} disabled={Boolean(orderBusy)}>
+                            Done
+                          </button>
+                          <button type="button" className="secondary-button" onClick={() => setOrderStatus(row.orderId, "CANCELLED")} disabled={Boolean(orderBusy)}>
+                            Cancel
+                          </button>
+                          <button type="button" className="danger-button" onClick={() => deleteOrder(row.orderId)} disabled={Boolean(orderBusy)}>
+                            Delete
+                          </button>
+                        </td>
+                      ) : null}
                       <td>
                         {canEditPlanning ? (
                           <select value={draft.lkwId} onChange={(event) => updateAssignmentDraft(row.orderId, "lkwId", event.target.value, { ...row, runde: effectiveRunde })}>
@@ -992,7 +1011,7 @@ export default function HomePage() {
                       </td>
                       <td>
                         {canEditPlanning ? (
-                          <input value={orderDraft.plannedTime} onChange={(event) => updateOrderDraft(row.orderId, "plannedTime", event.target.value, row)} />
+                          <input className="time-input" value={orderDraft.plannedTime} onChange={(event) => updateOrderDraft(row.orderId, "plannedTime", event.target.value, row)} />
                         ) : row.time}
                       </td>
                       <td>
@@ -1006,25 +1025,6 @@ export default function HomePage() {
                         </span>
                       </td>
                       <td>{row.problemReason || "-"}</td>
-                      {canEditPlanning ? (
-                        <td className="action-cell">
-                          <button type="button" onClick={() => saveOrder(row)} disabled={Boolean(orderBusy)}>
-                            Save order
-                          </button>
-                          <button type="button" onClick={() => saveAssignment(row)} disabled={Boolean(orderBusy)}>
-                            Save assign
-                          </button>
-                          <button type="button" className="secondary-button" onClick={() => setOrderStatus(row.orderId, "DONE")} disabled={Boolean(orderBusy)}>
-                            Done
-                          </button>
-                          <button type="button" className="secondary-button" onClick={() => setOrderStatus(row.orderId, "CANCELLED")} disabled={Boolean(orderBusy)}>
-                            Cancel
-                          </button>
-                          <button type="button" className="danger-button" onClick={() => deleteOrder(row.orderId)} disabled={Boolean(orderBusy)}>
-                            Delete
-                          </button>
-                        </td>
-                      ) : null}
                     </tr>
                   );
                 })}
