@@ -68,6 +68,12 @@ type PlanningDayResponse = {
     id: string;
     runde: number;
     description: string;
+    customer: string | null;
+    plz: string | null;
+    city: string | null;
+    country: string | null;
+    plannedTime: string | null;
+    info: string | null;
     status: string;
     problemReason: string | null;
   }>;
@@ -140,6 +146,8 @@ const importActions: ImportAction[] = [
   },
 ];
 
+type ViewMode = "lkw-first" | "orders-first";
+
 function todayDate(): string {
   return new Date().toISOString().slice(0, 10);
 }
@@ -176,6 +184,7 @@ export default function HomePage() {
   const [driverFilter, setDriverFilter] = useState("");
   const [statusFilter, setStatusFilter] = useState("");
   const [rundeFilter, setRundeFilter] = useState("");
+  const [viewMode, setViewMode] = useState<ViewMode>("lkw-first");
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
@@ -220,6 +229,41 @@ export default function HomePage() {
       const rundeMatch = !rundeFilter || String(row.runde) === rundeFilter;
       return lkwMatch && driverMatch && statusMatch && rundeMatch;
     });
+  }, [planning, lkwFilter, driverFilter, statusFilter, rundeFilter]);
+
+  const ordersFirstRows = useMemo(() => {
+    const assigned = (planning?.rows || []).map((row) => ({
+      key: row.id,
+      runde: row.runde,
+      description: row.order.description,
+      lkw: row.lkw?.number || "-",
+      driver: row.driver?.fullName || "-",
+      city: [row.order.plz, row.order.city, row.order.country].filter(Boolean).join(" ") || "-",
+      time: row.order.plannedTime || "-",
+      status: row.order.status || row.status,
+      problemReason: row.order.problemReason || row.problemReason,
+    }));
+    const unassigned = (planning?.unassignedOrders || []).map((order) => ({
+      key: order.id,
+      runde: order.runde,
+      description: order.description,
+      lkw: "-",
+      driver: "-",
+      city: [order.plz, order.city, order.country].filter(Boolean).join(" ") || "-",
+      time: order.plannedTime || "-",
+      status: order.status,
+      problemReason: order.problemReason,
+    }));
+
+    return [...assigned, ...unassigned]
+      .filter((row) => {
+        const lkwMatch = !lkwFilter || row.lkw.toLowerCase().includes(lkwFilter.toLowerCase());
+        const driverMatch = !driverFilter || row.driver.toLowerCase().includes(driverFilter.toLowerCase());
+        const statusMatch = !statusFilter || row.status === statusFilter;
+        const rundeMatch = !rundeFilter || String(row.runde) === rundeFilter;
+        return lkwMatch && driverMatch && statusMatch && rundeMatch;
+      })
+      .sort((a, b) => a.runde - b.runde || a.description.localeCompare(b.description));
   }, [planning, lkwFilter, driverFilter, statusFilter, rundeFilter]);
 
   async function loadDashboardData(date: string): Promise<void> {
@@ -409,63 +453,119 @@ export default function HomePage() {
         >
           Clear filters
         </button>
-        <span className="muted">{filteredRows.length} visible / {planning?.rows.length || 0} total</span>
+        <span className="muted">
+          {viewMode === "lkw-first"
+            ? `${filteredRows.length} visible / ${planning?.rows.length || 0} total`
+            : `${ordersFirstRows.length} visible / ${(planning?.rows.length || 0) + (planning?.unassignedOrders.length || 0)} total`}
+        </span>
       </section>
 
       <section className="planner">
         <div className="planner-header">
           <div>
             <h2>Tagesplanung</h2>
-            <p>LKW-first view for {selectedDate}. Data is read from the isolated planning database.</p>
+            <p>{viewMode === "lkw-first" ? "LKW-first" : "Orders-first"} view for {selectedDate}. Data is read from the isolated planning database.</p>
           </div>
           <div className="mode-switch">
-            <button type="button">LKW-first</button>
-            <button type="button" className="secondary-button">Orders-first</button>
+            <button
+              type="button"
+              className={viewMode === "lkw-first" ? "" : "secondary-button"}
+              onClick={() => setViewMode("lkw-first")}
+            >
+              LKW-first
+            </button>
+            <button
+              type="button"
+              className={viewMode === "orders-first" ? "" : "secondary-button"}
+              onClick={() => setViewMode("orders-first")}
+            >
+              Orders-first
+            </button>
           </div>
         </div>
 
         <div className="table-wrap">
-          <table>
-            <thead>
-              <tr>
-                <th>LKW</th>
-                <th>LKW status</th>
-                <th>Driver</th>
-                <th>Driver check</th>
-                <th>Chassis</th>
-                <th>Runde</th>
-                <th>Auftrag</th>
-                <th>City</th>
-                <th>Time</th>
-                <th>Status</th>
-              </tr>
-            </thead>
-            <tbody>
-              {filteredRows.map((row) => (
-                <tr key={row.id} className={row.status === "PROBLEM" || row.order.status === "PROBLEM" ? "problem-row" : ""}>
-                  <td>{row.lkw?.number || "-"}</td>
-                  <td>{row.lkw?.status || "-"}</td>
-                  <td>{row.driver?.fullName || "-"}</td>
-                  <td>{row.driver?.availability?.[0]?.status || "OK"}</td>
-                  <td>{row.chassis?.number || "-"}</td>
-                  <td>{row.runde}</td>
-                  <td>{row.order.description}</td>
-                  <td>{[row.order.plz, row.order.city, row.order.country].filter(Boolean).join(" ") || "-"}</td>
-                  <td>{row.order.plannedTime || "-"}</td>
-                  <td>
-                    <span className={`status status-${(row.order.status || row.status).toLowerCase()}`}>
-                      {row.order.status || row.status}
-                    </span>
-                  </td>
-                </tr>
-              ))}
-              {planning && filteredRows.length === 0 ? (
+          {viewMode === "lkw-first" ? (
+            <table>
+              <thead>
                 <tr>
-                  <td colSpan={10}>No planning rows match the current filters.</td>
+                  <th>LKW</th>
+                  <th>LKW status</th>
+                  <th>Driver</th>
+                  <th>Driver check</th>
+                  <th>Chassis</th>
+                  <th>Runde</th>
+                  <th>Auftrag</th>
+                  <th>City</th>
+                  <th>Time</th>
+                  <th>Status</th>
                 </tr>
-              ) : null}
-            </tbody>
-          </table>
+              </thead>
+              <tbody>
+                {filteredRows.map((row) => (
+                  <tr key={row.id} className={row.status === "PROBLEM" || row.order.status === "PROBLEM" ? "problem-row" : ""}>
+                    <td>{row.lkw?.number || "-"}</td>
+                    <td>{row.lkw?.status || "-"}</td>
+                    <td>{row.driver?.fullName || "-"}</td>
+                    <td>{row.driver?.availability?.[0]?.status || "OK"}</td>
+                    <td>{row.chassis?.number || "-"}</td>
+                    <td>{row.runde}</td>
+                    <td>{row.order.description}</td>
+                    <td>{[row.order.plz, row.order.city, row.order.country].filter(Boolean).join(" ") || "-"}</td>
+                    <td>{row.order.plannedTime || "-"}</td>
+                    <td>
+                      <span className={`status status-${(row.order.status || row.status).toLowerCase()}`}>
+                        {row.order.status || row.status}
+                      </span>
+                    </td>
+                  </tr>
+                ))}
+                {planning && filteredRows.length === 0 ? (
+                  <tr>
+                    <td colSpan={10}>No planning rows match the current filters.</td>
+                  </tr>
+                ) : null}
+              </tbody>
+            </table>
+          ) : (
+            <table>
+              <thead>
+                <tr>
+                  <th>Runde</th>
+                  <th>Auftrag</th>
+                  <th>LKW</th>
+                  <th>Driver</th>
+                  <th>City</th>
+                  <th>Time</th>
+                  <th>Status</th>
+                  <th>Problem</th>
+                </tr>
+              </thead>
+              <tbody>
+                {ordersFirstRows.map((row) => (
+                  <tr key={row.key} className={row.status === "PROBLEM" ? "problem-row" : ""}>
+                    <td>{row.runde}</td>
+                    <td>{row.description}</td>
+                    <td>{row.lkw}</td>
+                    <td>{row.driver}</td>
+                    <td>{row.city}</td>
+                    <td>{row.time}</td>
+                    <td>
+                      <span className={`status status-${row.status.toLowerCase()}`}>
+                        {row.status}
+                      </span>
+                    </td>
+                    <td>{row.problemReason || "-"}</td>
+                  </tr>
+                ))}
+                {planning && ordersFirstRows.length === 0 ? (
+                  <tr>
+                    <td colSpan={8}>No orders match the current filters.</td>
+                  </tr>
+                ) : null}
+              </tbody>
+            </table>
+          )}
         </div>
       </section>
 

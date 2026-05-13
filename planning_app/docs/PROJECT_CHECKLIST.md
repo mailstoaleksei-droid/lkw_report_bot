@@ -168,7 +168,9 @@ Status legend:
   - Root page includes the MVP Tagesplanung read view.
 - [x] LKW-first table starting with LKW column.
   - The first table column is LKW.
-- [ ] Orders-first mode.
+- [x] Orders-first mode.
+  - Web UI can switch between LKW-first and Orders-first tables.
+  - Orders-first view includes assigned and unassigned orders for the selected date.
 - [~] Filters: date, week, month, company, LKW, driver, status, Runde.
   - Date, LKW, driver, status, and Runde filters are implemented in the web UI.
   - Week, month, and company filters are pending.
