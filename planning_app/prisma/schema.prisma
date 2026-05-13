@@ -229,7 +229,7 @@ model Order {
   plannedTime     String?
   info            String?
   tourType        String?
-  externalOrderId String?
+  externalOrderId String?       @unique
   status          OrderStatus  @default(OPEN)
   problemReason   String?
   createdById     String?

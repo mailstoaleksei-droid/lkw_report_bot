@@ -96,7 +96,13 @@ Status legend:
   - Imported on 2026-05-13: 14 companies, 78 LKW, 157 LKW aliases, 92 drivers.
   - Skipped 7 placeholder LKW rows without `plate_number`.
   - Docker API preview and execute endpoints verified on 2026-05-13.
-- [ ] Import from existing reporting DB: weekly schedules.
+- [x] Import from existing reporting DB: weekly schedules.
+  - Preview endpoint added: `GET /api/imports/reporting-schedules/preview`.
+  - Execute endpoint added: `POST /api/imports/reporting-schedules/execute`.
+  - Imported on 2026-05-13: 1587 weekly schedule orders and 1587 assignments.
+  - Skipped 548 reporting status rows that are not assignment rows.
+  - Marked 12 imported schedule orders as `PROBLEM` because no driver was resolved in the reporting source.
+  - Docker API preview and execute endpoints verified on 2026-05-13.
 - [ ] Import from Excel `Urlaub`: daily vacation/sick data.
 - [ ] Import from Excel daily Tagesplan source.
 - [x] Identify exact source sheet for daily Tagesplan.
@@ -112,6 +118,7 @@ Status legend:
   - Current master import uses upsert by company name, LKW number, driver external ID, and alias/source.
 - [x] Add safe transaction execution.
   - Master import uses a Prisma transaction and marks failed `ImportRun` records as `FAILED`.
+  - Weekly schedule import uses a Prisma transaction and marks failed `ImportRun` records as `FAILED`.
 - [ ] Add rollback strategy.
 - [ ] Import scope defaults: last month and future dates.
 

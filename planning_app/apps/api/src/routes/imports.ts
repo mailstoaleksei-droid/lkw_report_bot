@@ -5,6 +5,10 @@ import {
   executeReportingMasterImport,
   previewReportingMasterImport,
 } from "../services/reporting-master-import.js";
+import {
+  executeReportingScheduleImport,
+  previewReportingScheduleImport,
+} from "../services/reporting-schedule-import.js";
 
 const statusPreviewSchema = z.object({
   values: z.array(z.string()).default([]),
@@ -38,6 +42,22 @@ export async function registerImportRoutes(app: FastifyInstance): Promise<void> 
   app.post("/api/imports/reporting-master-data/execute", async (_request, reply) => {
     try {
       return await executeReportingMasterImport();
+    } catch (error) {
+      requestImportError(reply, error);
+    }
+  });
+
+  app.get("/api/imports/reporting-schedules/preview", async (_request, reply) => {
+    try {
+      return await previewReportingScheduleImport();
+    } catch (error) {
+      requestImportError(reply, error);
+    }
+  });
+
+  app.post("/api/imports/reporting-schedules/execute", async (_request, reply) => {
+    try {
+      return await executeReportingScheduleImport();
     } catch (error) {
       requestImportError(reply, error);
     }
