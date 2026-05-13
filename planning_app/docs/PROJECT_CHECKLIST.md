@@ -154,7 +154,8 @@ Status legend:
   - Assignment write API checks imported daily driver availability.
 - [x] Holiday warning for Germany/Hamburg.
   - Planning day response returns computed DE/HH holiday warnings for the selected date.
-- [ ] Do not block saving on Problem in MVP.
+- [x] Do not block saving on Problem in MVP.
+  - Assignment API saves records and marks assignment/order as `PROBLEM` instead of rejecting conflict cases.
 
 ## 6. Frontend
 
