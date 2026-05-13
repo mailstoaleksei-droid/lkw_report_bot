@@ -265,6 +265,14 @@ th {
   font-size: 13px;
 }
 
+.audit-panel {
+  grid-column: 1 / -1;
+}
+
+.muted {
+  color: var(--muted);
+}
+
 .error {
   color: #b42318;
   font-weight: 700;

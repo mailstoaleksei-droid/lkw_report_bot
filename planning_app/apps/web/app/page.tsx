@@ -82,6 +82,20 @@ type DriverItem = {
   company: { name: string } | null;
 };
 
+type AuditItem = {
+  id: string;
+  eventType: string;
+  entityType: string;
+  entityId: string;
+  message: string | null;
+  createdAt: string;
+  user: {
+    displayName: string;
+    email: string;
+    role: string;
+  } | null;
+};
+
 function todayDate(): string {
   return new Date().toISOString().slice(0, 10);
 }
@@ -111,6 +125,7 @@ export default function HomePage() {
   const [planning, setPlanning] = useState<PlanningDayResponse | null>(null);
   const [lkw, setLkw] = useState<LkwItem[]>([]);
   const [drivers, setDrivers] = useState<DriverItem[]>([]);
+  const [audit, setAudit] = useState<AuditItem[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
@@ -150,14 +165,16 @@ export default function HomePage() {
     setError(null);
     setLoading(true);
     try {
-      const [planningResult, lkwResult, driversResult] = await Promise.all([
+      const [planningResult, lkwResult, driversResult, auditResult] = await Promise.all([
         apiFetch<PlanningDayResponse>(`/api/planning/day?date=${date}`),
         apiFetch<{ ok: true; items: LkwItem[] }>("/api/lkw?activeOnly=true&limit=8"),
         apiFetch<{ ok: true; items: DriverItem[] }>("/api/drivers?activeOnly=true&limit=8"),
+        apiFetch<{ ok: true; items: AuditItem[] }>("/api/audit-log?limit=12"),
       ]);
       setPlanning(planningResult);
       setLkw(lkwResult.items);
       setDrivers(driversResult.items);
+      setAudit(auditResult.items);
     } catch (caught) {
       setError(caught instanceof Error ? caught.message : "Failed to load data");
     } finally {
@@ -324,6 +341,19 @@ export default function HomePage() {
               <span>{item.company?.name || "-"} / {item.status}</span>
             </div>
           ))}
+        </div>
+        <div className="list-panel audit-panel">
+          <h2>Audit Log</h2>
+          {audit.map((item) => (
+            <div className="list-row" key={item.id}>
+              <strong>{item.message || item.eventType}</strong>
+              <span>
+                {item.eventType} / {item.entityType} / {item.user?.displayName || "system"}
+              </span>
+              <span>{new Date(item.createdAt).toLocaleString()}</span>
+            </div>
+          ))}
+          {audit.length === 0 ? <p className="muted">No audit events loaded.</p> : null}
         </div>
       </section>
     </main>
