@@ -249,6 +249,7 @@ export default function HomePage() {
   const [newUserEmail, setNewUserEmail] = useState("");
   const [newUserDisplayName, setNewUserDisplayName] = useState("");
   const [newUserPassword, setNewUserPassword] = useState("");
+  const [showNewUserPassword, setShowNewUserPassword] = useState(false);
   const [newUserRole, setNewUserRole] = useState("VIEWER");
   const [newOrderRunde, setNewOrderRunde] = useState("1");
   const [newOrderDescription, setNewOrderDescription] = useState("");
@@ -1420,13 +1421,20 @@ export default function HomePage() {
                 required
               />
               <input
-                type="password"
+                type={showNewUserPassword ? "text" : "password"}
                 value={newUserPassword}
                 onChange={(event) => setNewUserPassword(event.target.value)}
                 placeholder="Temporary password"
                 minLength={10}
                 required
               />
+              <button
+                type="button"
+                className="secondary-button"
+                onClick={() => setShowNewUserPassword((current) => !current)}
+              >
+                {showNewUserPassword ? "Hide" : "Show"}
+              </button>
               <select value={newUserRole} onChange={(event) => setNewUserRole(event.target.value)}>
                 <option value="VIEWER">VIEWER</option>
                 <option value="OPERATOR">OPERATOR</option>
