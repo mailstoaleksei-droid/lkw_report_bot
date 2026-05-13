@@ -43,10 +43,11 @@ Local status:
 
 Local status:
 - Docker Desktop 4.73.0 is installed.
-- Docker CLI is available by direct path:
+- WSL 2.7.3 is installed.
+- Docker CLI is available:
 
 ```powershell
-& 'C:\Program Files\Docker\Docker\resources\bin\docker.exe' --version
+docker --version
 ```
 
 Current verified version:
@@ -58,27 +59,23 @@ Installation notes:
 - The folder owner was changed to `Administrators`.
 - The second install succeeded.
 - The installer enabled `VirtualMachinePlatform`, `Microsoft-Windows-Subsystem-Linux`, and `Microsoft-Hyper-V`.
+- `wsl --install --no-distribution` was run after restart because WSL itself was not installed yet.
 
-Manual action still needed:
-1. Restart Windows, or at minimum log out and log in again.
-2. Start Docker Desktop.
-3. Verify in a normal PowerShell:
+Verified:
 
 ```powershell
 docker --version
 docker compose version
 docker info
+docker compose build
+docker compose up -d --build --force-recreate
 ```
 
-Reason:
-- The interactive user `NBGROO21\Aleksei Samosvat` is already in local group `docker-users`.
-- The current Codex runner is `nbgroo21\codexsandboxoffline`, so it cannot access the Docker daemon pipe until the session/user token is refreshed.
+Local app endpoints:
+- API health: `http://localhost:4000/healthz`
+- Web: `http://localhost:3000`
 
-After that, test from `planning_app/`:
-
-```powershell
-docker compose up --build
-```
+No Docker manual action is currently pending.
 
 ## 4. Confirm Daily Tagesplan Source
 

@@ -9,6 +9,8 @@ The planning app uses a separate PostgreSQL database:
 - Application schema inside the database: `planning`
 
 This keeps the existing Telegram/reporting database isolated from the new planning app.
+The runtime Prisma schema does not require a shadow database; `lkw_planning_shadow`
+is kept for manual development workflows when Prisma needs a separate shadow DB.
 
 ## Local Status
 

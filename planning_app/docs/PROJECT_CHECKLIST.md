@@ -40,11 +40,12 @@ Status legend:
 - [x] Seed first Admin user: `a.samosvat@groo.de`.
 - [x] Add local `.env` for development.
 - [x] Configure Prisma runtime with JS PostgreSQL adapter.
-- [ ] Verify Docker Compose build.
+- [x] Verify Docker Compose build.
   - Docker Desktop 4.73.0 installed successfully on 2026-05-13.
-  - Docker CLI works by direct path: `C:\Program Files\Docker\Docker\resources\bin\docker.exe`.
-  - Pending: Windows restart or logout/login is needed after enabling WSL/Hyper-V and adding the user to `docker-users`.
-  - Current Codex session runs as `nbgroo21\codexsandboxoffline` and cannot access the Docker daemon pipe yet.
+  - WSL 2.7.3 installed after Docker Desktop setup.
+  - `docker compose build` passed.
+  - `docker compose up -d --build --force-recreate` passed.
+  - Postgres and API healthchecks passed; web responded on `http://localhost:3000`.
 
 ## 2. Backend API
 
@@ -157,7 +158,11 @@ Status legend:
 - [ ] Monthly restore test procedure documented.
 - [ ] Healthchecks verified.
 - [ ] Docker healthchecks verified.
-  - Blocked locally until Windows restart/login refresh after Docker Desktop installation.
+- [x] Docker healthchecks verified.
+  - `lkw_planning_postgres` healthy.
+  - `lkw_planning_api` healthy.
+  - `lkw_planning_migrate` exited 0.
+  - `lkw_planning_seed` exited 0.
 - [ ] Log rotation configured.
 - [ ] Hetzner deployment notes.
 - [ ] Cloudflare DNS/SSL notes.

@@ -1,0 +1,14 @@
+.env
+.env.*
+!.env.example
+node_modules
+.npm-cache
+apps/*/node_modules
+apps/*/.next
+storage
+*.log
+npm-debug.log*
+Dockerfile
+docker-compose*.yml
+.git
+.gitignore

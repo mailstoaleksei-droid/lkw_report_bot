@@ -3,8 +3,10 @@ services:
     image: postgres:16-alpine
     container_name: lkw_planning_postgres
     restart: unless-stopped
-    env_file:
-      - .env
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB}
+      POSTGRES_USER: ${POSTGRES_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
     ports:
       - "5433:5432"
     volumes:
@@ -16,17 +18,58 @@ services:
       timeout: 5s
       retries: 5
 
+  migrate:
+    build:
+      context: .
+      dockerfile: apps/api/Dockerfile
+    container_name: lkw_planning_migrate
+    environment:
+      DATABASE_URL: postgresql://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB}?schema=planning
+      DIRECT_URL: postgresql://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB}?schema=planning
+    depends_on:
+      postgres:
+        condition: service_healthy
+    command: ["npx", "prisma", "migrate", "deploy"]
+    restart: "no"
+
+  seed:
+    build:
+      context: .
+      dockerfile: apps/api/Dockerfile
+    container_name: lkw_planning_seed
+    environment:
+      DATABASE_URL: postgresql://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB}?schema=planning
+      DIRECT_URL: postgresql://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB}?schema=planning
+      ADMIN_EMAIL: ${ADMIN_EMAIL}
+      ADMIN_PASSWORD: ${ADMIN_PASSWORD}
+      ADMIN_DISPLAY_NAME: ${ADMIN_DISPLAY_NAME}
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+    command: ["node", "apps/api/dist/scripts/seed-admin.js"]
+    restart: "no"
+
   api:
     build:
       context: .
       dockerfile: apps/api/Dockerfile
     container_name: lkw_planning_api
     restart: unless-stopped
-    env_file:
-      - .env
+    environment:
+      NODE_ENV: production
+      API_HOST: 0.0.0.0
+      API_PORT: 4000
+      CORS_ORIGIN: ${CORS_ORIGIN}
+      JWT_SECRET: ${JWT_SECRET}
+      SESSION_COOKIE_NAME: ${SESSION_COOKIE_NAME}
+      DATABASE_URL: postgresql://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB}?schema=planning
+      DIRECT_URL: postgresql://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB}?schema=planning
+      IMPORT_STAGING_DIR: /app/storage/imports
+      EXPORT_OUTPUT_DIR: /app/storage/exports
+      BACKUP_DIR: /app/storage/backups
     depends_on:
-      postgres:
-        condition: service_healthy
+      seed:
+        condition: service_completed_successfully
     ports:
       - "4000:4000"
     volumes:
@@ -43,8 +86,8 @@ services:
       dockerfile: apps/web/Dockerfile
     container_name: lkw_planning_web
     restart: unless-stopped
-    env_file:
-      - .env
+    environment:
+      NEXT_PUBLIC_API_BASE_URL: http://localhost:4000
     depends_on:
       api:
         condition: service_healthy
@@ -53,4 +96,3 @@ services:
 
 volumes:
   planning_postgres_data:
-
