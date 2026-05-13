@@ -347,6 +347,23 @@ th {
   resize: none;
 }
 
+.user-create-form {
+  display: grid;
+  gap: 10px;
+  grid-template-columns: minmax(180px, 1.4fr) minmax(160px, 1.2fr) minmax(160px, 1fr) minmax(130px, 0.8fr) auto;
+}
+
+.user-create-form input,
+.user-create-form select {
+  width: 100%;
+}
+
+.compact-table input[type="checkbox"] {
+  min-height: auto;
+  width: 18px;
+  height: 18px;
+}
+
 .compact-table {
   max-height: 460px;
 }
@@ -398,6 +415,7 @@ th {
 
   .dashboard,
   .filters-panel,
+  .user-create-form,
   .side-grid,
   .imports-grid {
     grid-template-columns: repeat(2, minmax(120px, 1fr));
@@ -411,6 +429,7 @@ th {
 
   .dashboard,
   .filters-panel,
+  .user-create-form,
   .side-grid,
   .imports-grid {
     grid-template-columns: 1fr;

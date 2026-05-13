@@ -119,6 +119,17 @@ type AuditItem = {
   } | null;
 };
 
+type ManagedUser = {
+  id: string;
+  email: string;
+  displayName: string;
+  role: string;
+  isActive: boolean;
+  lastLoginAt: string | null;
+  createdAt: string;
+  updatedAt: string;
+};
+
 type ImportAction = {
   key: string;
   title: string;
@@ -189,8 +200,14 @@ export default function HomePage() {
   const [lkw, setLkw] = useState<LkwItem[]>([]);
   const [drivers, setDrivers] = useState<DriverItem[]>([]);
   const [audit, setAudit] = useState<AuditItem[]>([]);
+  const [managedUsers, setManagedUsers] = useState<ManagedUser[]>([]);
   const [importResults, setImportResults] = useState<Record<string, ImportResult>>({});
   const [importBusy, setImportBusy] = useState<string | null>(null);
+  const [userBusy, setUserBusy] = useState<string | null>(null);
+  const [newUserEmail, setNewUserEmail] = useState("");
+  const [newUserDisplayName, setNewUserDisplayName] = useState("");
+  const [newUserPassword, setNewUserPassword] = useState("");
+  const [newUserRole, setNewUserRole] = useState("VIEWER");
   const [lkwFilter, setLkwFilter] = useState("");
   const [driverFilter, setDriverFilter] = useState("");
   const [statusFilter, setStatusFilter] = useState("");
@@ -337,10 +354,14 @@ export default function HomePage() {
         apiFetch<{ ok: true; items: DriverItem[] }>("/api/drivers?limit=500"),
         apiFetch<{ ok: true; items: AuditItem[] }>("/api/audit-log?limit=200"),
       ]);
+      const usersResult = user?.role === "ADMIN"
+        ? await apiFetch<{ ok: true; items: ManagedUser[] }>("/api/users")
+        : { ok: true as const, items: [] };
       setPlanning(planningResult);
       setLkw(lkwResult.items);
       setDrivers(driversResult.items);
       setAudit(auditResult.items);
+      setManagedUsers(usersResult.items);
     } catch (caught) {
       setError(caught instanceof Error ? caught.message : "Failed to load data");
     } finally {
@@ -392,6 +413,48 @@ export default function HomePage() {
       }));
     } finally {
       setImportBusy(null);
+    }
+  }
+
+  async function createUser(event: FormEvent<HTMLFormElement>): Promise<void> {
+    event.preventDefault();
+    setError(null);
+    setUserBusy("create");
+    try {
+      await apiFetch("/api/users", {
+        method: "POST",
+        body: JSON.stringify({
+          email: newUserEmail,
+          displayName: newUserDisplayName,
+          password: newUserPassword,
+          role: newUserRole,
+        }),
+      });
+      setNewUserEmail("");
+      setNewUserDisplayName("");
+      setNewUserPassword("");
+      setNewUserRole("VIEWER");
+      await loadDashboardData(selectedDate);
+    } catch (caught) {
+      setError(caught instanceof Error ? caught.message : "User create failed");
+    } finally {
+      setUserBusy(null);
+    }
+  }
+
+  async function updateManagedUser(id: string, body: Partial<Pick<ManagedUser, "role" | "isActive" | "displayName">>): Promise<void> {
+    setError(null);
+    setUserBusy(id);
+    try {
+      await apiFetch(`/api/users/${id}`, {
+        method: "PATCH",
+        body: JSON.stringify(body),
+      });
+      await loadDashboardData(selectedDate);
+    } catch (caught) {
+      setError(caught instanceof Error ? caught.message : "User update failed");
+    } finally {
+      setUserBusy(null);
     }
   }
 
@@ -793,6 +856,87 @@ export default function HomePage() {
             </table>
           </div>
         </div>
+
+        {user.role === "ADMIN" ? (
+          <div className="list-panel audit-panel management-panel">
+            <div className="panel-header">
+              <h2>User management</h2>
+              <span className="muted">{managedUsers.length} users</span>
+            </div>
+            <form className="user-create-form" onSubmit={createUser}>
+              <input
+                type="email"
+                value={newUserEmail}
+                onChange={(event) => setNewUserEmail(event.target.value)}
+                placeholder="Email"
+                required
+              />
+              <input
+                value={newUserDisplayName}
+                onChange={(event) => setNewUserDisplayName(event.target.value)}
+                placeholder="Display name"
+                required
+              />
+              <input
+                type="password"
+                value={newUserPassword}
+                onChange={(event) => setNewUserPassword(event.target.value)}
+                placeholder="Temporary password"
+                minLength={10}
+                required
+              />
+              <select value={newUserRole} onChange={(event) => setNewUserRole(event.target.value)}>
+                <option value="VIEWER">VIEWER</option>
+                <option value="OPERATOR">OPERATOR</option>
+                <option value="MANAGER">MANAGER</option>
+                <option value="ADMIN">ADMIN</option>
+              </select>
+              <button type="submit" disabled={Boolean(userBusy)}>Create user</button>
+            </form>
+            <div className="table-wrap compact-table">
+              <table>
+                <thead>
+                  <tr>
+                    <th>Name</th>
+                    <th>Email</th>
+                    <th>Role</th>
+                    <th>Active</th>
+                    <th>Last login</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {managedUsers.map((item) => (
+                    <tr key={item.id}>
+                      <td>{item.displayName}</td>
+                      <td>{item.email}</td>
+                      <td>
+                        <select
+                          value={item.role}
+                          disabled={Boolean(userBusy)}
+                          onChange={(event) => updateManagedUser(item.id, { role: event.target.value })}
+                        >
+                          <option value="VIEWER">VIEWER</option>
+                          <option value="OPERATOR">OPERATOR</option>
+                          <option value="MANAGER">MANAGER</option>
+                          <option value="ADMIN">ADMIN</option>
+                        </select>
+                      </td>
+                      <td>
+                        <input
+                          type="checkbox"
+                          checked={item.isActive}
+                          disabled={Boolean(userBusy)}
+                          onChange={(event) => updateManagedUser(item.id, { isActive: event.target.checked })}
+                        />
+                      </td>
+                      <td>{item.lastLoginAt ? new Date(item.lastLoginAt).toLocaleString() : "-"}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        ) : null}
       </section>
     </main>
   );

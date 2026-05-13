@@ -189,7 +189,9 @@ Status legend:
 - [~] Audit Log page.
   - Web UI shows the latest 200 audit events in a searchable table.
   - Separate route/page and advanced filters are pending.
-- [ ] User management page.
+- [~] User management page.
+  - Admin UI can list users, create users with temporary passwords, change roles, and activate/deactivate users.
+  - Password reset flow and separate route/page are pending.
 - [ ] Settings page.
 
 ## 7. Exports
