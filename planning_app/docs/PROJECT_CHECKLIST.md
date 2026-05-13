@@ -90,7 +90,12 @@ Status legend:
 
 ## 4. Excel And Existing DB Imports
 
-- [ ] Import from existing reporting DB: companies, LKW, drivers.
+- [x] Import from existing reporting DB: companies, LKW, drivers.
+  - Preview endpoint added: `GET /api/imports/reporting-master-data/preview`.
+  - Execute endpoint added: `POST /api/imports/reporting-master-data/execute`.
+  - Imported on 2026-05-13: 14 companies, 78 LKW, 157 LKW aliases, 92 drivers.
+  - Skipped 7 placeholder LKW rows without `plate_number`.
+  - Docker API preview and execute endpoints verified on 2026-05-13.
 - [ ] Import from existing reporting DB: weekly schedules.
 - [ ] Import from Excel `Urlaub`: daily vacation/sick data.
 - [ ] Import from Excel daily Tagesplan source.
@@ -101,10 +106,12 @@ Status legend:
 - [ ] Parse `Runde_1`, `Runde_2`, `Runde_3`.
 - [~] Map `Wagen` values to LKW.
   - Confirmed examples: `2206 -> GR-OO2206`, `411 -> KO-HH411`, `4295 -> WI-QY4295`.
-- [ ] Add preview before import.
-- [ ] Add validation report.
-- [ ] Add duplicate detection.
-- [ ] Add safe transaction execution.
+- [x] Add preview before import.
+- [x] Add validation report.
+- [x] Add duplicate detection.
+  - Current master import uses upsert by company name, LKW number, driver external ID, and alias/source.
+- [x] Add safe transaction execution.
+  - Master import uses a Prisma transaction and marks failed `ImportRun` records as `FAILED`.
 - [ ] Add rollback strategy.
 - [ ] Import scope defaults: last month and future dates.
 

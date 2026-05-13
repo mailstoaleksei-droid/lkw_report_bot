@@ -64,6 +64,7 @@ services:
       SESSION_COOKIE_NAME: ${SESSION_COOKIE_NAME}
       DATABASE_URL: postgresql://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB}?schema=planning
       DIRECT_URL: postgresql://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB}?schema=planning
+      REPORTING_DATABASE_URL: ${REPORTING_DATABASE_URL:-}
       IMPORT_STAGING_DIR: /app/storage/imports
       EXPORT_OUTPUT_DIR: /app/storage/exports
       BACKUP_DIR: /app/storage/backups
