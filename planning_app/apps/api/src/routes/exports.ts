@@ -6,6 +6,7 @@ import { prisma } from "../prisma.js";
 
 const exportQuerySchema = z.object({
   date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
+  scope: z.enum(["day", "week", "month"]).default("day"),
   auftrag: z.string().trim().optional(),
   lkw: z.string().trim().optional(),
   driver: z.string().trim().optional(),
@@ -14,10 +15,23 @@ const exportQuerySchema = z.object({
   runde: z.string().regex(/^\d+$/).optional(),
 });
 
-function dateRange(dateOnly: string): { start: Date; end: Date } {
+function planningRange(dateOnly: string, scope: "day" | "week" | "month"): { start: Date; end: Date } {
   const start = new Date(`${dateOnly}T00:00:00.000Z`);
+  if (scope === "week") {
+    const day = start.getUTCDay() || 7;
+    start.setUTCDate(start.getUTCDate() - day + 1);
+  }
+  if (scope === "month") {
+    start.setUTCDate(1);
+  }
   const end = new Date(start);
-  end.setUTCDate(end.getUTCDate() + 1);
+  if (scope === "week") {
+    end.setUTCDate(end.getUTCDate() + 7);
+  } else if (scope === "month") {
+    end.setUTCMonth(end.getUTCMonth() + 1);
+  } else {
+    end.setUTCDate(end.getUTCDate() + 1);
+  }
   return { start, end };
 }
 
@@ -50,7 +64,7 @@ export async function registerExportRoutes(app: FastifyInstance, config: AppConf
     }
 
     const query = parsed.data;
-    const { start, end } = dateRange(query.date);
+    const { start, end } = planningRange(query.date, query.scope);
     const rows = await prisma.assignment.findMany({
       where: {
         planningDate: { gte: start, lt: end },
@@ -131,7 +145,7 @@ export async function registerExportRoutes(app: FastifyInstance, config: AppConf
   </Table>
  </Worksheet>
 </Workbook>`;
-    const fileName = `tagesplanung-${query.date}.xls`;
+    const fileName = `tagesplanung-${query.scope}-${query.date}.xls`;
 
     await prisma.exportLog.create({
       data: {
@@ -139,6 +153,7 @@ export async function registerExportRoutes(app: FastifyInstance, config: AppConf
         format: "xls",
         filters: {
           date: query.date,
+          scope: query.scope,
           auftrag: query.auftrag || null,
           lkw: query.lkw || null,
           driver: query.driver || null,

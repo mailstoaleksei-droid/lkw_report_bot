@@ -180,7 +180,7 @@ label {
 }
 
 .filters-panel {
-  grid-template-columns: repeat(6, minmax(120px, 1fr)) auto auto;
+  grid-template-columns: repeat(7, minmax(108px, 1fr)) auto auto;
   min-height: 0;
 }
 

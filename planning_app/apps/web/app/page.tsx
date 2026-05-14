@@ -223,6 +223,7 @@ const countryOptions = [
 
 type ViewMode = "lkw-first" | "orders-first";
 type AppSection = "dashboard" | "planning" | "imports" | "lkw" | "drivers" | "audit" | "users";
+type PeriodFilter = "day" | "week" | "month";
 
 function todayDate(): string {
   return new Date().toISOString().slice(0, 10);
@@ -305,6 +306,7 @@ export default function HomePage() {
   const [newOrderInfo, setNewOrderInfo] = useState("");
   const [assignmentDrafts, setAssignmentDrafts] = useState<Record<string, { lkwId: string; driverId: string }>>({});
   const [orderDrafts, setOrderDrafts] = useState<Record<string, OrderDraft>>({});
+  const [periodFilter, setPeriodFilter] = useState<PeriodFilter>("day");
   const [auftragFilter, setAuftragFilter] = useState("");
   const [lkwFilter, setLkwFilter] = useState("");
   const [driverFilter, setDriverFilter] = useState("");
@@ -329,7 +331,7 @@ export default function HomePage() {
   useEffect(() => {
     if (!user) return;
     loadDashboardData(selectedDate);
-  }, [user, selectedDate]);
+  }, [user, selectedDate, periodFilter]);
 
   const metrics = useMemo(() => {
     const counters = planning?.counters || {
@@ -506,7 +508,7 @@ export default function HomePage() {
     setLoading(true);
     try {
       const [planningResult, lkwResult, driversResult, auditResult] = await Promise.all([
-        apiFetch<PlanningDayResponse>(`/api/planning/day?date=${date}`),
+        apiFetch<PlanningDayResponse>(`/api/planning/day?date=${date}&scope=${periodFilter}`),
         apiFetch<{ ok: true; items: LkwItem[] }>("/api/lkw?limit=500"),
         apiFetch<{ ok: true; items: DriverItem[] }>(`/api/drivers?limit=500&planningDate=${date}`),
         hasManagerAccess(currentUser.role)
@@ -848,7 +850,7 @@ export default function HomePage() {
   }
 
   function exportTagesplanung(): void {
-    const params = new URLSearchParams({ date: selectedDate });
+    const params = new URLSearchParams({ date: selectedDate, scope: periodFilter });
     if (auftragFilter) params.set("auftrag", auftragFilter);
     if (lkwFilter) params.set("lkw", lkwFilter);
     if (driverFilter) params.set("driver", driverFilter);
@@ -971,6 +973,14 @@ export default function HomePage() {
           <label>
             Auftrag
             <input value={auftragFilter} onChange={(event) => setAuftragFilter(event.target.value)} placeholder="Order text" />
+          </label>
+          <label>
+            Period
+            <select value={periodFilter} onChange={(event) => setPeriodFilter(event.target.value as PeriodFilter)}>
+              <option value="day">Day</option>
+              <option value="week">Week</option>
+              <option value="month">Month</option>
+            </select>
           </label>
           <label>
             LKW

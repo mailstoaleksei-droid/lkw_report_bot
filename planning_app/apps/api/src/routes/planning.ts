@@ -9,12 +9,26 @@ import { prisma } from "../prisma.js";
 
 const dayQuerySchema = z.object({
   date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
+  scope: z.enum(["day", "week", "month"]).default("day"),
 });
 
-function dateRange(dateOnly: string): { start: Date; end: Date } {
+function planningRange(dateOnly: string, scope: "day" | "week" | "month"): { start: Date; end: Date } {
   const start = new Date(`${dateOnly}T00:00:00.000Z`);
+  if (scope === "week") {
+    const day = start.getUTCDay() || 7;
+    start.setUTCDate(start.getUTCDate() - day + 1);
+  }
+  if (scope === "month") {
+    start.setUTCDate(1);
+  }
   const end = new Date(start);
-  end.setUTCDate(end.getUTCDate() + 1);
+  if (scope === "week") {
+    end.setUTCDate(end.getUTCDate() + 7);
+  } else if (scope === "month") {
+    end.setUTCMonth(end.getUTCMonth() + 1);
+  } else {
+    end.setUTCDate(end.getUTCDate() + 1);
+  }
   return { start, end };
 }
 
@@ -28,7 +42,7 @@ export async function registerPlanningRoutes(app: FastifyInstance, config: AppCo
       return reply.code(400).send({ ok: false, error: "Invalid date query" });
     }
 
-    const { start, end } = dateRange(parsed.data.date);
+    const { start, end } = planningRange(parsed.data.date, parsed.data.scope);
     const [orders, assignments, totalPlanningLkw] = await Promise.all([
       prisma.order.findMany({
         where: {

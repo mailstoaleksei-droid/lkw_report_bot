@@ -201,9 +201,8 @@ Status legend:
   - Orders can be edited and soft-deleted from the Orders-first table.
   - Orders-first action column is at the right edge and includes `Save` and `Delete`.
 - [~] Filters: date, week, month, Auftrag, company, LKW, driver, status, Runde.
-  - Date, Auftrag, company, LKW, driver, status, and Runde filters are implemented in the web UI.
+  - Date, week, month, Auftrag, company, LKW, driver, status, and Runde filters are implemented in the web UI.
   - Planning date, Refresh, and Export Excel are grouped in a separate right-side tile next to the filter tile.
-  - Week and month filters are pending.
 - [x] Conflict/problem indicators.
   - Problem rows are highlighted and problem status is shown.
 - [x] Holiday warning banner.
@@ -243,8 +242,7 @@ Status legend:
 - [ ] Excel Wochenplan.
 - [~] Export respects filters.
   - Date filter is supported by the export endpoint.
-  - Auftrag, company, LKW, driver, status, and Runde filters are supported by the Excel export endpoint.
-  - Week and month export filters are pending.
+  - Week/month scope, Auftrag, company, LKW, driver, status, and Runde filters are supported by the Excel export endpoint.
 - [x] Export log records created.
 
 ## 8. Operations
