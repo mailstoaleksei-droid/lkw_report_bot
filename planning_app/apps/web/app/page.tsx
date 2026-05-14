@@ -543,6 +543,12 @@ function todayDate(): string {
   return new Date().toISOString().slice(0, 10);
 }
 
+function formatDisplayDate(value: string): string {
+  const [year, month, day] = value.split("-");
+  if (!year || !month || !day) return value;
+  return `${day}.${month}.${year}`;
+}
+
 function hasManagerAccess(role: string): boolean {
   return ["ADMIN", "MANAGER"].includes(role);
 }
@@ -1430,7 +1436,7 @@ export default function HomePage() {
         <div className="planner-header">
           <div className="planner-title-row">
             <h2>{t("dailyPlanning")}</h2>
-            <span className="planning-date-title">{selectedDate}</span>
+            <span className="planning-date-title">{formatDisplayDate(selectedDate)}</span>
           </div>
           <div className="mode-switch">
             <button

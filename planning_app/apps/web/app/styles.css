@@ -300,7 +300,7 @@ label {
 }
 
 .planning-date-title {
-  color: var(--accent);
+  color: var(--text);
   font-size: 18px;
   font-weight: 800;
 }
