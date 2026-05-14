@@ -202,7 +202,7 @@ Status legend:
   - Orders-first action column is at the right edge and includes `Save` and `Delete`.
 - [~] Filters: date, week, month, Auftrag, company, LKW, driver, status, Runde.
   - Date, Auftrag, company, LKW, driver, status, and Runde filters are implemented in the web UI.
-  - Planning date is part of the compact filter panel; there is no separate planning-date toolbar.
+  - Planning date, Refresh, and Export Excel are grouped in a separate right-side tile next to the filter tile.
   - Week and month filters are pending.
 - [x] Conflict/problem indicators.
   - Problem rows are highlighted and problem status is shown.

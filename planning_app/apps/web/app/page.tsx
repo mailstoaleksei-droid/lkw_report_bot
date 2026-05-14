@@ -966,78 +966,82 @@ export default function HomePage() {
       ) : null}
 
       {activeSection === "planning" ? (
-      <section className="filters-panel">
-        <label>
-          Planning date
-          <input type="date" value={selectedDate || todayDate()} onChange={(event) => setSelectedDate(event.target.value)} />
-        </label>
-        <label>
-          Auftrag
-          <input value={auftragFilter} onChange={(event) => setAuftragFilter(event.target.value)} placeholder="Order text" />
-        </label>
-        <label>
-          LKW
-          <input value={lkwFilter} onChange={(event) => setLkwFilter(event.target.value)} placeholder="GR-OO..." />
-        </label>
-        <label>
-          Driver
-          <input value={driverFilter} onChange={(event) => setDriverFilter(event.target.value)} placeholder="Name" />
-        </label>
-        <label>
-          Company
-          <select value={companyFilter} onChange={(event) => setCompanyFilter(event.target.value)}>
-            <option value="">All</option>
-            {companyOptions.map((company) => (
-              <option key={company} value={company}>{company}</option>
-            ))}
-          </select>
-        </label>
-        <label>
-          Status
-          <select value={statusFilter} onChange={(event) => setStatusFilter(event.target.value)}>
-            <option value="">All</option>
-            <option value="OPEN">OPEN</option>
-            <option value="PLANNED">PLANNED</option>
-            <option value="PROBLEM">PROBLEM</option>
-            <option value="DONE">DONE</option>
-            <option value="CANCELLED">CANCELLED</option>
-          </select>
-        </label>
-        <label>
-          Runde
-          <select value={rundeFilter} onChange={(event) => setRundeFilter(event.target.value)}>
-            <option value="">All</option>
-            <option value="1">1</option>
-            <option value="2">2</option>
-            <option value="3">3</option>
-          </select>
-        </label>
-        <button
-          type="button"
-          className="secondary-button"
-          onClick={() => {
-            setAuftragFilter("");
-            setLkwFilter("");
-            setDriverFilter("");
-            setCompanyFilter("");
-            setStatusFilter("");
-            setRundeFilter("");
-          }}
-        >
-          Clear filters
-        </button>
-        <button type="button" onClick={() => loadDashboardData(selectedDate)} disabled={loading}>
-          Refresh
-        </button>
-        <button type="button" className="secondary-button" onClick={exportTagesplanung}>
-          Export Excel
-        </button>
-        <span className="muted">
-          {viewMode === "lkw-first"
-            ? `${ordersFirstRows.length} visible / ${(planning?.rows.length || 0) + (planning?.unassignedOrders.length || 0)} total`
-            : `${ordersFirstRows.length} visible / ${(planning?.rows.length || 0) + (planning?.unassignedOrders.length || 0)} total`}
-        </span>
-        {error ? <span className="error">{error}</span> : null}
+      <section className="planning-controls">
+        <div className="filters-panel">
+          <label>
+            Auftrag
+            <input value={auftragFilter} onChange={(event) => setAuftragFilter(event.target.value)} placeholder="Order text" />
+          </label>
+          <label>
+            LKW
+            <input value={lkwFilter} onChange={(event) => setLkwFilter(event.target.value)} placeholder="GR-OO..." />
+          </label>
+          <label>
+            Driver
+            <input value={driverFilter} onChange={(event) => setDriverFilter(event.target.value)} placeholder="Name" />
+          </label>
+          <label>
+            Company
+            <select value={companyFilter} onChange={(event) => setCompanyFilter(event.target.value)}>
+              <option value="">All</option>
+              {companyOptions.map((company) => (
+                <option key={company} value={company}>{company}</option>
+              ))}
+            </select>
+          </label>
+          <label>
+            Status
+            <select value={statusFilter} onChange={(event) => setStatusFilter(event.target.value)}>
+              <option value="">All</option>
+              <option value="OPEN">OPEN</option>
+              <option value="PLANNED">PLANNED</option>
+              <option value="PROBLEM">PROBLEM</option>
+              <option value="DONE">DONE</option>
+              <option value="CANCELLED">CANCELLED</option>
+            </select>
+          </label>
+          <label>
+            Runde
+            <select value={rundeFilter} onChange={(event) => setRundeFilter(event.target.value)}>
+              <option value="">All</option>
+              <option value="1">1</option>
+              <option value="2">2</option>
+              <option value="3">3</option>
+            </select>
+          </label>
+          <button
+            type="button"
+            className="secondary-button"
+            onClick={() => {
+              setAuftragFilter("");
+              setLkwFilter("");
+              setDriverFilter("");
+              setCompanyFilter("");
+              setStatusFilter("");
+              setRundeFilter("");
+            }}
+          >
+            Clear filters
+          </button>
+          <span className="muted">
+            {viewMode === "lkw-first"
+              ? `${ordersFirstRows.length} visible / ${(planning?.rows.length || 0) + (planning?.unassignedOrders.length || 0)} total`
+              : `${ordersFirstRows.length} visible / ${(planning?.rows.length || 0) + (planning?.unassignedOrders.length || 0)} total`}
+          </span>
+          {error ? <span className="error">{error}</span> : null}
+        </div>
+        <div className="planning-actions-panel">
+          <label>
+            Planning date
+            <input type="date" value={selectedDate || todayDate()} onChange={(event) => setSelectedDate(event.target.value)} />
+          </label>
+          <button type="button" onClick={() => loadDashboardData(selectedDate)} disabled={loading}>
+            Refresh
+          </button>
+          <button type="button" className="secondary-button" onClick={exportTagesplanung}>
+            Export Excel
+          </button>
+        </div>
       </section>
       ) : null}
 

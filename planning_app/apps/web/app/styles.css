@@ -160,16 +160,31 @@ label {
   padding: 14px 16px;
 }
 
-.filters-panel {
+.planning-controls {
+  align-items: stretch;
+  display: grid;
+  gap: 12px;
+  grid-template-columns: minmax(0, 1fr) 320px;
+  margin: 0 0 20px;
+}
+
+.filters-panel,
+.planning-actions-panel {
   align-items: end;
   background: var(--panel);
   border: 1px solid var(--line);
   border-radius: 8px;
   display: grid;
   gap: 12px;
-  grid-template-columns: repeat(7, minmax(120px, 1fr)) auto auto auto auto;
-  margin: 0 0 20px;
   padding: 14px;
+}
+
+.filters-panel {
+  grid-template-columns: repeat(6, minmax(120px, 1fr)) auto auto;
+}
+
+.planning-actions-panel {
+  grid-template-columns: 1fr;
 }
 
 .metric,
@@ -626,6 +641,7 @@ th {
   }
 
   .dashboard,
+  .planning-controls,
   .filters-panel,
   .order-create-form,
   .user-create-form,
@@ -641,6 +657,7 @@ th {
   }
 
   .dashboard,
+  .planning-controls,
   .filters-panel,
   .order-create-form,
   .user-create-form,
