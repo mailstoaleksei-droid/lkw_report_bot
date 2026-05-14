@@ -1428,10 +1428,10 @@ export default function HomePage() {
       {activeSection === "planning" ? (
       <section className="planner">
         <div className="planner-header">
-          <div>
+          <div className="planner-title-row">
             <h2>{t("dailyPlanning")}</h2>
+            <span className="planning-date-title">{selectedDate}</span>
           </div>
-          <div className="planning-date-title">{selectedDate}</div>
           <div className="mode-switch">
             <button
               type="button"

@@ -277,9 +277,9 @@ label {
 .planner-header {
   align-items: center;
   border-bottom: 1px solid var(--line);
-  display: grid;
+  display: flex;
   gap: 8px;
-  grid-template-columns: minmax(180px, 1fr) auto minmax(180px, 1fr);
+  justify-content: space-between;
   padding: 8px 14px;
 }
 
@@ -293,16 +293,16 @@ label {
   margin: 0;
 }
 
+.planner-title-row {
+  align-items: baseline;
+  display: flex;
+  gap: 10px;
+}
+
 .planning-date-title {
-  background: #eaf3ff;
-  border: 1px solid #c7d9f2;
-  border-radius: 6px;
   color: var(--accent);
   font-size: 18px;
   font-weight: 800;
-  justify-self: center;
-  padding: 4px 14px;
-  text-align: center;
 }
 
 .mode-switch {
@@ -737,12 +737,12 @@ th {
   }
 
   .planner-header {
-    grid-template-columns: 1fr;
+    align-items: stretch;
+    flex-direction: column;
   }
 
-  .planning-date-title,
-  .mode-switch {
-    justify-self: stretch;
+  .planner-title-row {
+    justify-content: space-between;
   }
 
   .mode-switch button {
