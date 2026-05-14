@@ -239,6 +239,18 @@ const countryOptions = [
 ];
 
 const EMPTY_LKW_FILTER = "__EMPTY_LKW__";
+const masterStatusOptions = [
+  "ACTIVE",
+  "INACTIVE",
+  "SOLD",
+  "RETURNED",
+  "WORKSHOP",
+  "RESERVE",
+  "DISMISSED",
+  "VACATION",
+  "SICK",
+  "UNKNOWN",
+];
 
 type ViewMode = "lkw-first" | "orders-first";
 type AppSection = "planning" | "imports" | "lkw" | "drivers" | "audit" | "users";
@@ -554,6 +566,10 @@ function formatDisplayDate(value: string): string {
   return `${day}.${month}.${year}`;
 }
 
+function dateInputValue(value: string | null): string {
+  return value ? value.slice(0, 10) : "";
+}
+
 function hasManagerAccess(role: string): boolean {
   return ["ADMIN", "MANAGER"].includes(role);
 }
@@ -613,6 +629,7 @@ export default function HomePage() {
   const [importBusy, setImportBusy] = useState<string | null>(null);
   const [userBusy, setUserBusy] = useState<string | null>(null);
   const [orderBusy, setOrderBusy] = useState<string | null>(null);
+  const [managementBusy, setManagementBusy] = useState<string | null>(null);
   const [newUserEmail, setNewUserEmail] = useState("");
   const [newUserDisplayName, setNewUserDisplayName] = useState("");
   const [newUserPassword, setNewUserPassword] = useState("");
@@ -1141,6 +1158,59 @@ export default function HomePage() {
     }
   }
 
+  function updateLkwLocal(id: string, patch: Partial<LkwItem>): void {
+    setLkw((current) => current.map((item) => (item.id === id ? { ...item, ...patch } : item)));
+  }
+
+  function updateDriverLocal(id: string, patch: Partial<DriverItem>): void {
+    setDrivers((current) => current.map((item) => (item.id === id ? { ...item, ...patch } : item)));
+  }
+
+  async function saveLkwItem(item: LkwItem): Promise<void> {
+    setError(null);
+    setManagementBusy(item.id);
+    try {
+      await apiFetch(`/api/lkw/${item.id}`, {
+        method: "PATCH",
+        body: JSON.stringify({
+          number: item.number,
+          type: item.type || null,
+          status: item.status,
+          soldDate: dateInputValue(item.soldDate) || null,
+          returnedDate: dateInputValue(item.returnedDate) || null,
+          isActive: item.isActive,
+        }),
+      });
+      await loadDashboardData(selectedDate);
+    } catch (caught) {
+      setError(caught instanceof Error ? caught.message : "LKW update failed");
+    } finally {
+      setManagementBusy(null);
+    }
+  }
+
+  async function saveDriverItem(item: DriverItem): Promise<void> {
+    setError(null);
+    setManagementBusy(item.id);
+    try {
+      await apiFetch(`/api/drivers/${item.id}`, {
+        method: "PATCH",
+        body: JSON.stringify({
+          fullName: item.fullName,
+          phone: item.phone || null,
+          status: item.status,
+          dismissedDate: dateInputValue(item.dismissedDate) || null,
+          isActive: item.isActive,
+        }),
+      });
+      await loadDashboardData(selectedDate);
+    } catch (caught) {
+      setError(caught instanceof Error ? caught.message : "Driver update failed");
+    } finally {
+      setManagementBusy(null);
+    }
+  }
+
   function updateOrderDraft(orderId: string, field: keyof OrderDraft, value: string, row: { runde: number; description: string; customer: string; plz: string; cityName: string; country: string; plannedTime: string; info: string }): void {
     setOrderDrafts((current) => ({
       ...current,
@@ -1289,6 +1359,7 @@ export default function HomePage() {
   const canViewImports = hasManagerAccess(user.role);
   const canExecuteImports = user.role === "ADMIN";
   const canViewAudit = hasManagerAccess(user.role);
+  const canManageMasterData = hasManagerAccess(user.role);
   const visibleSections: Array<{ key: AppSection; label: string }> = [
     { key: "planning", label: t("dailyPlanning") },
     ...(canViewImports ? [{ key: "imports" as AppSection, label: t("imports") }] : []),
@@ -1799,20 +1870,57 @@ export default function HomePage() {
                   <th>{t("type")}</th>
                   <th>{t("company")}</th>
                   <th>{t("status")}</th>
+                  <th>{t("active")}</th>
                   <th>{t("sold")}</th>
                   <th>{t("returned")}</th>
+                  {canManageMasterData ? <th>{t("action")}</th> : null}
                 </tr>
               </thead>
               <tbody>
                 {filteredManagementLkw.map((item) => (
                   <tr key={item.id}>
                     <td>{item.externalId || "-"}</td>
-                    <td>{item.number}</td>
-                    <td>{item.type || "-"}</td>
+                    <td>
+                      {canManageMasterData ? (
+                        <input className="management-input" value={item.number} onChange={(event) => updateLkwLocal(item.id, { number: event.target.value })} />
+                      ) : item.number}
+                    </td>
+                    <td>
+                      {canManageMasterData ? (
+                        <input className="management-input" value={item.type || ""} onChange={(event) => updateLkwLocal(item.id, { type: event.target.value })} />
+                      ) : item.type || "-"}
+                    </td>
                     <td>{item.company?.name || "-"}</td>
-                    <td>{item.status}</td>
-                    <td>{item.soldDate ? item.soldDate.slice(0, 10) : "-"}</td>
-                    <td>{item.returnedDate ? item.returnedDate.slice(0, 10) : "-"}</td>
+                    <td>
+                      {canManageMasterData ? (
+                        <select className="management-input" value={item.status} onChange={(event) => updateLkwLocal(item.id, { status: event.target.value })}>
+                          {masterStatusOptions.map((status) => <option key={status} value={status}>{status}</option>)}
+                        </select>
+                      ) : item.status}
+                    </td>
+                    <td>
+                      <input
+                        checked={item.isActive}
+                        disabled={!canManageMasterData}
+                        onChange={(event) => updateLkwLocal(item.id, { isActive: event.target.checked })}
+                        type="checkbox"
+                      />
+                    </td>
+                    <td>
+                      {canManageMasterData ? (
+                        <input className="management-input" type="date" value={dateInputValue(item.soldDate)} onChange={(event) => updateLkwLocal(item.id, { soldDate: event.target.value || null })} />
+                      ) : item.soldDate ? item.soldDate.slice(0, 10) : "-"}
+                    </td>
+                    <td>
+                      {canManageMasterData ? (
+                        <input className="management-input" type="date" value={dateInputValue(item.returnedDate)} onChange={(event) => updateLkwLocal(item.id, { returnedDate: event.target.value || null })} />
+                      ) : item.returnedDate ? item.returnedDate.slice(0, 10) : "-"}
+                    </td>
+                    {canManageMasterData ? (
+                      <td>
+                        <button type="button" onClick={() => saveLkwItem(item)} disabled={managementBusy === item.id}>{t("save")}</button>
+                      </td>
+                    ) : null}
                   </tr>
                 ))}
               </tbody>
@@ -1843,18 +1951,51 @@ export default function HomePage() {
                   <th>{t("phone")}</th>
                   <th>{t("company")}</th>
                   <th>{t("status")}</th>
+                  <th>{t("active")}</th>
                   <th>{t("dismissDate")}</th>
+                  {canManageMasterData ? <th>{t("action")}</th> : null}
                 </tr>
               </thead>
               <tbody>
                 {filteredManagementDrivers.map((item) => (
                   <tr key={item.id}>
                     <td>{item.externalId || "-"}</td>
-                    <td>{item.fullName}</td>
-                    <td>{item.phone || "-"}</td>
+                    <td>
+                      {canManageMasterData ? (
+                        <input className="management-input" value={item.fullName} onChange={(event) => updateDriverLocal(item.id, { fullName: event.target.value })} />
+                      ) : item.fullName}
+                    </td>
+                    <td>
+                      {canManageMasterData ? (
+                        <input className="management-input" value={item.phone || ""} onChange={(event) => updateDriverLocal(item.id, { phone: event.target.value })} />
+                      ) : item.phone || "-"}
+                    </td>
                     <td>{item.company?.name || "-"}</td>
-                    <td>{item.status}</td>
-                    <td>{item.dismissedDate ? item.dismissedDate.slice(0, 10) : "-"}</td>
+                    <td>
+                      {canManageMasterData ? (
+                        <select className="management-input" value={item.status} onChange={(event) => updateDriverLocal(item.id, { status: event.target.value })}>
+                          {masterStatusOptions.map((status) => <option key={status} value={status}>{status}</option>)}
+                        </select>
+                      ) : item.status}
+                    </td>
+                    <td>
+                      <input
+                        checked={item.isActive}
+                        disabled={!canManageMasterData}
+                        onChange={(event) => updateDriverLocal(item.id, { isActive: event.target.checked })}
+                        type="checkbox"
+                      />
+                    </td>
+                    <td>
+                      {canManageMasterData ? (
+                        <input className="management-input" type="date" value={dateInputValue(item.dismissedDate)} onChange={(event) => updateDriverLocal(item.id, { dismissedDate: event.target.value || null })} />
+                      ) : item.dismissedDate ? item.dismissedDate.slice(0, 10) : "-"}
+                    </td>
+                    {canManageMasterData ? (
+                      <td>
+                        <button type="button" onClick={() => saveDriverItem(item)} disabled={managementBusy === item.id}>{t("save")}</button>
+                      </td>
+                    ) : null}
                   </tr>
                 ))}
               </tbody>

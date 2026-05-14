@@ -610,6 +610,13 @@ th {
   padding: 16px;
 }
 
+.management-input {
+  font-size: 12px;
+  min-height: 28px;
+  padding: 4px 8px;
+  width: 100%;
+}
+
 .imports-panel {
   grid-column: 1 / -1;
 }

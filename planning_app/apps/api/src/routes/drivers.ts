@@ -1,4 +1,4 @@
-import { MasterStatus } from "@prisma/client";
+import { AuditEventType, MasterStatus } from "@prisma/client";
 import type { FastifyInstance } from "fastify";
 import { z } from "zod";
 import { requireUser } from "../auth/guards.js";
@@ -14,6 +14,40 @@ const querySchema = z.object({
   planningDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional(),
   limit: z.coerce.number().int().min(1).max(500).default(200),
 });
+
+const updateSchema = z.object({
+  fullName: z.string().trim().min(1).max(160).optional(),
+  surname: z.string().trim().max(100).nullable().optional(),
+  phone: z.string().trim().max(80).nullable().optional(),
+  status: z.nativeEnum(MasterStatus).optional(),
+  dismissedDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).nullable().optional(),
+  isActive: z.boolean().optional(),
+});
+
+function dateOrNull(value: string | null | undefined): Date | null | undefined {
+  if (value === undefined) return undefined;
+  if (value === null || value === "") return null;
+  return new Date(`${value}T00:00:00.000Z`);
+}
+
+function cleanText(value: string | null | undefined): string | null | undefined {
+  if (value === undefined) return undefined;
+  const trimmed = value?.trim() || "";
+  return trimmed || null;
+}
+
+function formatValue(value: unknown): string {
+  if (value instanceof Date) return value.toISOString().slice(0, 10);
+  if (value === null || value === undefined || value === "") return "-";
+  return String(value);
+}
+
+function buildChangeMessage(before: Record<string, unknown>, after: Record<string, unknown>): string {
+  const changes = Object.keys(after)
+    .filter((key) => formatValue(before[key]) !== formatValue(after[key]))
+    .map((key) => `${key}: ${formatValue(before[key])} -> ${formatValue(after[key])}`);
+  return changes.length ? `Driver updated: ${changes.join("; ")}` : "Driver update requested without changes";
+}
 
 export async function registerDriverRoutes(app: FastifyInstance, config: AppConfig): Promise<void> {
   app.get("/api/drivers", async (request, reply) => {
@@ -71,5 +105,72 @@ export async function registerDriverRoutes(app: FastifyInstance, config: AppConf
     });
 
     return { ok: true, items };
+  });
+
+  app.patch("/api/drivers/:id", async (request, reply) => {
+    const user = await requireUser(request, reply, config, "MANAGER");
+    if (!user) return;
+
+    const params = z.object({ id: z.string().uuid() }).safeParse(request.params);
+    const parsed = updateSchema.safeParse(request.body);
+    if (!params.success || !parsed.success) {
+      return reply.code(400).send({ ok: false, error: "Invalid driver update" });
+    }
+
+    const before = await prisma.driver.findFirst({
+      where: { id: params.data.id, deletedAt: null },
+      select: {
+        id: true,
+        fullName: true,
+        surname: true,
+        phone: true,
+        status: true,
+        dismissedDate: true,
+        isActive: true,
+      },
+    });
+    if (!before) {
+      return reply.code(404).send({ ok: false, error: "Driver not found" });
+    }
+
+    const input = parsed.data;
+    const updated = await prisma.$transaction(async (tx) => {
+      const saved = await tx.driver.update({
+        where: { id: before.id },
+        data: {
+          ...(input.fullName !== undefined ? { fullName: input.fullName } : {}),
+          ...(input.surname !== undefined ? { surname: cleanText(input.surname) } : {}),
+          ...(input.phone !== undefined ? { phone: cleanText(input.phone) } : {}),
+          ...(input.status !== undefined ? { status: input.status, rawStatus: input.status } : {}),
+          ...(input.dismissedDate !== undefined ? { dismissedDate: dateOrNull(input.dismissedDate) } : {}),
+          ...(input.isActive !== undefined ? { isActive: input.isActive } : {}),
+        },
+        select: {
+          id: true,
+          fullName: true,
+          surname: true,
+          phone: true,
+          status: true,
+          dismissedDate: true,
+          isActive: true,
+        },
+      });
+
+      await tx.auditLog.create({
+        data: {
+          eventType: AuditEventType.STATUS_CHANGED,
+          entityType: "Driver",
+          entityId: saved.id,
+          userId: user.id,
+          message: buildChangeMessage(before, saved),
+          before,
+          after: saved,
+        },
+      });
+
+      return saved;
+    });
+
+    return { ok: true, item: updated };
   });
 }
