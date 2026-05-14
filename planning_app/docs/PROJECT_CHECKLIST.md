@@ -80,6 +80,7 @@ Status legend:
   - Import execute endpoints require Admin.
 - [x] Add export endpoints.
   - `GET /api/exports/tagesplanung.xls?date=YYYY-MM-DD` exports Tagesplanung rows for Excel.
+  - `GET /api/exports/tagesplanung.pdf?date=YYYY-MM-DD` exports Tagesplanung rows for PDF.
 - [~] Add holiday endpoints.
   - Planning day response now includes computed Germany/Hamburg holiday warnings.
 
@@ -249,14 +250,18 @@ Status legend:
 
 ## 7. Exports
 
-- [ ] PDF Tagesplan.
+- [x] PDF Tagesplan.
+  - MVP PDF export is available from the planning action tile.
+  - PDF export respects the same planning date/scope and row filters as Excel.
 - [x] Excel Tagesplan.
   - MVP exports Excel-compatible XML `.xls` without unsafe third-party XLSX dependencies.
+  - Excel export now includes assigned and unassigned Orders-first rows.
 - [ ] PDF Wochenplan.
 - [ ] Excel Wochenplan.
 - [~] Export respects filters.
   - Date filter is supported by the export endpoint.
   - Week/month scope, Auftrag, company, LKW, driver, status, and Runde filters are supported by the Excel export endpoint.
+  - PDF Tagesplan uses the same filters as Excel Tagesplan.
 - [x] Export log records created.
 
 ## 8. Operations

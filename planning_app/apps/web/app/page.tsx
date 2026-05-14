@@ -281,6 +281,7 @@ const translations = {
     execute: "Execute",
     executeImport: "Execute import",
     exportExcel: "Export Excel",
+    exportPdf: "Export PDF",
     freeLkw: "Free LKW",
     hide: "Hide",
     imports: "Imports",
@@ -372,6 +373,7 @@ const translations = {
     execute: "Ausführen",
     executeImport: "Import ausführen",
     exportExcel: "Excel exportieren",
+    exportPdf: "PDF exportieren",
     freeLkw: "Freie LKW",
     hide: "Ausblenden",
     imports: "Importe",
@@ -463,6 +465,7 @@ const translations = {
     execute: "Выполнить",
     executeImport: "Выполнить импорт",
     exportExcel: "Экспорт Excel",
+    exportPdf: "Экспорт PDF",
     freeLkw: "Свободные LKW",
     hide: "Скрыть",
     imports: "Импорты",
@@ -1183,7 +1186,7 @@ export default function HomePage() {
     return isDriverAvailableForRunde(suggestedDriverId, runde, orderId) ? suggestedDriverId : currentDriverId;
   }
 
-  function exportTagesplanung(): void {
+  function exportTagesplanung(format: "xls" | "pdf"): void {
     const params = new URLSearchParams({ date: selectedDate, scope: periodFilter });
     if (auftragFilter) params.set("auftrag", auftragFilter);
     if (lkwFilter) params.set("lkw", lkwFilter);
@@ -1191,7 +1194,7 @@ export default function HomePage() {
     if (companyFilter) params.set("company", companyFilter);
     if (statusFilter) params.set("status", statusFilter);
     if (rundeFilter) params.set("runde", rundeFilter);
-    window.location.href = `${apiBaseUrl}/api/exports/tagesplanung.xls?${params.toString()}`;
+    window.location.href = `${apiBaseUrl}/api/exports/tagesplanung.${format}?${params.toString()}`;
   }
 
   if (loading && !user) {
@@ -1404,8 +1407,11 @@ export default function HomePage() {
           <button type="button" onClick={() => loadDashboardData(selectedDate)} disabled={loading}>
             {t("refresh")}
           </button>
-          <button type="button" className="secondary-button" onClick={exportTagesplanung}>
+          <button type="button" className="secondary-button" onClick={() => exportTagesplanung("xls")}>
             {t("exportExcel")}
+          </button>
+          <button type="button" className="secondary-button" onClick={() => exportTagesplanung("pdf")}>
+            {t("exportPdf")}
           </button>
         </div>
       </section>

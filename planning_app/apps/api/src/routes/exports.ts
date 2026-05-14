@@ -4,6 +4,26 @@ import { requireUser } from "../auth/guards.js";
 import type { AppConfig } from "../config.js";
 import { prisma } from "../prisma.js";
 
+type ExportQuery = z.infer<typeof exportQuerySchema>;
+
+type ExportRow = {
+  lkw: string;
+  lkwCompany: string;
+  driver: string;
+  driverCompany: string;
+  chassis: string;
+  runde: number;
+  auftrag: string;
+  customer: string;
+  plz: string;
+  city: string;
+  country: string;
+  time: string;
+  info: string;
+  status: string;
+  problem: string;
+};
+
 const exportQuerySchema = z.object({
   date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
   scope: z.enum(["day", "week", "month"]).default("day"),
@@ -53,19 +73,27 @@ function includesFilter(value: string | null | undefined, filter: string | undef
   return !filter || (value || "").toLowerCase().includes(filter.toLowerCase());
 }
 
-export async function registerExportRoutes(app: FastifyInstance, config: AppConfig): Promise<void> {
-  app.get("/api/exports/tagesplanung.xls", async (request, reply) => {
-    const user = await requireUser(request, reply, config, "VIEWER");
-    if (!user) return;
+function textValue(value: string | number | null | undefined): string {
+  return value === null || value === undefined || value === "" ? "-" : String(value);
+}
 
-    const parsed = exportQuerySchema.safeParse(request.query);
-    if (!parsed.success) {
-      return reply.code(400).send({ ok: false, error: "Invalid export query" });
-    }
+function matchesExportFilters(row: ExportRow, query: ExportQuery): boolean {
+  const auftragMatch = includesFilter(row.auftrag, query.auftrag);
+  const lkwMatch = includesFilter(row.lkw === "-" ? "" : row.lkw, query.lkw);
+  const driverMatch = includesFilter(row.driver === "-" ? "" : row.driver, query.driver);
+  const companyMatch = !query.company || [
+    row.lkwCompany,
+    row.driverCompany,
+  ].some((value) => includesFilter(value, query.company));
+  const statusMatch = !query.status || row.status === query.status;
+  const rundeMatch = !query.runde || String(row.runde) === query.runde;
+  return auftragMatch && lkwMatch && driverMatch && companyMatch && statusMatch && rundeMatch;
+}
 
-    const query = parsed.data;
-    const { start, end } = planningRange(query.date, query.scope);
-    const rows = await prisma.assignment.findMany({
+async function loadExportRows(query: ExportQuery): Promise<ExportRow[]> {
+  const { start, end } = planningRange(query.date, query.scope);
+  const [assignments, unassignedOrders] = await Promise.all([
+    prisma.assignment.findMany({
       where: {
         planningDate: { gte: start, lt: end },
         deletedAt: null,
@@ -81,29 +109,119 @@ export async function registerExportRoutes(app: FastifyInstance, config: AppConf
         driver: { include: { company: true } },
         chassis: true,
       },
-    });
-    const filteredRows = rows.filter((row) => {
-      const statusValue = row.order.status || row.status;
-      const auftragMatch = includesFilter(row.order.description, query.auftrag);
-      const lkwMatch = includesFilter(row.lkw?.number, query.lkw);
-      const driverMatch = includesFilter(row.driver?.fullName, query.driver);
-      const companyMatch = !query.company || [
-        row.lkw?.company?.name,
-        row.driver?.company?.name,
-      ].some((value) => includesFilter(value, query.company));
-      const statusMatch = !query.status || statusValue === query.status;
-      const rundeMatch = !query.runde || String(row.runde) === query.runde;
-      return auftragMatch && lkwMatch && driverMatch && companyMatch && statusMatch && rundeMatch;
-    });
+    }),
+    prisma.order.findMany({
+      where: {
+        planningDate: { gte: start, lt: end },
+        deletedAt: null,
+        assignments: { none: { deletedAt: null } },
+      },
+      orderBy: [{ runde: "asc" }, { createdAt: "asc" }],
+    }),
+  ]);
 
+  const assignedRows: ExportRow[] = assignments.map((row) => ({
+    lkw: textValue(row.lkw?.number),
+    lkwCompany: textValue(row.lkw?.company?.name),
+    driver: textValue(row.driver?.fullName),
+    driverCompany: textValue(row.driver?.company?.name),
+    chassis: textValue(row.chassis?.number),
+    runde: row.runde,
+    auftrag: textValue(row.order.description),
+    customer: textValue(row.order.customer),
+    plz: textValue(row.order.plz),
+    city: textValue(row.order.city),
+    country: textValue(row.order.country),
+    time: textValue(row.order.plannedTime),
+    info: textValue(row.order.info),
+    status: row.order.status || row.status,
+    problem: textValue(row.order.problemReason || row.problemReason),
+  }));
+  const unassignedRows: ExportRow[] = unassignedOrders.map((order) => ({
+    lkw: "-",
+    lkwCompany: "-",
+    driver: "-",
+    driverCompany: "-",
+    chassis: "-",
+    runde: order.runde,
+    auftrag: textValue(order.description),
+    customer: textValue(order.customer),
+    plz: textValue(order.plz),
+    city: textValue(order.city),
+    country: textValue(order.country),
+    time: textValue(order.plannedTime),
+    info: textValue(order.info),
+    status: order.status,
+    problem: textValue(order.problemReason),
+  }));
+
+  return [...assignedRows, ...unassignedRows]
+    .filter((row) => matchesExportFilters(row, query))
+    .sort((a, b) => a.runde - b.runde || a.lkw.localeCompare(b.lkw) || a.auftrag.localeCompare(b.auftrag));
+}
+
+function pdfEscape(value: string): string {
+  return value
+    .replace(/\\/g, "\\\\")
+    .replace(/\(/g, "\\(")
+    .replace(/\)/g, "\\)")
+    .replace(/[^\x20-\x7E]/g, "?");
+}
+
+function fit(value: string | number, width: number): string {
+  const text = String(value).replace(/\s+/g, " ").trim();
+  return text.length > width ? `${text.slice(0, Math.max(width - 1, 0))}.` : text.padEnd(width, " ");
+}
+
+function makePdf(lines: string[]): Buffer {
+  const objects: string[] = [];
+  const content = [
+    "BT",
+    "/F1 8 Tf",
+    "10 TL",
+    "36 560 Td",
+    ...lines.map((line, index) => `${index === 0 ? "" : "T*"}(${pdfEscape(line)}) Tj`),
+    "ET",
+  ].join("\n");
+  objects.push("<< /Type /Catalog /Pages 2 0 R >>");
+  objects.push("<< /Type /Pages /Kids [3 0 R] /Count 1 >>");
+  objects.push("<< /Type /Page /Parent 2 0 R /MediaBox [0 0 842 595] /Resources << /Font << /F1 4 0 R >> >> /Contents 5 0 R >>");
+  objects.push("<< /Type /Font /Subtype /Type1 /BaseFont /Courier >>");
+  objects.push(`<< /Length ${Buffer.byteLength(content, "utf8")} >>\nstream\n${content}\nendstream`);
+
+  let body = "%PDF-1.4\n";
+  const offsets = [0];
+  objects.forEach((object, index) => {
+    offsets.push(Buffer.byteLength(body, "utf8"));
+    body += `${index + 1} 0 obj\n${object}\nendobj\n`;
+  });
+  const xrefOffset = Buffer.byteLength(body, "utf8");
+  body += `xref\n0 ${objects.length + 1}\n0000000000 65535 f \n`;
+  offsets.slice(1).forEach((offset) => {
+    body += `${String(offset).padStart(10, "0")} 00000 n \n`;
+  });
+  body += `trailer\n<< /Size ${objects.length + 1} /Root 1 0 R >>\nstartxref\n${xrefOffset}\n%%EOF\n`;
+  return Buffer.from(body, "utf8");
+}
+
+export async function registerExportRoutes(app: FastifyInstance, config: AppConfig): Promise<void> {
+  app.get("/api/exports/tagesplanung.xls", async (request, reply) => {
+    const user = await requireUser(request, reply, config, "VIEWER");
+    if (!user) return;
+
+    const parsed = exportQuerySchema.safeParse(request.query);
+    if (!parsed.success) {
+      return reply.code(400).send({ ok: false, error: "Invalid export query" });
+    }
+
+    const query = parsed.data;
+    const rows = await loadExportRows(query);
     const header = [
       "LKW",
-      "LKW status",
-      "Driver",
-      "Driver status",
-      "Chassis",
       "Runde",
       "Auftrag",
+      "Driver",
+      "Chassis",
       "Customer",
       "PLZ",
       "City",
@@ -115,22 +233,20 @@ export async function registerExportRoutes(app: FastifyInstance, config: AppConf
     ];
     const tableRows = [
       xmlRow(header),
-      ...filteredRows.map((row) => [
-        row.lkw?.number,
-        row.lkw?.status,
-        row.driver?.fullName,
-        row.driver?.status,
-        row.chassis?.number,
+      ...rows.map((row) => [
+        row.lkw,
         row.runde,
-        row.order.description,
-        row.order.customer,
-        row.order.plz,
-        row.order.city,
-        row.order.country,
-        row.order.plannedTime,
-        row.order.info,
-        row.order.status,
-        row.order.problemReason || row.problemReason,
+        row.auftrag,
+        row.driver,
+        row.chassis,
+        row.customer,
+        row.plz,
+        row.city,
+        row.country,
+        row.time,
+        row.info,
+        row.status,
+        row.problem,
       ]).map(xmlRow),
     ];
     const body = `<?xml version="1.0" encoding="UTF-8"?>
@@ -169,5 +285,63 @@ export async function registerExportRoutes(app: FastifyInstance, config: AppConf
     reply.header("Content-Type", "application/vnd.ms-excel; charset=utf-8");
     reply.header("Content-Disposition", `attachment; filename="${fileName}"`);
     return reply.send(body);
+  });
+
+  app.get("/api/exports/tagesplanung.pdf", async (request, reply) => {
+    const user = await requireUser(request, reply, config, "VIEWER");
+    if (!user) return;
+
+    const parsed = exportQuerySchema.safeParse(request.query);
+    if (!parsed.success) {
+      return reply.code(400).send({ ok: false, error: "Invalid export query" });
+    }
+
+    const query = parsed.data;
+    const rows = await loadExportRows(query);
+    const fileName = `tagesplanung-${query.scope}-${query.date}.pdf`;
+    const header = `${fit("LKW", 12)} ${fit("R", 2)} ${fit("Auftrag", 30)} ${fit("Driver", 22)} ${fit("Country", 8)} ${fit("Status", 9)} ${fit("Problem", 28)}`;
+    const separator = "-".repeat(header.length);
+    const lines = [
+      `Tagesplanung ${query.scope} ${query.date}`,
+      `Rows: ${rows.length}`,
+      "",
+      header,
+      separator,
+      ...rows.slice(0, 48).map((row) => [
+        fit(row.lkw, 12),
+        fit(row.runde, 2),
+        fit(row.auftrag, 30),
+        fit(row.driver, 22),
+        fit(row.country, 8),
+        fit(row.status, 9),
+        fit(row.problem, 28),
+      ].join(" ")),
+    ];
+    if (rows.length > 48) {
+      lines.push(`... ${rows.length - 48} more rows. Use Excel export for the full list.`);
+    }
+
+    await prisma.exportLog.create({
+      data: {
+        exportType: "tagesplanung",
+        format: "pdf",
+        filters: {
+          date: query.date,
+          scope: query.scope,
+          auftrag: query.auftrag || null,
+          lkw: query.lkw || null,
+          driver: query.driver || null,
+          company: query.company || null,
+          status: query.status || null,
+          runde: query.runde || null,
+        },
+        outputPath: fileName,
+        createdById: user.id,
+      },
+    });
+
+    reply.header("Content-Type", "application/pdf");
+    reply.header("Content-Disposition", `attachment; filename="${fileName}"`);
+    return reply.send(makePdf(lines));
   });
 }
