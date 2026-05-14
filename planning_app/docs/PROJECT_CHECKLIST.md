@@ -178,6 +178,11 @@ Status legend:
 - [x] Initial Next.js shell added.
 - [x] Login page.
   - Root page now shows a login form and uses the API session cookie.
+- [~] Localization.
+  - UI detects browser/system language on first open.
+  - Manual language switcher added for German, English, and Russian.
+  - Selected language is saved in browser local storage.
+  - Core planning, import, management, audit, and user-management labels are translated.
 - [x] Dashboard with real counters.
   - Counters are loaded from `GET /api/planning/day`.
   - Dashboard counters are embedded under the Tagesplanung filter tile.

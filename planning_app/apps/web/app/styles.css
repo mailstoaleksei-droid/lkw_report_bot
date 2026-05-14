@@ -119,6 +119,17 @@ label {
   gap: 12px;
 }
 
+.language-field {
+  align-items: center;
+  display: flex;
+  gap: 8px;
+}
+
+.language-field select {
+  min-height: 34px;
+  padding: 6px 8px;
+}
+
 .app-tabs {
   display: flex;
   flex-wrap: wrap;

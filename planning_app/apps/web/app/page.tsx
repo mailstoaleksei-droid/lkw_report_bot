@@ -241,6 +241,300 @@ const countryOptions = [
 type ViewMode = "lkw-first" | "orders-first";
 type AppSection = "planning" | "imports" | "lkw" | "drivers" | "audit" | "users";
 type PeriodFilter = "day" | "week" | "month";
+type Language = "de" | "en" | "ru";
+
+const languageOptions: Array<{ value: Language; label: string }> = [
+  { value: "de", label: "Deutsch" },
+  { value: "en", label: "English" },
+  { value: "ru", label: "Русский" },
+];
+
+const translations = {
+  en: {
+    active: "Active",
+    activeOrders: "Active orders",
+    action: "Action",
+    all: "All",
+    applicationSections: "Application sections",
+    assignedLkw: "Assigned LKW",
+    assignedOrders: "Assigned orders",
+    auditLog: "Audit Log",
+    auftrag: "Auftrag",
+    cancel: "Cancel",
+    changePassword: "Change password",
+    city: "City",
+    clearFilters: "Clear filters",
+    company: "Company",
+    confirmNewPassword: "Confirm new password",
+    country: "Country",
+    createOrder: "Create order",
+    createUser: "Create user",
+    currentTemporaryPassword: "Current temporary password",
+    customer: "Customer",
+    delete: "Delete",
+    dailyPlanning: "Tagesplanung",
+    day: "Day",
+    dismissDate: "Dismissed",
+    driver: "Driver",
+    driverManagement: "Driver management",
+    email: "Email",
+    execute: "Execute",
+    executeImport: "Execute import",
+    exportExcel: "Export Excel",
+    freeLkw: "Free LKW",
+    hide: "Hide",
+    imports: "Imports",
+    info: "Info",
+    internalLogistics: "Internal logistics",
+    language: "Language",
+    lastLogin: "Last login",
+    lkwManagement: "LKW management",
+    lkwUsage: "LKW usage",
+    loading: "Loading...",
+    logout: "Logout",
+    markAssigned: "Mark assigned",
+    month: "Month",
+    name: "Name",
+    newPassword: "New password",
+    newTemporaryPassword: "New temporary password",
+    noActiveRows: "No active planning rows match the current filters.",
+    noAuditRows: "No audit events match the current filter.",
+    noOrders: "No orders match the current filters.",
+    onlyAdminCanExecute: "Only Admin can execute imports",
+    orderText: "Order text",
+    password: "Password",
+    passwordTemporaryActive: " Temporary password active",
+    period: "Period",
+    phone: "Phone",
+    planningDatabaseNote: "Data is read from the isolated planning database.",
+    planningDate: "Planning date",
+    preview: "Preview",
+    problem: "Problem",
+    problems: "Problems",
+    refresh: "Refresh",
+    reportingDbSource: "Reporting DB source",
+    resetPassword: "Reset password",
+    returned: "Returned",
+    role: "Role",
+    runde: "Runde",
+    save: "Save",
+    saveNewPassword: "Save new password",
+    searchAudit: "Search event, Auftrag, entity, user",
+    searchDriver: "Search driver, phone, status, company",
+    searchLkw: "Search LKW, status, company",
+    setActive: "Set active",
+    show: "Show",
+    signIn: "Sign in",
+    signingIn: "Signing in...",
+    sold: "Sold",
+    status: "Status",
+    temporaryPassword: "Temporary password",
+    temporaryPasswordMustChange: "Temporary password must be changed before using the app.",
+    time: "Time",
+    total: "total",
+    totalOrders: "Total orders",
+    type: "Type",
+    user: "User",
+    userManagement: "User management",
+    users: "users",
+    viewFor: "view for",
+    visible: "visible",
+    week: "Week",
+  },
+  de: {
+    active: "Aktiv",
+    activeOrders: "Aktive Aufträge",
+    action: "Aktion",
+    all: "Alle",
+    applicationSections: "App-Bereiche",
+    assignedLkw: "Zugewiesene LKW",
+    assignedOrders: "Zugewiesene Aufträge",
+    auditLog: "Audit Log",
+    auftrag: "Auftrag",
+    cancel: "Abbrechen",
+    changePassword: "Passwort ändern",
+    city: "Stadt",
+    clearFilters: "Filter löschen",
+    company: "Firma",
+    confirmNewPassword: "Neues Passwort bestätigen",
+    country: "Land",
+    createOrder: "Auftrag erstellen",
+    createUser: "Benutzer erstellen",
+    currentTemporaryPassword: "Aktuelles temporäres Passwort",
+    customer: "Kunde",
+    delete: "Löschen",
+    dailyPlanning: "Tagesplanung",
+    day: "Tag",
+    dismissDate: "Entlassen",
+    driver: "Fahrer",
+    driverManagement: "Fahrerverwaltung",
+    email: "E-Mail",
+    execute: "Ausführen",
+    executeImport: "Import ausführen",
+    exportExcel: "Excel exportieren",
+    freeLkw: "Freie LKW",
+    hide: "Ausblenden",
+    imports: "Importe",
+    info: "Info",
+    internalLogistics: "Interne Logistik",
+    language: "Sprache",
+    lastLogin: "Letzter Login",
+    lkwManagement: "LKW-Verwaltung",
+    lkwUsage: "LKW-Auslastung",
+    loading: "Lädt...",
+    logout: "Abmelden",
+    markAssigned: "Als zugewiesen markieren",
+    month: "Monat",
+    name: "Name",
+    newPassword: "Neues Passwort",
+    newTemporaryPassword: "Neues temporäres Passwort",
+    noActiveRows: "Keine aktiven Planungszeilen für die aktuellen Filter.",
+    noAuditRows: "Keine Audit-Einträge für den aktuellen Filter.",
+    noOrders: "Keine Aufträge für die aktuellen Filter.",
+    onlyAdminCanExecute: "Nur Admin darf Importe ausführen",
+    orderText: "Auftragstext",
+    password: "Passwort",
+    passwordTemporaryActive: " Temporäres Passwort aktiv",
+    period: "Zeitraum",
+    phone: "Telefon",
+    planningDatabaseNote: "Daten werden aus der isolierten Planungsdatenbank gelesen.",
+    planningDate: "Planungsdatum",
+    preview: "Vorschau",
+    problem: "Problem",
+    problems: "Probleme",
+    refresh: "Aktualisieren",
+    reportingDbSource: "Reporting-DB-Quelle",
+    resetPassword: "Passwort zurücksetzen",
+    returned: "Rückgabe",
+    role: "Rolle",
+    runde: "Runde",
+    save: "Speichern",
+    saveNewPassword: "Neues Passwort speichern",
+    searchAudit: "Event, Auftrag, Entität, Benutzer suchen",
+    searchDriver: "Fahrer, Telefon, Status, Firma suchen",
+    searchLkw: "LKW, Status, Firma suchen",
+    setActive: "Aktiv setzen",
+    show: "Anzeigen",
+    signIn: "Anmelden",
+    signingIn: "Anmeldung...",
+    sold: "Verkauft",
+    status: "Status",
+    temporaryPassword: "Temporäres Passwort",
+    temporaryPasswordMustChange: "Das temporäre Passwort muss vor Nutzung der App geändert werden.",
+    time: "Zeit",
+    total: "gesamt",
+    totalOrders: "Aufträge gesamt",
+    type: "Typ",
+    user: "Benutzer",
+    userManagement: "Benutzerverwaltung",
+    users: "Benutzer",
+    viewFor: "Ansicht für",
+    visible: "sichtbar",
+    week: "Woche",
+  },
+  ru: {
+    active: "Активен",
+    activeOrders: "Активные заказы",
+    action: "Действие",
+    all: "Все",
+    applicationSections: "Разделы приложения",
+    assignedLkw: "Назначенные LKW",
+    assignedOrders: "Назначенные заказы",
+    auditLog: "Журнал аудита",
+    auftrag: "Заказ",
+    cancel: "Отмена",
+    changePassword: "Сменить пароль",
+    city: "Город",
+    clearFilters: "Очистить фильтры",
+    company: "Компания",
+    confirmNewPassword: "Повторите новый пароль",
+    country: "Страна",
+    createOrder: "Создать заказ",
+    createUser: "Создать пользователя",
+    currentTemporaryPassword: "Текущий временный пароль",
+    customer: "Клиент",
+    delete: "Удалить",
+    dailyPlanning: "Планирование дня",
+    day: "День",
+    dismissDate: "Уволен",
+    driver: "Водитель",
+    driverManagement: "Водители",
+    email: "Email",
+    execute: "Выполнить",
+    executeImport: "Выполнить импорт",
+    exportExcel: "Экспорт Excel",
+    freeLkw: "Свободные LKW",
+    hide: "Скрыть",
+    imports: "Импорты",
+    info: "Инфо",
+    internalLogistics: "Внутренняя логистика",
+    language: "Язык",
+    lastLogin: "Последний вход",
+    lkwManagement: "LKW",
+    lkwUsage: "Загрузка LKW",
+    loading: "Загрузка...",
+    logout: "Выйти",
+    markAssigned: "Отметить назначенным",
+    month: "Месяц",
+    name: "Имя",
+    newPassword: "Новый пароль",
+    newTemporaryPassword: "Новый временный пароль",
+    noActiveRows: "Нет активных строк по текущим фильтрам.",
+    noAuditRows: "Нет событий аудита по текущему фильтру.",
+    noOrders: "Нет заказов по текущим фильтрам.",
+    onlyAdminCanExecute: "Только Admin может выполнять импорт",
+    orderText: "Текст заказа",
+    password: "Пароль",
+    passwordTemporaryActive: " Временный пароль активен",
+    period: "Период",
+    phone: "Телефон",
+    planningDatabaseNote: "Данные читаются из отдельной базы планирования.",
+    planningDate: "Дата планирования",
+    preview: "Предпросмотр",
+    problem: "Проблема",
+    problems: "Проблемы",
+    refresh: "Обновить",
+    reportingDbSource: "Источник Reporting DB",
+    resetPassword: "Сбросить пароль",
+    returned: "Возврат",
+    role: "Роль",
+    runde: "Рейс",
+    save: "Сохранить",
+    saveNewPassword: "Сохранить новый пароль",
+    searchAudit: "Поиск: событие, заказ, объект, пользователь",
+    searchDriver: "Поиск: водитель, телефон, статус, компания",
+    searchLkw: "Поиск: LKW, статус, компания",
+    setActive: "Сделать активным",
+    show: "Показать",
+    signIn: "Войти",
+    signingIn: "Вход...",
+    sold: "Продан",
+    status: "Статус",
+    temporaryPassword: "Временный пароль",
+    temporaryPasswordMustChange: "Временный пароль нужно изменить перед использованием приложения.",
+    time: "Время",
+    total: "всего",
+    totalOrders: "Всего заказов",
+    type: "Тип",
+    user: "Пользователь",
+    userManagement: "Пользователи",
+    users: "пользователей",
+    viewFor: "вид на",
+    visible: "видно",
+    week: "Неделя",
+  },
+} satisfies Record<Language, Record<string, string>>;
+
+type TranslationKey = keyof typeof translations.en;
+
+function detectLanguage(): Language {
+  if (typeof navigator === "undefined") return "en";
+  const candidates = navigator.languages?.length ? navigator.languages : [navigator.language];
+  const match = candidates
+    .map((value) => value.toLowerCase().slice(0, 2))
+    .find((value) => value === "de" || value === "en" || value === "ru");
+  return (match as Language | undefined) || "en";
+}
 
 function todayDate(): string {
   return new Date().toISOString().slice(0, 10);
@@ -332,6 +626,7 @@ export default function HomePage() {
   const [rundeFilter, setRundeFilter] = useState("");
   const [viewMode, setViewMode] = useState<ViewMode>("lkw-first");
   const [activeSection, setActiveSection] = useState<AppSection>("planning");
+  const [language, setLanguage] = useState<Language>("en");
   const [lkwManagementFilter, setLkwManagementFilter] = useState("");
   const [driverManagementFilter, setDriverManagementFilter] = useState("");
   const [auditFilter, setAuditFilter] = useState("");
@@ -343,6 +638,11 @@ export default function HomePage() {
       .then((result) => setUser(result.user))
       .catch(() => setUser(null))
       .finally(() => setLoading(false));
+  }, []);
+
+  useEffect(() => {
+    const savedLanguage = window.localStorage.getItem("lkwPlanningLanguage") as Language | null;
+    setLanguage(savedLanguage && savedLanguage in translations ? savedLanguage : detectLanguage());
   }, []);
 
   useEffect(() => {
@@ -363,15 +663,24 @@ export default function HomePage() {
     };
 
     return [
-      ["Total orders", String(counters.ordersToday)],
-      ["Active orders", String(counters.activeOrders)],
-      ["Assigned orders", String(counters.assignedOrders)],
-      ["Assigned LKW", String(counters.assignedLkw)],
-      ["Free LKW", String(counters.freeLkw)],
-      ["LKW usage", `${counters.lkwUsagePercent}%`],
-      ["Problems", String(counters.problemOrders)],
+      [t("totalOrders"), String(counters.ordersToday)],
+      [t("activeOrders"), String(counters.activeOrders)],
+      [t("assignedOrders"), String(counters.assignedOrders)],
+      [t("assignedLkw"), String(counters.assignedLkw)],
+      [t("freeLkw"), String(counters.freeLkw)],
+      [t("lkwUsage"), `${counters.lkwUsagePercent}%`],
+      [t("problems"), String(counters.problemOrders)],
     ];
-  }, [planning]);
+  }, [planning, language]);
+
+  function t(key: TranslationKey): string {
+    return translations[language][key] || translations.en[key];
+  }
+
+  function updateLanguage(value: Language): void {
+    setLanguage(value);
+    window.localStorage.setItem("lkwPlanningLanguage", value);
+  }
 
   const allOrdersFirstRows = useMemo(() => {
     const assigned = (planning?.rows || []).map((row) => ({
@@ -886,7 +1195,7 @@ export default function HomePage() {
   }
 
   if (loading && !user) {
-    return <main className="shell"><p>Loading...</p></main>;
+    return <main className="shell"><p>{t("loading")}</p></main>;
   }
 
   if (!user) {
@@ -894,19 +1203,27 @@ export default function HomePage() {
       <main className="login-shell">
         <form className="login-panel" onSubmit={handleLogin}>
           <div>
-            <p className="eyebrow">Internal logistics</p>
+            <p className="eyebrow">{t("internalLogistics")}</p>
             <h1>LKW Planning</h1>
           </div>
           <label>
-            Email
+            {t("language")}
+            <select value={language} onChange={(event) => updateLanguage(event.target.value as Language)}>
+              {languageOptions.map((option) => (
+                <option key={option.value} value={option.value}>{option.label}</option>
+              ))}
+            </select>
+          </label>
+          <label>
+            {t("email")}
             <input value={email} onChange={(event) => setEmail(event.target.value)} type="email" required />
           </label>
           <label>
-            Password
+            {t("password")}
             <input value={password} onChange={(event) => setPassword(event.target.value)} type="password" required />
           </label>
           {error ? <p className="error">{error}</p> : null}
-          <button type="submit" disabled={loading}>{loading ? "Signing in..." : "Sign in"}</button>
+          <button type="submit" disabled={loading}>{loading ? t("signingIn") : t("signIn")}</button>
         </form>
       </main>
     );
@@ -917,25 +1234,33 @@ export default function HomePage() {
       <main className="login-shell">
         <form className="login-panel" onSubmit={changeOwnPassword}>
           <div>
-            <p className="eyebrow">Internal logistics</p>
-            <h1>Change password</h1>
-            <p className="muted">Temporary password must be changed before using the app.</p>
+            <p className="eyebrow">{t("internalLogistics")}</p>
+            <h1>{t("changePassword")}</h1>
+            <p className="muted">{t("temporaryPasswordMustChange")}</p>
           </div>
           <label>
-            Current temporary password
+            {t("language")}
+            <select value={language} onChange={(event) => updateLanguage(event.target.value as Language)}>
+              {languageOptions.map((option) => (
+                <option key={option.value} value={option.value}>{option.label}</option>
+              ))}
+            </select>
+          </label>
+          <label>
+            {t("currentTemporaryPassword")}
             <input value={currentPassword} onChange={(event) => setCurrentPassword(event.target.value)} type="password" required />
           </label>
           <label>
-            New password
+            {t("newPassword")}
             <input value={newPassword} onChange={(event) => setNewPassword(event.target.value)} type="password" minLength={10} required />
           </label>
           <label>
-            Confirm new password
+            {t("confirmNewPassword")}
             <input value={confirmNewPassword} onChange={(event) => setConfirmNewPassword(event.target.value)} type="password" minLength={10} required />
           </label>
           {error ? <p className="error">{error}</p> : null}
-          <button type="submit" disabled={loading}>{loading ? "Saving..." : "Save new password"}</button>
-          <button type="button" className="secondary-button" onClick={handleLogout}>Logout</button>
+          <button type="submit" disabled={loading}>{loading ? `${t("save")}...` : t("saveNewPassword")}</button>
+          <button type="button" className="secondary-button" onClick={handleLogout}>{t("logout")}</button>
         </form>
       </main>
     );
@@ -946,28 +1271,36 @@ export default function HomePage() {
   const canExecuteImports = user.role === "ADMIN";
   const canViewAudit = hasManagerAccess(user.role);
   const visibleSections: Array<{ key: AppSection; label: string }> = [
-    { key: "planning", label: "Tagesplanung" },
-    ...(canViewImports ? [{ key: "imports" as AppSection, label: "Imports" }] : []),
-    { key: "lkw", label: "LKW management" },
-    { key: "drivers", label: "Driver management" },
-    ...(canViewAudit ? [{ key: "audit" as AppSection, label: "Audit Log" }] : []),
-    ...(user.role === "ADMIN" ? [{ key: "users" as AppSection, label: "User management" }] : []),
+    { key: "planning", label: t("dailyPlanning") },
+    ...(canViewImports ? [{ key: "imports" as AppSection, label: t("imports") }] : []),
+    { key: "lkw", label: t("lkwManagement") },
+    { key: "drivers", label: t("driverManagement") },
+    ...(canViewAudit ? [{ key: "audit" as AppSection, label: t("auditLog") }] : []),
+    ...(user.role === "ADMIN" ? [{ key: "users" as AppSection, label: t("userManagement") }] : []),
   ];
 
   return (
     <main className="shell">
       <header className="topbar">
         <div>
-          <p className="eyebrow">Internal logistics</p>
+          <p className="eyebrow">{t("internalLogistics")}</p>
           <h1>LKW Planning</h1>
         </div>
         <div className="userbar">
           <span>{user.displayName} / {user.role}</span>
-          <button type="button" className="secondary-button" onClick={handleLogout}>Logout</button>
+          <label className="language-field">
+            {t("language")}
+            <select value={language} onChange={(event) => updateLanguage(event.target.value as Language)}>
+              {languageOptions.map((option) => (
+                <option key={option.value} value={option.value}>{option.label}</option>
+              ))}
+            </select>
+          </label>
+          <button type="button" className="secondary-button" onClick={handleLogout}>{t("logout")}</button>
         </div>
       </header>
 
-      <nav className="app-tabs" aria-label="Application sections">
+      <nav className="app-tabs" aria-label={t("applicationSections")}>
         {visibleSections.map((section) => (
           <button
             key={section.key}
@@ -985,15 +1318,15 @@ export default function HomePage() {
         <div className="planning-main-column">
           <div className="filters-panel">
             <label>
-              Auftrag
-              <input value={auftragFilter} onChange={(event) => setAuftragFilter(event.target.value)} placeholder="Order text" />
+              {t("auftrag")}
+              <input value={auftragFilter} onChange={(event) => setAuftragFilter(event.target.value)} placeholder={t("orderText")} />
             </label>
             <label>
-              Period
+              {t("period")}
               <select value={periodFilter} onChange={(event) => setPeriodFilter(event.target.value as PeriodFilter)}>
-                <option value="day">Day</option>
-                <option value="week">Week</option>
-                <option value="month">Month</option>
+                <option value="day">{t("day")}</option>
+                <option value="week">{t("week")}</option>
+                <option value="month">{t("month")}</option>
               </select>
             </label>
             <label>
@@ -1001,22 +1334,22 @@ export default function HomePage() {
               <input value={lkwFilter} onChange={(event) => setLkwFilter(event.target.value)} placeholder="GR-OO..." />
             </label>
             <label>
-              Driver
-              <input value={driverFilter} onChange={(event) => setDriverFilter(event.target.value)} placeholder="Name" />
+              {t("driver")}
+              <input value={driverFilter} onChange={(event) => setDriverFilter(event.target.value)} placeholder={t("name")} />
             </label>
             <label>
-              Company
+              {t("company")}
               <select value={companyFilter} onChange={(event) => setCompanyFilter(event.target.value)}>
-                <option value="">All</option>
+                <option value="">{t("all")}</option>
                 {companyOptions.map((company) => (
                   <option key={company} value={company}>{company}</option>
                 ))}
               </select>
             </label>
             <label>
-              Status
+              {t("status")}
               <select value={statusFilter} onChange={(event) => setStatusFilter(event.target.value)}>
-                <option value="">All</option>
+                <option value="">{t("all")}</option>
                 <option value="OPEN">OPEN</option>
                 <option value="PLANNED">PLANNED</option>
                 <option value="PROBLEM">PROBLEM</option>
@@ -1025,9 +1358,9 @@ export default function HomePage() {
               </select>
             </label>
             <label>
-              Runde
+              {t("runde")}
               <select value={rundeFilter} onChange={(event) => setRundeFilter(event.target.value)}>
-                <option value="">All</option>
+                <option value="">{t("all")}</option>
                 <option value="1">1</option>
                 <option value="2">2</option>
                 <option value="3">3</option>
@@ -1045,12 +1378,12 @@ export default function HomePage() {
                 setRundeFilter("");
               }}
             >
-              Clear filters
+              {t("clearFilters")}
             </button>
             <span className="muted">
               {viewMode === "lkw-first"
-                ? `${ordersFirstRows.length} visible / ${(planning?.rows.length || 0) + (planning?.unassignedOrders.length || 0)} total`
-                : `${ordersFirstRows.length} visible / ${(planning?.rows.length || 0) + (planning?.unassignedOrders.length || 0)} total`}
+                ? `${ordersFirstRows.length} ${t("visible")} / ${(planning?.rows.length || 0) + (planning?.unassignedOrders.length || 0)} ${t("total")}`
+                : `${ordersFirstRows.length} ${t("visible")} / ${(planning?.rows.length || 0) + (planning?.unassignedOrders.length || 0)} ${t("total")}`}
             </span>
             {error ? <span className="error">{error}</span> : null}
           </div>
@@ -1065,14 +1398,14 @@ export default function HomePage() {
         </div>
         <div className="planning-actions-panel">
           <label>
-            Planning date
+            {t("planningDate")}
             <input type="date" value={selectedDate || todayDate()} onChange={(event) => setSelectedDate(event.target.value)} />
           </label>
           <button type="button" onClick={() => loadDashboardData(selectedDate)} disabled={loading}>
-            Refresh
+            {t("refresh")}
           </button>
           <button type="button" className="secondary-button" onClick={exportTagesplanung}>
-            Export Excel
+            {t("exportExcel")}
           </button>
         </div>
       </section>
@@ -1088,8 +1421,8 @@ export default function HomePage() {
       <section className="planner">
         <div className="planner-header">
           <div>
-            <h2>Tagesplanung</h2>
-            <p>{viewMode === "lkw-first" ? "LKW-first" : "Orders-first"} view for {selectedDate}. Data is read from the isolated planning database.</p>
+            <h2>{t("dailyPlanning")}</h2>
+            <p>{viewMode === "lkw-first" ? "LKW-first" : "Orders-first"} {t("viewFor")} {selectedDate}. {t("planningDatabaseNote")}</p>
           </div>
           <div className="mode-switch">
             <button
@@ -1112,23 +1445,23 @@ export default function HomePage() {
         {canEditPlanning && viewMode === "orders-first" ? (
           <form className="order-create-form" onSubmit={createOrder}>
             <select value={newOrderRunde} onChange={(event) => setNewOrderRunde(event.target.value)}>
-              <option value="1">Runde 1</option>
-              <option value="2">Runde 2</option>
-              <option value="3">Runde 3</option>
+              <option value="1">{t("runde")} 1</option>
+              <option value="2">{t("runde")} 2</option>
+              <option value="3">{t("runde")} 3</option>
             </select>
-            <input value={newOrderDescription} onChange={(event) => setNewOrderDescription(event.target.value)} placeholder="Auftrag" required />
-            <input value={newOrderCustomer} onChange={(event) => setNewOrderCustomer(event.target.value)} placeholder="Customer" />
+            <input value={newOrderDescription} onChange={(event) => setNewOrderDescription(event.target.value)} placeholder={t("auftrag")} required />
+            <input value={newOrderCustomer} onChange={(event) => setNewOrderCustomer(event.target.value)} placeholder={t("customer")} />
             <input value={newOrderPlz} onChange={(event) => setNewOrderPlz(event.target.value)} placeholder="PLZ" />
-            <input value={newOrderCity} onChange={(event) => setNewOrderCity(event.target.value)} placeholder="City" />
+            <input value={newOrderCity} onChange={(event) => setNewOrderCity(event.target.value)} placeholder={t("city")} />
             <select value={newOrderCountry} onChange={(event) => setNewOrderCountry(event.target.value)}>
-              <option value="">Country</option>
+              <option value="">{t("country")}</option>
               {countryOptions.map((country) => (
                 <option key={country.value} value={country.value}>{country.label}</option>
               ))}
             </select>
-            <input value={newOrderTime} onChange={(event) => setNewOrderTime(event.target.value)} placeholder="Time" />
-            <input value={newOrderInfo} onChange={(event) => setNewOrderInfo(event.target.value)} placeholder="Info" />
-            <button type="submit" disabled={Boolean(orderBusy)}>Create order</button>
+            <input value={newOrderTime} onChange={(event) => setNewOrderTime(event.target.value)} placeholder={t("time")} />
+            <input value={newOrderInfo} onChange={(event) => setNewOrderInfo(event.target.value)} placeholder={t("info")} />
+            <button type="submit" disabled={Boolean(orderBusy)}>{t("createOrder")}</button>
           </form>
         ) : null}
 
@@ -1139,15 +1472,15 @@ export default function HomePage() {
                 <thead>
                   <tr>
                     <th>LKW</th>
-                    <th>Runde</th>
-                    <th>Auftrag</th>
-                    <th>Driver</th>
-                    <th>Customer</th>
-                    <th>Country</th>
-                    <th>Info</th>
-                    <th>Status</th>
-                    <th>Problem</th>
-                    {canEditPlanning ? <th>Action</th> : null}
+                    <th>{t("runde")}</th>
+                    <th>{t("auftrag")}</th>
+                    <th>{t("driver")}</th>
+                    <th>{t("customer")}</th>
+                    <th>{t("country")}</th>
+                    <th>{t("info")}</th>
+                    <th>{t("status")}</th>
+                    <th>{t("problem")}</th>
+                    {canEditPlanning ? <th>{t("action")}</th> : null}
                   </tr>
                 </thead>
                 <tbody>
@@ -1206,7 +1539,7 @@ export default function HomePage() {
                         {canEditPlanning ? (
                           <td className="single-action-cell">
                             <button type="button" onClick={() => markOrderAssigned(editableRow)} disabled={Boolean(orderBusy)}>
-                              Mark assigned
+                              {t("markAssigned")}
                             </button>
                           </td>
                         ) : null}
@@ -1215,7 +1548,7 @@ export default function HomePage() {
                   })}
                   {planning && activeRows.length === 0 ? (
                     <tr>
-                      <td colSpan={canEditPlanning ? 10 : 9}>No active planning rows match the current filters.</td>
+                    <td colSpan={canEditPlanning ? 10 : 9}>{t("noActiveRows")}</td>
                     </tr>
                   ) : null}
                 </tbody>
@@ -1224,21 +1557,21 @@ export default function HomePage() {
               {assignedRows.length > 0 ? (
                 <div className="assigned-orders-block">
                   <div className="panel-header">
-                    <h3>Assigned orders</h3>
+                    <h3>{t("assignedOrders")}</h3>
                     <span className="muted">{assignedRows.length}</span>
                   </div>
                   <table className="orders-table lkw-first-table">
                     <thead>
                       <tr>
                         <th>LKW</th>
-                        <th>Runde</th>
-                        <th>Auftrag</th>
-                        <th>Driver</th>
-                        <th>Customer</th>
-                        <th>Country</th>
-                        <th>Info</th>
-                        <th>Status</th>
-                        <th>Problem</th>
+                        <th>{t("runde")}</th>
+                        <th>{t("auftrag")}</th>
+                        <th>{t("driver")}</th>
+                        <th>{t("customer")}</th>
+                        <th>{t("country")}</th>
+                        <th>{t("info")}</th>
+                        <th>{t("status")}</th>
+                        <th>{t("problem")}</th>
                       </tr>
                     </thead>
                     <tbody>
@@ -1268,14 +1601,14 @@ export default function HomePage() {
             <table className="orders-table order-data-table">
               <thead>
                 <tr>
-                  <th>Runde</th>
-                  <th>Auftrag</th>
-                  <th>Customer</th>
-                  <th>Country</th>
-                  <th>Info</th>
-                  <th>Status</th>
-                  <th>Problem</th>
-                  {canEditPlanning ? <th>Action</th> : null}
+                  <th>{t("runde")}</th>
+                  <th>{t("auftrag")}</th>
+                  <th>{t("customer")}</th>
+                  <th>{t("country")}</th>
+                  <th>{t("info")}</th>
+                  <th>{t("status")}</th>
+                  <th>{t("problem")}</th>
+                  {canEditPlanning ? <th>{t("action")}</th> : null}
                 </tr>
               </thead>
               <tbody>
@@ -1314,7 +1647,7 @@ export default function HomePage() {
                       <td>
                         {canEditPlanning ? (
                           <select value={orderDraft.country} onChange={(event) => updateOrderDraft(row.orderId, "country", event.target.value, row)}>
-                            <option value="">Country</option>
+                            <option value="">{t("country")}</option>
                             {countryOptions.map((country) => (
                               <option key={country.value} value={country.value}>{country.label}</option>
                             ))}
@@ -1335,10 +1668,10 @@ export default function HomePage() {
                       {canEditPlanning ? (
                         <td className="action-cell">
                           <button type="button" onClick={() => saveOrder(row)} disabled={Boolean(orderBusy)}>
-                            Save
+                            {t("save")}
                           </button>
                           <button type="button" className="danger-button" onClick={() => deleteOrder(row.orderId)} disabled={Boolean(orderBusy)}>
-                            Delete
+                            {t("delete")}
                           </button>
                         </td>
                       ) : null}
@@ -1347,7 +1680,7 @@ export default function HomePage() {
                 })}
                 {planning && ordersFirstRows.length === 0 ? (
                   <tr>
-                    <td colSpan={canEditPlanning ? 8 : 7}>No orders match the current filters.</td>
+                    <td colSpan={canEditPlanning ? 8 : 7}>{t("noOrders")}</td>
                   </tr>
                 ) : null}
               </tbody>
@@ -1360,7 +1693,7 @@ export default function HomePage() {
       {activeSection === "imports" ? (
         <section className="section-grid">
         <div className="list-panel imports-panel">
-          <h2>Imports</h2>
+          <h2>{t("imports")}</h2>
           <div className="imports-grid">
             {importActions.map((action) => {
               const result = importResults[action.key];
@@ -1368,7 +1701,7 @@ export default function HomePage() {
                 <div className="import-card" key={action.key}>
                   <div>
                     <strong>{action.title}</strong>
-                    <span>Reporting DB source</span>
+                    <span>{t("reportingDbSource")}</span>
                   </div>
                   <div className="import-buttons">
                     <button
@@ -1377,15 +1710,15 @@ export default function HomePage() {
                       disabled={Boolean(importBusy)}
                       onClick={() => runImportAction(action, "preview")}
                     >
-                      Preview
+                      {t("preview")}
                     </button>
                     <button
                       type="button"
                       disabled={Boolean(importBusy) || !canExecuteImports}
-                      title={canExecuteImports ? "Execute import" : "Only Admin can execute imports"}
+                      title={canExecuteImports ? t("executeImport") : t("onlyAdminCanExecute")}
                       onClick={() => runImportAction(action, "execute")}
                     >
-                      Execute
+                      {t("execute")}
                     </button>
                   </div>
                   {result ? (
@@ -1412,13 +1745,13 @@ export default function HomePage() {
         <section className="section-grid">
         <div className="list-panel management-panel">
           <div className="panel-header">
-            <h2>LKW management</h2>
+            <h2>{t("lkwManagement")}</h2>
             <span className="muted">{filteredManagementLkw.length} / {lkw.length}</span>
           </div>
           <input
             value={lkwManagementFilter}
             onChange={(event) => setLkwManagementFilter(event.target.value)}
-            placeholder="Search LKW, status, company"
+            placeholder={t("searchLkw")}
           />
           <div className="table-wrap compact-table">
             <table>
@@ -1426,11 +1759,11 @@ export default function HomePage() {
                 <tr>
                   <th>ID</th>
                   <th>LKW</th>
-                  <th>Type</th>
-                  <th>Company</th>
-                  <th>Status</th>
-                  <th>Sold</th>
-                  <th>Returned</th>
+                  <th>{t("type")}</th>
+                  <th>{t("company")}</th>
+                  <th>{t("status")}</th>
+                  <th>{t("sold")}</th>
+                  <th>{t("returned")}</th>
                 </tr>
               </thead>
               <tbody>
@@ -1456,24 +1789,24 @@ export default function HomePage() {
         <section className="section-grid">
         <div className="list-panel management-panel">
           <div className="panel-header">
-            <h2>Driver management</h2>
+            <h2>{t("driverManagement")}</h2>
             <span className="muted">{filteredManagementDrivers.length} / {drivers.length}</span>
           </div>
           <input
             value={driverManagementFilter}
             onChange={(event) => setDriverManagementFilter(event.target.value)}
-            placeholder="Search driver, phone, status, company"
+            placeholder={t("searchDriver")}
           />
           <div className="table-wrap compact-table">
             <table>
               <thead>
                 <tr>
                   <th>ID</th>
-                  <th>Driver</th>
-                  <th>Phone</th>
-                  <th>Company</th>
-                  <th>Status</th>
-                  <th>Dismissed</th>
+                  <th>{t("driver")}</th>
+                  <th>{t("phone")}</th>
+                  <th>{t("company")}</th>
+                  <th>{t("status")}</th>
+                  <th>{t("dismissDate")}</th>
                 </tr>
               </thead>
               <tbody>
@@ -1498,23 +1831,23 @@ export default function HomePage() {
         <section className="section-grid">
         <div className="list-panel audit-panel management-panel">
           <div className="panel-header">
-            <h2>Audit Log</h2>
+            <h2>{t("auditLog")}</h2>
             <span className="muted">{filteredAudit.length} / {audit.length}</span>
           </div>
           <input
             value={auditFilter}
             onChange={(event) => setAuditFilter(event.target.value)}
-            placeholder="Search event, Auftrag, entity, user"
+            placeholder={t("searchAudit")}
           />
           <div className="table-wrap compact-table">
             <table>
               <thead>
                 <tr>
-                  <th>Time</th>
+                  <th>{t("time")}</th>
                   <th>Event</th>
-                  <th>Auftrag</th>
+                  <th>{t("auftrag")}</th>
                   <th>Entity</th>
-                  <th>User</th>
+                  <th>{t("user")}</th>
                   <th>Message</th>
                 </tr>
               </thead>
@@ -1531,7 +1864,7 @@ export default function HomePage() {
                 ))}
                 {filteredAudit.length === 0 ? (
                   <tr>
-                    <td colSpan={6}>No audit events match the current filter.</td>
+                    <td colSpan={6}>{t("noAuditRows")}</td>
                   </tr>
                 ) : null}
               </tbody>
@@ -1545,28 +1878,28 @@ export default function HomePage() {
           <section className="section-grid">
           <div className="list-panel audit-panel management-panel">
             <div className="panel-header">
-              <h2>User management</h2>
-              <span className="muted">{managedUsers.length} users</span>
+              <h2>{t("userManagement")}</h2>
+              <span className="muted">{managedUsers.length} {t("users")}</span>
             </div>
             <form className="user-create-form" onSubmit={createUser}>
               <input
                 type="email"
                 value={newUserEmail}
                 onChange={(event) => setNewUserEmail(event.target.value)}
-                placeholder="Email"
+                placeholder={t("email")}
                 required
               />
               <input
                 value={newUserDisplayName}
                 onChange={(event) => setNewUserDisplayName(event.target.value)}
-                placeholder="Display name"
+                placeholder={t("name")}
                 required
               />
               <input
                 type={showNewUserPassword ? "text" : "password"}
                 value={newUserPassword}
                 onChange={(event) => setNewUserPassword(event.target.value)}
-                placeholder="Temporary password"
+                placeholder={t("temporaryPassword")}
                 minLength={10}
                 required
               />
@@ -1575,7 +1908,7 @@ export default function HomePage() {
                 className="secondary-button"
                 onClick={() => setShowNewUserPassword((current) => !current)}
               >
-                {showNewUserPassword ? "Hide" : "Show"}
+                {showNewUserPassword ? t("hide") : t("show")}
               </button>
               <select value={newUserRole} onChange={(event) => setNewUserRole(event.target.value)}>
                 <option value="VIEWER">VIEWER</option>
@@ -1583,18 +1916,18 @@ export default function HomePage() {
                 <option value="MANAGER">MANAGER</option>
                 <option value="ADMIN">ADMIN</option>
               </select>
-              <button type="submit" disabled={Boolean(userBusy)}>Create user</button>
+              <button type="submit" disabled={Boolean(userBusy)}>{t("createUser")}</button>
             </form>
             <div className="table-wrap compact-table">
               <table>
                 <thead>
                   <tr>
-                    <th>Name</th>
-                    <th>Email</th>
-                    <th>Role</th>
-                    <th>Password</th>
-                    <th>Active</th>
-                    <th>Last login</th>
+                    <th>{t("name")}</th>
+                    <th>{t("email")}</th>
+                    <th>{t("role")}</th>
+                    <th>{t("password")}</th>
+                    <th>{t("active")}</th>
+                    <th>{t("lastLogin")}</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -1622,14 +1955,14 @@ export default function HomePage() {
                               type={showResetPassword ? "text" : "password"}
                               value={resetPassword}
                               onChange={(event) => setResetPassword(event.target.value)}
-                              placeholder="New temporary password"
+                              placeholder={t("newTemporaryPassword")}
                               minLength={10}
                             />
                             <button type="button" className="secondary-button" onClick={() => setShowResetPassword((current) => !current)}>
-                              {showResetPassword ? "Hide" : "Show"}
+                              {showResetPassword ? t("hide") : t("show")}
                             </button>
                             <button type="button" onClick={() => resetManagedUserPassword(item.id)} disabled={Boolean(userBusy) || resetPassword.length < 10}>
-                              Save
+                              {t("save")}
                             </button>
                             <button
                               type="button"
@@ -1640,7 +1973,7 @@ export default function HomePage() {
                                 setShowResetPassword(false);
                               }}
                             >
-                              Cancel
+                              {t("cancel")}
                             </button>
                           </div>
                         ) : (
@@ -1654,10 +1987,10 @@ export default function HomePage() {
                               setShowResetPassword(false);
                             }}
                           >
-                            Reset password
+                            {t("resetPassword")}
                           </button>
                         )}
-                        {item.mustChangePassword ? <span className="muted"> Temporary password active</span> : null}
+                        {item.mustChangePassword ? <span className="muted">{t("passwordTemporaryActive")}</span> : null}
                       </td>
                       <td>
                         <input
