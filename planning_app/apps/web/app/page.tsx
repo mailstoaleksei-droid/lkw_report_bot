@@ -17,6 +17,8 @@ type MetricCounters = {
   assignedLkw: number;
   freeLkw: number;
   openOrders: number;
+  activeOrders: number;
+  assignedOrders: number;
   problemOrders: number;
   lkwUsagePercent: number;
 };
@@ -339,15 +341,18 @@ export default function HomePage() {
       assignedLkw: 0,
       freeLkw: 0,
       openOrders: 0,
+      activeOrders: 0,
+      assignedOrders: 0,
       problemOrders: 0,
       lkwUsagePercent: 0,
     };
 
     return [
-      ["Orders today", String(counters.ordersToday)],
+      ["Total orders", String(counters.ordersToday)],
+      ["Active orders", String(counters.activeOrders)],
+      ["Assigned orders", String(counters.assignedOrders)],
       ["Assigned LKW", String(counters.assignedLkw)],
       ["Free LKW", String(counters.freeLkw)],
-      ["Open orders", String(counters.openOrders)],
       ["LKW usage", `${counters.lkwUsagePercent}%`],
       ["Problems", String(counters.problemOrders)],
     ];

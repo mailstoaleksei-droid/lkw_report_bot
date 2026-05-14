@@ -179,6 +179,7 @@ Status legend:
   - Counters are loaded from `GET /api/planning/day`.
   - Dashboard counters are embedded under the Tagesplanung filter tile.
   - Dashboard was removed as a separate top navigation tab to keep the planner compact.
+  - Dashboard shows total orders, active orders, assigned orders, assigned LKW, free LKW, LKW usage, and problems.
 - [x] Tagesplanung page.
   - Root page includes the MVP Tagesplanung read view.
 - [x] LKW-first table starting with LKW column.

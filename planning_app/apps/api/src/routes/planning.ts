@@ -89,6 +89,10 @@ export async function registerPlanningRoutes(app: FastifyInstance, config: AppCo
 
     const assignedLkwIds = new Set(assignments.map((row) => row.lkwId).filter(Boolean));
     const openOrders = orders.filter((order) => order.status === OrderStatus.OPEN).length;
+    const assignedOrders = orders.filter((order) => order.status === OrderStatus.DONE).length;
+    const activeOrders = orders.filter((order) => (
+      order.status !== OrderStatus.DONE && order.status !== OrderStatus.CANCELLED
+    )).length;
     const problemOrders = orders.filter((order) => order.status === OrderStatus.PROBLEM).length;
     const unassignedOrders = orders.filter((order) => order.assignments.length === 0);
 
@@ -100,6 +104,8 @@ export async function registerPlanningRoutes(app: FastifyInstance, config: AppCo
         assignedLkw: assignedLkwIds.size,
         freeLkw: Math.max(totalPlanningLkw - assignedLkwIds.size, 0),
         openOrders,
+        activeOrders,
+        assignedOrders,
         problemOrders,
         lkwUsagePercent: totalPlanningLkw > 0
           ? Math.round((assignedLkwIds.size / totalPlanningLkw) * 1000) / 10
