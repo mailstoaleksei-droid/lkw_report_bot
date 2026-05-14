@@ -1430,8 +1430,8 @@ export default function HomePage() {
         <div className="planner-header">
           <div>
             <h2>{t("dailyPlanning")}</h2>
-            <p>{viewMode === "lkw-first" ? "LKW-first" : "Orders-first"} {t("viewFor")} {selectedDate}. {t("planningDatabaseNote")}</p>
           </div>
+          <div className="planning-date-title">{selectedDate}</div>
           <div className="mode-switch">
             <button
               type="button"

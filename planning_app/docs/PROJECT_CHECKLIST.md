@@ -201,6 +201,8 @@ Status legend:
   - LKW status and driver check columns were removed from the planning table.
   - Operators/Admins mark a row as assigned from the right-side action column; this saves LKW/driver and sets the order to `DONE`.
   - Assigned rows move into the `Assigned orders` block for viewing.
+  - Tagesplanung rows were compacted to one-line height so more LKW/orders fit on one screen.
+  - The planner subtitle was replaced with a centered highlighted planning date.
 - [x] Orders-first mode.
   - Web UI can switch between LKW-first and Orders-first tables.
   - Orders-first view includes assigned and unassigned orders for the selected date.
