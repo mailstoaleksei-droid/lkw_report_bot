@@ -177,6 +177,8 @@ Status legend:
   - Root page now shows a login form and uses the API session cookie.
 - [x] Dashboard with real counters.
   - Counters are loaded from `GET /api/planning/day`.
+  - Dashboard counters are embedded under the Tagesplanung filter tile.
+  - Dashboard was removed as a separate top navigation tab to keep the planner compact.
 - [x] Tagesplanung page.
   - Root page includes the MVP Tagesplanung read view.
 - [x] LKW-first table starting with LKW column.
@@ -202,7 +204,7 @@ Status legend:
   - Orders-first action column is at the right edge and includes `Save` and `Delete`.
 - [~] Filters: date, week, month, Auftrag, company, LKW, driver, status, Runde.
   - Date, week, month, Auftrag, company, LKW, driver, status, and Runde filters are implemented in the web UI.
-  - Planning date, Refresh, and Export Excel are grouped in a separate right-side tile next to the filter tile.
+  - Planning date, Refresh, and Export Excel are grouped in a separate right-side tile next to the filters and dashboard column.
 - [x] Conflict/problem indicators.
   - Problem rows are highlighted and problem status is shown.
 - [x] Holiday warning banner.

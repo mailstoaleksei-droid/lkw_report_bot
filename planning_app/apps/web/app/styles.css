@@ -168,6 +168,12 @@ label {
   margin: 0 0 20px;
 }
 
+.planning-main-column {
+  display: grid;
+  gap: 12px;
+  min-width: 0;
+}
+
 .filters-panel,
 .planning-actions-panel {
   align-items: end;
@@ -186,6 +192,10 @@ label {
 
 .planning-actions-panel {
   grid-template-columns: 1fr;
+}
+
+.planning-dashboard {
+  margin: 0;
 }
 
 .metric,

@@ -222,7 +222,7 @@ const countryOptions = [
 ];
 
 type ViewMode = "lkw-first" | "orders-first";
-type AppSection = "dashboard" | "planning" | "imports" | "lkw" | "drivers" | "audit" | "users";
+type AppSection = "planning" | "imports" | "lkw" | "drivers" | "audit" | "users";
 type PeriodFilter = "day" | "week" | "month";
 
 function todayDate(): string {
@@ -921,7 +921,6 @@ export default function HomePage() {
   const canExecuteImports = user.role === "ADMIN";
   const canViewAudit = hasManagerAccess(user.role);
   const visibleSections: Array<{ key: AppSection; label: string }> = [
-    { key: "dashboard", label: "Dashboard" },
     { key: "planning", label: "Tagesplanung" },
     ...(canViewImports ? [{ key: "imports" as AppSection, label: "Imports" }] : []),
     { key: "lkw", label: "LKW management" },
@@ -956,89 +955,88 @@ export default function HomePage() {
         ))}
       </nav>
 
-      {activeSection === "dashboard" ? (
-        <section className="dashboard">
-          {metrics.map(([label, value]) => (
-            <div className="metric" key={label}>
-              <span>{label}</span>
-              <strong>{value}</strong>
-            </div>
-          ))}
-        </section>
-      ) : null}
-
       {activeSection === "planning" ? (
       <section className="planning-controls">
-        <div className="filters-panel">
-          <label>
-            Auftrag
-            <input value={auftragFilter} onChange={(event) => setAuftragFilter(event.target.value)} placeholder="Order text" />
-          </label>
-          <label>
-            Period
-            <select value={periodFilter} onChange={(event) => setPeriodFilter(event.target.value as PeriodFilter)}>
-              <option value="day">Day</option>
-              <option value="week">Week</option>
-              <option value="month">Month</option>
-            </select>
-          </label>
-          <label>
-            LKW
-            <input value={lkwFilter} onChange={(event) => setLkwFilter(event.target.value)} placeholder="GR-OO..." />
-          </label>
-          <label>
-            Driver
-            <input value={driverFilter} onChange={(event) => setDriverFilter(event.target.value)} placeholder="Name" />
-          </label>
-          <label>
-            Company
-            <select value={companyFilter} onChange={(event) => setCompanyFilter(event.target.value)}>
-              <option value="">All</option>
-              {companyOptions.map((company) => (
-                <option key={company} value={company}>{company}</option>
-              ))}
-            </select>
-          </label>
-          <label>
-            Status
-            <select value={statusFilter} onChange={(event) => setStatusFilter(event.target.value)}>
-              <option value="">All</option>
-              <option value="OPEN">OPEN</option>
-              <option value="PLANNED">PLANNED</option>
-              <option value="PROBLEM">PROBLEM</option>
-              <option value="DONE">DONE</option>
-              <option value="CANCELLED">CANCELLED</option>
-            </select>
-          </label>
-          <label>
-            Runde
-            <select value={rundeFilter} onChange={(event) => setRundeFilter(event.target.value)}>
-              <option value="">All</option>
-              <option value="1">1</option>
-              <option value="2">2</option>
-              <option value="3">3</option>
-            </select>
-          </label>
-          <button
-            type="button"
-            className="secondary-button"
-            onClick={() => {
-              setAuftragFilter("");
-              setLkwFilter("");
-              setDriverFilter("");
-              setCompanyFilter("");
-              setStatusFilter("");
-              setRundeFilter("");
-            }}
-          >
-            Clear filters
-          </button>
-          <span className="muted">
-            {viewMode === "lkw-first"
-              ? `${ordersFirstRows.length} visible / ${(planning?.rows.length || 0) + (planning?.unassignedOrders.length || 0)} total`
-              : `${ordersFirstRows.length} visible / ${(planning?.rows.length || 0) + (planning?.unassignedOrders.length || 0)} total`}
-          </span>
-          {error ? <span className="error">{error}</span> : null}
+        <div className="planning-main-column">
+          <div className="filters-panel">
+            <label>
+              Auftrag
+              <input value={auftragFilter} onChange={(event) => setAuftragFilter(event.target.value)} placeholder="Order text" />
+            </label>
+            <label>
+              Period
+              <select value={periodFilter} onChange={(event) => setPeriodFilter(event.target.value as PeriodFilter)}>
+                <option value="day">Day</option>
+                <option value="week">Week</option>
+                <option value="month">Month</option>
+              </select>
+            </label>
+            <label>
+              LKW
+              <input value={lkwFilter} onChange={(event) => setLkwFilter(event.target.value)} placeholder="GR-OO..." />
+            </label>
+            <label>
+              Driver
+              <input value={driverFilter} onChange={(event) => setDriverFilter(event.target.value)} placeholder="Name" />
+            </label>
+            <label>
+              Company
+              <select value={companyFilter} onChange={(event) => setCompanyFilter(event.target.value)}>
+                <option value="">All</option>
+                {companyOptions.map((company) => (
+                  <option key={company} value={company}>{company}</option>
+                ))}
+              </select>
+            </label>
+            <label>
+              Status
+              <select value={statusFilter} onChange={(event) => setStatusFilter(event.target.value)}>
+                <option value="">All</option>
+                <option value="OPEN">OPEN</option>
+                <option value="PLANNED">PLANNED</option>
+                <option value="PROBLEM">PROBLEM</option>
+                <option value="DONE">DONE</option>
+                <option value="CANCELLED">CANCELLED</option>
+              </select>
+            </label>
+            <label>
+              Runde
+              <select value={rundeFilter} onChange={(event) => setRundeFilter(event.target.value)}>
+                <option value="">All</option>
+                <option value="1">1</option>
+                <option value="2">2</option>
+                <option value="3">3</option>
+              </select>
+            </label>
+            <button
+              type="button"
+              className="secondary-button"
+              onClick={() => {
+                setAuftragFilter("");
+                setLkwFilter("");
+                setDriverFilter("");
+                setCompanyFilter("");
+                setStatusFilter("");
+                setRundeFilter("");
+              }}
+            >
+              Clear filters
+            </button>
+            <span className="muted">
+              {viewMode === "lkw-first"
+                ? `${ordersFirstRows.length} visible / ${(planning?.rows.length || 0) + (planning?.unassignedOrders.length || 0)} total`
+                : `${ordersFirstRows.length} visible / ${(planning?.rows.length || 0) + (planning?.unassignedOrders.length || 0)} total`}
+            </span>
+            {error ? <span className="error">{error}</span> : null}
+          </div>
+          <section className="dashboard planning-dashboard">
+            {metrics.map(([label, value]) => (
+              <div className="metric" key={label}>
+                <span>{label}</span>
+                <strong>{value}</strong>
+              </div>
+            ))}
+          </section>
         </div>
         <div className="planning-actions-panel">
           <label>
