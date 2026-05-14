@@ -351,29 +351,6 @@ export default function HomePage() {
     ];
   }, [planning]);
 
-  const filteredRows = useMemo(() => {
-    return (planning?.rows || []).filter((row) => {
-      const auftragMatch = !auftragFilter || row.order.description.toLowerCase().includes(auftragFilter.toLowerCase());
-      const lkwMatch = !lkwFilter || row.lkw?.number.toLowerCase().includes(lkwFilter.toLowerCase());
-      const driverMatch = !driverFilter || row.driver?.fullName.toLowerCase().includes(driverFilter.toLowerCase());
-      const companyMatch = !companyFilter || [row.lkw?.company, row.driver?.company].some((value) => (
-        (value || "").toLowerCase().includes(companyFilter.toLowerCase())
-      ));
-      const statusValue = row.order.status || row.status;
-      const statusMatch = !statusFilter || statusValue === statusFilter;
-      const rundeMatch = !rundeFilter || String(row.runde) === rundeFilter;
-      return auftragMatch && lkwMatch && driverMatch && companyMatch && statusMatch && rundeMatch;
-    });
-  }, [planning, auftragFilter, lkwFilter, driverFilter, companyFilter, statusFilter, rundeFilter]);
-
-  const activeRows = useMemo(() => (
-    filteredRows.filter((row) => (row.order.status || row.status) !== "DONE")
-  ), [filteredRows]);
-
-  const assignedRows = useMemo(() => (
-    filteredRows.filter((row) => (row.order.status || row.status) === "DONE")
-  ), [filteredRows]);
-
   const allOrdersFirstRows = useMemo(() => {
     const assigned = (planning?.rows || []).map((row) => ({
       key: row.id,
@@ -437,6 +414,14 @@ export default function HomePage() {
       return auftragMatch && lkwMatch && driverMatch && companyMatch && statusMatch && rundeMatch;
     });
   }, [allOrdersFirstRows, auftragFilter, lkwFilter, driverFilter, companyFilter, statusFilter, rundeFilter]);
+
+  const activeRows = useMemo(() => (
+    ordersFirstRows.filter((row) => row.status !== "DONE")
+  ), [ordersFirstRows]);
+
+  const assignedRows = useMemo(() => (
+    ordersFirstRows.filter((row) => row.status === "DONE")
+  ), [ordersFirstRows]);
 
   const planningLkw = useMemo(() => (
     lkw.filter((item) => isLkwVisibleForPlanning(item, selectedDate))
@@ -713,27 +698,6 @@ export default function HomePage() {
     }
   }
 
-  async function saveAssignment(row: { orderId: string; lkwId: string; driverId: string }): Promise<void> {
-    setError(null);
-    setOrderBusy(row.orderId);
-    const draft = assignmentDrafts[row.orderId] || { lkwId: row.lkwId, driverId: row.driverId };
-    try {
-      await apiFetch("/api/assignments/upsert", {
-        method: "POST",
-        body: JSON.stringify({
-          orderId: row.orderId,
-          lkwId: draft.lkwId || null,
-          driverId: draft.driverId || null,
-        }),
-      });
-      await loadDashboardData(selectedDate);
-    } catch (caught) {
-      setError(caught instanceof Error ? caught.message : "Assignment save failed");
-    } finally {
-      setOrderBusy(null);
-    }
-  }
-
   async function saveOrder(row: { orderId: string; runde: number; description: string; customer: string; plz: string; cityName: string; country: string; plannedTime: string; info: string }): Promise<void> {
     setError(null);
     setOrderBusy(row.orderId);
@@ -769,47 +733,28 @@ export default function HomePage() {
     }
   }
 
-  async function saveOrderAndAssignment(row: EditableOrderRow): Promise<void> {
+  async function markOrderAssigned(row: EditableOrderRow): Promise<void> {
     setError(null);
     setOrderBusy(row.orderId);
-    const orderDraft = orderDrafts[row.orderId] || {
-      runde: String(row.runde),
-      description: row.description,
-      customer: row.customer,
-      plz: row.plz,
-      city: row.cityName,
-      country: row.country,
-      plannedTime: row.plannedTime,
-      info: row.info,
-    };
     const assignmentDraft = assignmentDrafts[row.orderId] || { lkwId: row.lkwId, driverId: row.driverId };
+    if (!assignmentDraft.lkwId || !assignmentDraft.driverId) {
+      setError("Select LKW and driver before marking assigned.");
+      setOrderBusy(null);
+      return;
+    }
     try {
-      await apiFetch(`/api/orders/${row.orderId}`, {
-        method: "PATCH",
+      await apiFetch("/api/assignments/upsert", {
+        method: "POST",
         body: JSON.stringify({
-          runde: Number(orderDraft.runde),
-          description: orderDraft.description,
-          customer: orderDraft.customer || null,
-          plz: orderDraft.plz || null,
-          city: orderDraft.city || null,
-          country: orderDraft.country || null,
-          plannedTime: orderDraft.plannedTime || null,
-          info: orderDraft.info || null,
+          orderId: row.orderId,
+          lkwId: assignmentDraft.lkwId,
+          driverId: assignmentDraft.driverId,
         }),
       });
-      if (row.lkwId || row.driverId || assignmentDraft.lkwId || assignmentDraft.driverId) {
-        await apiFetch("/api/assignments/upsert", {
-          method: "POST",
-          body: JSON.stringify({
-            orderId: row.orderId,
-            lkwId: assignmentDraft.lkwId || null,
-            driverId: assignmentDraft.driverId || null,
-          }),
-        });
-      }
+      await apiFetch(`/api/orders/${row.orderId}`, { method: "PATCH", body: JSON.stringify({ status: "DONE" }) });
       await loadDashboardData(selectedDate);
     } catch (caught) {
-      setError(caught instanceof Error ? caught.message : "Order save failed");
+      setError(caught instanceof Error ? caught.message : "Mark assigned failed");
     } finally {
       setOrderBusy(null);
     }
@@ -1093,7 +1038,7 @@ export default function HomePage() {
         </button>
         <span className="muted">
           {viewMode === "lkw-first"
-            ? `${filteredRows.length} visible / ${planning?.rows.length || 0} total`
+            ? `${ordersFirstRows.length} visible / ${(planning?.rows.length || 0) + (planning?.unassignedOrders.length || 0)} total`
             : `${ordersFirstRows.length} visible / ${(planning?.rows.length || 0) + (planning?.unassignedOrders.length || 0)} total`}
         </span>
       </section>
@@ -1130,7 +1075,7 @@ export default function HomePage() {
           </div>
         </div>
 
-        {canEditPlanning ? (
+        {canEditPlanning && viewMode === "orders-first" ? (
           <form className="order-create-form" onSubmit={createOrder}>
             <select value={newOrderRunde} onChange={(event) => setNewOrderRunde(event.target.value)}>
               <option value="1">Runde 1</option>
@@ -1175,114 +1120,61 @@ export default function HomePage() {
                 <tbody>
                   {activeRows.map((row) => {
                     const editableRow: EditableOrderRow = {
-                      orderId: row.order.id,
+                      orderId: row.orderId,
                       runde: row.runde,
-                      description: row.order.description,
-                      customer: row.order.customer || "",
-                      plz: row.order.plz || "",
-                      cityName: row.order.city || "",
-                      country: row.order.country || "",
-                      plannedTime: row.order.plannedTime || "",
-                      info: row.order.info || "",
-                      lkwId: row.lkw?.id || "",
-                      driverId: row.driver?.id || "",
+                      description: row.description,
+                      customer: row.customer,
+                      plz: row.plz,
+                      cityName: row.cityName,
+                      country: row.country,
+                      plannedTime: row.plannedTime,
+                      info: row.info,
+                      lkwId: row.lkwId,
+                      driverId: row.driverId,
                     };
-                    const draft = assignmentDrafts[row.order.id] || {
+                    const draft = assignmentDrafts[row.orderId] || {
                       lkwId: editableRow.lkwId,
                       driverId: editableRow.driverId,
                     };
-                    const orderDraft = orderDrafts[row.order.id] || {
-                      runde: String(editableRow.runde),
-                      description: editableRow.description,
-                      customer: editableRow.customer,
-                      plz: editableRow.plz,
-                      city: editableRow.cityName,
-                      country: editableRow.country,
-                      plannedTime: editableRow.plannedTime,
-                      info: editableRow.info,
-                    };
-                    const effectiveRunde = Number(orderDraft.runde || row.runde);
+                    const effectiveRunde = row.runde;
                     return (
-                      <tr key={row.id} className={row.status === "PROBLEM" || row.order.status === "PROBLEM" ? "problem-row" : ""}>
+                      <tr key={row.key} className={row.status === "PROBLEM" ? "problem-row" : ""}>
                         <td>
                           {canEditPlanning ? (
-                            <select value={draft.lkwId} onChange={(event) => updateAssignmentDraft(row.order.id, "lkwId", event.target.value, { ...editableRow, runde: effectiveRunde })}>
+                            <select value={draft.lkwId} onChange={(event) => updateAssignmentDraft(row.orderId, "lkwId", event.target.value, { ...editableRow, runde: effectiveRunde })}>
                               <option value="">-</option>
-                              {planningLkw.filter((item) => item.id === draft.lkwId || isLkwAvailableForRunde(item.id, effectiveRunde, row.order.id)).map((item) => (
+                              {planningLkw.filter((item) => item.id === draft.lkwId || isLkwAvailableForRunde(item.id, effectiveRunde, row.orderId)).map((item) => (
                                 <option value={item.id} key={item.id}>{item.number}</option>
                               ))}
                             </select>
-                          ) : row.lkw?.number || "-"}
+                          ) : row.lkw}
                         </td>
+                        <td>{row.runde}</td>
+                        <td>{row.description}</td>
                         <td>
                           {canEditPlanning ? (
-                            <select value={orderDraft.runde} onChange={(event) => updateOrderDraft(row.order.id, "runde", event.target.value, editableRow)}>
-                              <option value="1">1</option>
-                              <option value="2">2</option>
-                              <option value="3">3</option>
-                            </select>
-                          ) : row.runde}
-                        </td>
-                        <td>
-                          {canEditPlanning ? (
-                            <input value={orderDraft.description} onChange={(event) => updateOrderDraft(row.order.id, "description", event.target.value, editableRow)} />
-                          ) : row.order.description}
-                        </td>
-                        <td>
-                          {canEditPlanning ? (
-                            <select value={draft.driverId} onChange={(event) => updateAssignmentDraft(row.order.id, "driverId", event.target.value, { ...editableRow, runde: effectiveRunde })}>
+                            <select value={draft.driverId} onChange={(event) => updateAssignmentDraft(row.orderId, "driverId", event.target.value, { ...editableRow, runde: effectiveRunde })}>
                               <option value="">-</option>
-                              {planningDrivers.filter((item) => item.id === draft.driverId || isDriverAvailableForRunde(item.id, effectiveRunde, row.order.id)).map((item) => (
+                              {planningDrivers.filter((item) => item.id === draft.driverId || isDriverAvailableForRunde(item.id, effectiveRunde, row.orderId)).map((item) => (
                                 <option value={item.id} key={item.id}>{item.fullName}</option>
                               ))}
                             </select>
-                          ) : row.driver?.fullName || "-"}
+                          ) : row.driver}
                         </td>
+                        <td>{row.customer || "-"}</td>
+                        <td>{row.city}</td>
+                        <td>{row.time}</td>
+                        <td>{row.info || "-"}</td>
                         <td>
-                          {canEditPlanning ? (
-                            <input value={orderDraft.customer} onChange={(event) => updateOrderDraft(row.order.id, "customer", event.target.value, editableRow)} />
-                          ) : row.order.customer || "-"}
-                        </td>
-                        <td>
-                          {canEditPlanning ? (
-                            <div className="city-edit">
-                              <input value={orderDraft.plz} onChange={(event) => updateOrderDraft(row.order.id, "plz", event.target.value, editableRow)} placeholder="PLZ" />
-                              <input value={orderDraft.city} onChange={(event) => updateOrderDraft(row.order.id, "city", event.target.value, editableRow)} placeholder="City" />
-                              <select value={orderDraft.country} onChange={(event) => updateOrderDraft(row.order.id, "country", event.target.value, editableRow)}>
-                                <option value="">Country</option>
-                                {countryOptions.map((country) => (
-                                  <option key={country.value} value={country.value}>{country.label}</option>
-                                ))}
-                              </select>
-                            </div>
-                          ) : [row.order.plz, row.order.city, row.order.country].filter(Boolean).join(" ") || "-"}
-                        </td>
-                        <td>
-                          {canEditPlanning ? (
-                            <input className="time-input" value={orderDraft.plannedTime} onChange={(event) => updateOrderDraft(row.order.id, "plannedTime", event.target.value, editableRow)} />
-                          ) : row.order.plannedTime || "-"}
-                        </td>
-                        <td>
-                          {canEditPlanning ? (
-                            <input value={orderDraft.info} onChange={(event) => updateOrderDraft(row.order.id, "info", event.target.value, editableRow)} />
-                          ) : row.order.info || "-"}
-                        </td>
-                        <td>
-                          <span className={`status status-${(row.order.status || row.status).toLowerCase()}`}>
-                            {row.order.status || row.status}
+                          <span className={`status status-${row.status.toLowerCase()}`}>
+                            {row.status}
                           </span>
                         </td>
-                        <td>{row.order.problemReason || row.problemReason || "-"}</td>
+                        <td>{row.problemReason || "-"}</td>
                         {canEditPlanning ? (
-                          <td className="action-cell">
-                            <button type="button" onClick={() => saveOrderAndAssignment(editableRow)} disabled={Boolean(orderBusy)}>
-                              Save
-                            </button>
-                            <button type="button" onClick={() => setOrderStatus(row.order.id, "DONE")} disabled={Boolean(orderBusy)}>
+                          <td className="single-action-cell">
+                            <button type="button" onClick={() => markOrderAssigned(editableRow)} disabled={Boolean(orderBusy)}>
                               Mark assigned
-                            </button>
-                            <button type="button" className="danger-button" onClick={() => deleteOrder(row.order.id)} disabled={Boolean(orderBusy)}>
-                              Delete
                             </button>
                           </td>
                         ) : null}
@@ -1316,33 +1208,25 @@ export default function HomePage() {
                         <th>Info</th>
                         <th>Status</th>
                         <th>Problem</th>
-                        {canEditPlanning ? <th>Action</th> : null}
                       </tr>
                     </thead>
                     <tbody>
                       {assignedRows.map((row) => (
-                        <tr key={row.id}>
-                          <td>{row.lkw?.number || "-"}</td>
+                        <tr key={row.key}>
+                          <td>{row.lkw}</td>
                           <td>{row.runde}</td>
-                          <td>{row.order.description}</td>
-                          <td>{row.driver?.fullName || "-"}</td>
-                          <td>{row.order.customer || "-"}</td>
-                          <td>{[row.order.plz, row.order.city, row.order.country].filter(Boolean).join(" ") || "-"}</td>
-                          <td>{row.order.plannedTime || "-"}</td>
-                          <td>{row.order.info || "-"}</td>
+                          <td>{row.description}</td>
+                          <td>{row.driver}</td>
+                          <td>{row.customer || "-"}</td>
+                          <td>{row.city}</td>
+                          <td>{row.time}</td>
+                          <td>{row.info || "-"}</td>
                           <td>
-                            <span className={`status status-${(row.order.status || row.status).toLowerCase()}`}>
-                              {row.order.status || row.status}
+                            <span className={`status status-${row.status.toLowerCase()}`}>
+                              {row.status}
                             </span>
                           </td>
-                          <td>{row.order.problemReason || row.problemReason || "-"}</td>
-                          {canEditPlanning ? (
-                            <td className="single-action-cell">
-                              <button type="button" className="secondary-button" onClick={() => setOrderStatus(row.order.id, "PLANNED")} disabled={Boolean(orderBusy)}>
-                                Return active
-                              </button>
-                            </td>
-                          ) : null}
+                          <td>{row.problemReason || "-"}</td>
                         </tr>
                       ))}
                     </tbody>
@@ -1351,13 +1235,11 @@ export default function HomePage() {
               ) : null}
             </div>
           ) : (
-            <table className="orders-table">
+            <table className="orders-table order-data-table">
               <thead>
                 <tr>
                   <th>Runde</th>
                   <th>Auftrag</th>
-                  <th>LKW</th>
-                  <th>Driver</th>
                   <th>Customer</th>
                   <th>Country</th>
                   <th>Time</th>
@@ -1369,7 +1251,6 @@ export default function HomePage() {
               </thead>
               <tbody>
                 {ordersFirstRows.map((row) => {
-                  const draft = assignmentDrafts[row.orderId] || { lkwId: row.lkwId, driverId: row.driverId };
                   const orderDraft = orderDrafts[row.orderId] || {
                     runde: String(row.runde),
                     description: row.description,
@@ -1380,7 +1261,6 @@ export default function HomePage() {
                     plannedTime: row.plannedTime,
                     info: row.info,
                   };
-                  const effectiveRunde = Number(orderDraft.runde || row.runde);
                   return (
                     <tr key={row.key} className={row.status === "PROBLEM" ? "problem-row" : ""}>
                       <td>
@@ -1396,26 +1276,6 @@ export default function HomePage() {
                         {canEditPlanning ? (
                           <input value={orderDraft.description} onChange={(event) => updateOrderDraft(row.orderId, "description", event.target.value, row)} />
                         ) : row.description}
-                      </td>
-                      <td>
-                        {canEditPlanning ? (
-                          <select value={draft.lkwId} onChange={(event) => updateAssignmentDraft(row.orderId, "lkwId", event.target.value, { ...row, runde: effectiveRunde })}>
-                            <option value="">-</option>
-                            {planningLkw.filter((item) => item.id === draft.lkwId || isLkwAvailableForRunde(item.id, effectiveRunde, row.orderId)).map((item) => (
-                              <option value={item.id} key={item.id}>{item.number}</option>
-                            ))}
-                          </select>
-                        ) : row.lkw}
-                      </td>
-                      <td>
-                        {canEditPlanning ? (
-                          <select value={draft.driverId} onChange={(event) => updateAssignmentDraft(row.orderId, "driverId", event.target.value, { ...row, runde: effectiveRunde })}>
-                            <option value="">-</option>
-                            {planningDrivers.filter((item) => item.id === draft.driverId || isDriverAvailableForRunde(item.id, effectiveRunde, row.orderId)).map((item) => (
-                              <option value={item.id} key={item.id}>{item.fullName}</option>
-                            ))}
-                          </select>
-                        ) : row.driver}
                       </td>
                       <td>
                         {canEditPlanning ? (
@@ -1454,7 +1314,7 @@ export default function HomePage() {
                       <td>{row.problemReason || "-"}</td>
                       {canEditPlanning ? (
                         <td className="action-cell">
-                          <button type="button" onClick={() => saveOrderAndAssignment(row)} disabled={Boolean(orderBusy)}>
+                          <button type="button" onClick={() => saveOrder(row)} disabled={Boolean(orderBusy)}>
                             Save
                           </button>
                           <button type="button" className="danger-button" onClick={() => deleteOrder(row.orderId)} disabled={Boolean(orderBusy)}>
@@ -1467,7 +1327,7 @@ export default function HomePage() {
                 })}
                 {planning && ordersFirstRows.length === 0 ? (
                   <tr>
-                    <td colSpan={canEditPlanning ? 11 : 10}>No orders match the current filters.</td>
+                    <td colSpan={canEditPlanning ? 9 : 8}>No orders match the current filters.</td>
                   </tr>
                 ) : null}
               </tbody>

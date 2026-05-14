@@ -181,17 +181,18 @@ Status legend:
   - Root page includes the MVP Tagesplanung read view.
 - [x] LKW-first table starting with LKW column.
   - The first table column is LKW.
-  - The LKW-first table now mirrors the Orders-first editable columns, with LKW as the first column.
+  - The LKW-first table is now the assignment view for created orders.
+  - The LKW-first table includes created orders even when no LKW/driver has been assigned yet.
+  - Only LKW and driver are editable in LKW-first.
   - LKW status and driver check columns were removed from the planning table.
-  - The planning location column is now labelled `Country` and uses a nearby-country dropdown for editing.
-  - Operators/Admins can save, soft-delete, or mark an active row as assigned from the right-side action column.
-  - Assigned rows move into the `Assigned orders` block and can be returned to active planning.
+  - Operators/Admins mark a row as assigned from the right-side action column; this saves LKW/driver and sets the order to `DONE`.
+  - Assigned rows move into the `Assigned orders` block for viewing.
 - [x] Orders-first mode.
   - Web UI can switch between LKW-first and Orders-first tables.
   - Orders-first view includes assigned and unassigned orders for the selected date.
-  - Operators/Admins can create a new order from the Tagesplanung view.
-  - Operators/Admins can assign or update LKW and driver from the Orders-first table.
-  - Orders-first dropdowns hide LKW and drivers already assigned in the same Runde.
+  - Operators/Admins create and edit order data from the Orders-first table.
+  - LKW and driver assignment is intentionally removed from Orders-first and handled only in LKW-first.
+  - LKW-first dropdowns hide LKW and drivers already assigned in the same Runde.
   - Driver dropdowns hide drivers who are on imported vacation/sick status for the selected planning date.
   - Selecting a LKW auto-fills the driver when a same-date LKW-driver pairing is already known.
   - Orders can be edited inline, including Runde, Auftrag, customer, PLZ/city/country, time, and info.
