@@ -1407,12 +1407,14 @@ export default function HomePage() {
           <button type="button" onClick={() => loadDashboardData(selectedDate)} disabled={loading}>
             {t("refresh")}
           </button>
-          <button type="button" className="secondary-button" onClick={() => exportTagesplanung("xls")}>
-            {t("exportExcel")}
-          </button>
-          <button type="button" className="secondary-button" onClick={() => exportTagesplanung("pdf")}>
-            {t("exportPdf")}
-          </button>
+          <div className="export-actions">
+            <button type="button" className="secondary-button" onClick={() => exportTagesplanung("xls")}>
+              {t("exportExcel")}
+            </button>
+            <button type="button" className="secondary-button" onClick={() => exportTagesplanung("pdf")}>
+              {t("exportPdf")}
+            </button>
+          </div>
         </div>
       </section>
       ) : null}

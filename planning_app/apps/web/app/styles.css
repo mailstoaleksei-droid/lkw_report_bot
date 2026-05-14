@@ -175,7 +175,7 @@ label {
   align-items: start;
   display: grid;
   gap: 8px;
-  grid-template-columns: minmax(0, 1fr) 260px;
+  grid-template-columns: minmax(0, 1fr) 300px;
   margin: 0 0 14px;
 }
 
@@ -202,6 +202,8 @@ label {
 }
 
 .planning-actions-panel {
+  align-self: stretch;
+  align-content: start;
   grid-template-columns: 1fr;
 }
 
@@ -228,6 +230,19 @@ label {
 .planning-actions-panel button {
   min-height: 34px;
   padding: 7px 12px;
+}
+
+.export-actions {
+  display: grid;
+  gap: 6px;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.export-actions button {
+  font-size: 12px;
+  min-height: 30px;
+  padding: 6px 8px;
+  white-space: nowrap;
 }
 
 .metric,
