@@ -238,6 +238,8 @@ const countryOptions = [
   { value: "DK", label: "DK - Denmark" },
 ];
 
+const EMPTY_LKW_FILTER = "__EMPTY_LKW__";
+
 type ViewMode = "lkw-first" | "orders-first";
 type AppSection = "planning" | "imports" | "lkw" | "drivers" | "audit" | "users";
 type PeriodFilter = "day" | "week" | "month";
@@ -278,6 +280,7 @@ const translations = {
     driver: "Driver",
     driverManagement: "Driver management",
     email: "Email",
+    emptyLkw: "Empty",
     execute: "Execute",
     executeImport: "Execute import",
     exportExcel: "Export Excel",
@@ -370,6 +373,7 @@ const translations = {
     driver: "Fahrer",
     driverManagement: "Fahrerverwaltung",
     email: "E-Mail",
+    emptyLkw: "Leer",
     execute: "Ausführen",
     executeImport: "Import ausführen",
     exportExcel: "Excel exportieren",
@@ -462,6 +466,7 @@ const translations = {
     driver: "Водитель",
     driverManagement: "Водители",
     email: "Email",
+    emptyLkw: "Пусто",
     execute: "Выполнить",
     executeImport: "Выполнить импорт",
     exportExcel: "Экспорт Excel",
@@ -744,7 +749,8 @@ export default function HomePage() {
   const ordersFirstRows = useMemo(() => {
     return allOrdersFirstRows.filter((row) => {
       const auftragMatch = !auftragFilter || row.description.toLowerCase().includes(auftragFilter.toLowerCase());
-      const lkwMatch = !lkwFilter || row.lkw.toLowerCase().includes(lkwFilter.toLowerCase());
+      const lkwMatch = !lkwFilter
+        || (lkwFilter === EMPTY_LKW_FILTER ? !row.lkwId : row.lkw.toLowerCase().includes(lkwFilter.toLowerCase()));
       const driverMatch = !driverFilter || row.driver.toLowerCase().includes(driverFilter.toLowerCase());
       const companyMatch = !companyFilter || [row.lkwCompany, row.driverCompany].some((value) => (
         value.toLowerCase().includes(companyFilter.toLowerCase())
@@ -1195,7 +1201,11 @@ export default function HomePage() {
   function exportTagesplanung(format: "xls" | "pdf"): void {
     const params = new URLSearchParams({ date: selectedDate, scope: periodFilter });
     if (auftragFilter) params.set("auftrag", auftragFilter);
-    if (lkwFilter) params.set("lkw", lkwFilter);
+    if (lkwFilter === EMPTY_LKW_FILTER) {
+      params.set("lkwMissing", "1");
+    } else if (lkwFilter) {
+      params.set("lkw", lkwFilter);
+    }
     if (driverFilter) params.set("driver", driverFilter);
     if (companyFilter) params.set("company", companyFilter);
     if (statusFilter) params.set("status", statusFilter);
@@ -1341,7 +1351,21 @@ export default function HomePage() {
               </label>
               <label>
                 LKW
-                <input value={lkwFilter} onChange={(event) => setLkwFilter(event.target.value)} placeholder="GR-OO..." />
+                <span className="filter-combo">
+                  <input
+                    value={lkwFilter === EMPTY_LKW_FILTER ? "" : lkwFilter}
+                    onChange={(event) => setLkwFilter(event.target.value)}
+                    placeholder={lkwFilter === EMPTY_LKW_FILTER ? "-" : "GR-OO..."}
+                    disabled={lkwFilter === EMPTY_LKW_FILTER}
+                  />
+                  <button
+                    type="button"
+                    className={lkwFilter === EMPTY_LKW_FILTER ? "" : "secondary-button"}
+                    onClick={() => setLkwFilter(lkwFilter === EMPTY_LKW_FILTER ? "" : EMPTY_LKW_FILTER)}
+                  >
+                    {t("emptyLkw")}
+                  </button>
+                </span>
               </label>
               <label>
                 {t("driver")}

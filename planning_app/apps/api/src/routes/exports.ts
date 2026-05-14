@@ -29,6 +29,7 @@ const exportQuerySchema = z.object({
   scope: z.enum(["day", "week", "month"]).default("day"),
   auftrag: z.string().trim().optional(),
   lkw: z.string().trim().optional(),
+  lkwMissing: z.string().trim().optional(),
   driver: z.string().trim().optional(),
   company: z.string().trim().optional(),
   status: z.string().trim().optional(),
@@ -80,6 +81,7 @@ function textValue(value: string | number | null | undefined): string {
 function matchesExportFilters(row: ExportRow, query: ExportQuery): boolean {
   const auftragMatch = includesFilter(row.auftrag, query.auftrag);
   const lkwMatch = includesFilter(row.lkw === "-" ? "" : row.lkw, query.lkw);
+  const lkwMissingMatch = !query.lkwMissing || row.lkw === "-";
   const driverMatch = includesFilter(row.driver === "-" ? "" : row.driver, query.driver);
   const companyMatch = !query.company || [
     row.lkwCompany,
@@ -87,7 +89,7 @@ function matchesExportFilters(row: ExportRow, query: ExportQuery): boolean {
   ].some((value) => includesFilter(value, query.company));
   const statusMatch = !query.status || row.status === query.status;
   const rundeMatch = !query.runde || String(row.runde) === query.runde;
-  return auftragMatch && lkwMatch && driverMatch && companyMatch && statusMatch && rundeMatch;
+  return auftragMatch && lkwMatch && lkwMissingMatch && driverMatch && companyMatch && statusMatch && rundeMatch;
 }
 
 async function loadExportRows(query: ExportQuery): Promise<ExportRow[]> {
@@ -272,6 +274,7 @@ export async function registerExportRoutes(app: FastifyInstance, config: AppConf
           scope: query.scope,
           auftrag: query.auftrag || null,
           lkw: query.lkw || null,
+          lkwMissing: query.lkwMissing || null,
           driver: query.driver || null,
           company: query.company || null,
           status: query.status || null,
@@ -330,6 +333,7 @@ export async function registerExportRoutes(app: FastifyInstance, config: AppConf
           scope: query.scope,
           auftrag: query.auftrag || null,
           lkw: query.lkw || null,
+          lkwMissing: query.lkwMissing || null,
           driver: query.driver || null,
           company: query.company || null,
           status: query.status || null,

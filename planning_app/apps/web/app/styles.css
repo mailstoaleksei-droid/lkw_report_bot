@@ -250,6 +250,19 @@ label {
   padding: 7px 12px;
 }
 
+.filter-combo {
+  display: grid;
+  gap: 6px;
+  grid-template-columns: minmax(0, 1fr) auto;
+}
+
+.filter-combo button {
+  font-size: 12px;
+  min-height: 34px;
+  padding: 6px 10px;
+  white-space: nowrap;
+}
+
 .export-actions {
   display: grid;
   gap: 6px;
