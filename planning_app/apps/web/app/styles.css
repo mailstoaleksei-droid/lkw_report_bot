@@ -178,7 +178,7 @@ label {
   border-radius: 8px;
   display: grid;
   gap: 12px;
-  grid-template-columns: repeat(4, minmax(140px, 1fr)) auto auto;
+  grid-template-columns: repeat(5, minmax(140px, 1fr)) auto auto;
   margin: 0 0 20px;
   padding: 14px;
 }

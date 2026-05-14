@@ -8,6 +8,7 @@ const exportQuerySchema = z.object({
   date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
   lkw: z.string().trim().optional(),
   driver: z.string().trim().optional(),
+  company: z.string().trim().optional(),
   status: z.string().trim().optional(),
   runde: z.string().regex(/^\d+$/).optional(),
 });
@@ -61,8 +62,8 @@ export async function registerExportRoutes(app: FastifyInstance, config: AppConf
       ],
       include: {
         order: true,
-        lkw: true,
-        driver: true,
+        lkw: { include: { company: true } },
+        driver: { include: { company: true } },
         chassis: true,
       },
     });
@@ -70,9 +71,13 @@ export async function registerExportRoutes(app: FastifyInstance, config: AppConf
       const statusValue = row.order.status || row.status;
       const lkwMatch = includesFilter(row.lkw?.number, query.lkw);
       const driverMatch = includesFilter(row.driver?.fullName, query.driver);
+      const companyMatch = !query.company || [
+        row.lkw?.company?.name,
+        row.driver?.company?.name,
+      ].some((value) => includesFilter(value, query.company));
       const statusMatch = !query.status || statusValue === query.status;
       const rundeMatch = !query.runde || String(row.runde) === query.runde;
-      return lkwMatch && driverMatch && statusMatch && rundeMatch;
+      return lkwMatch && driverMatch && companyMatch && statusMatch && rundeMatch;
     });
 
     const header = [
@@ -134,6 +139,7 @@ export async function registerExportRoutes(app: FastifyInstance, config: AppConf
           date: query.date,
           lkw: query.lkw || null,
           driver: query.driver || null,
+          company: query.company || null,
           status: query.status || null,
           runde: query.runde || null,
         },

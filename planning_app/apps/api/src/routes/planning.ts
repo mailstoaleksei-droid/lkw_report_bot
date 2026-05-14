@@ -109,6 +109,7 @@ export async function registerPlanningRoutes(app: FastifyInstance, config: AppCo
           externalId: assignment.driver.externalId,
           fullName: assignment.driver.fullName,
           status: assignment.driver.status,
+          company: assignment.driver.company?.name || null,
           availability: assignment.driver.availability,
         } : null,
         chassis: assignment.chassis ? {

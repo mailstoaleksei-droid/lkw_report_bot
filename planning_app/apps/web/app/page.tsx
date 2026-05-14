@@ -37,6 +37,7 @@ type PlanningRow = {
     id: string;
     fullName: string;
     status: string;
+    company: string | null;
     availability: Array<{ status: string; rawStatus: string | null; source: string }>;
   } | null;
   chassis: {
@@ -288,6 +289,7 @@ export default function HomePage() {
   const [orderDrafts, setOrderDrafts] = useState<Record<string, OrderDraft>>({});
   const [lkwFilter, setLkwFilter] = useState("");
   const [driverFilter, setDriverFilter] = useState("");
+  const [companyFilter, setCompanyFilter] = useState("");
   const [statusFilter, setStatusFilter] = useState("");
   const [rundeFilter, setRundeFilter] = useState("");
   const [viewMode, setViewMode] = useState<ViewMode>("lkw-first");
@@ -334,12 +336,15 @@ export default function HomePage() {
     return (planning?.rows || []).filter((row) => {
       const lkwMatch = !lkwFilter || row.lkw?.number.toLowerCase().includes(lkwFilter.toLowerCase());
       const driverMatch = !driverFilter || row.driver?.fullName.toLowerCase().includes(driverFilter.toLowerCase());
+      const companyMatch = !companyFilter || [row.lkw?.company, row.driver?.company].some((value) => (
+        (value || "").toLowerCase().includes(companyFilter.toLowerCase())
+      ));
       const statusValue = row.order.status || row.status;
       const statusMatch = !statusFilter || statusValue === statusFilter;
       const rundeMatch = !rundeFilter || String(row.runde) === rundeFilter;
-      return lkwMatch && driverMatch && statusMatch && rundeMatch;
+      return lkwMatch && driverMatch && companyMatch && statusMatch && rundeMatch;
     });
-  }, [planning, lkwFilter, driverFilter, statusFilter, rundeFilter]);
+  }, [planning, lkwFilter, driverFilter, companyFilter, statusFilter, rundeFilter]);
 
   const activeRows = useMemo(() => (
     filteredRows.filter((row) => (row.order.status || row.status) !== "DONE")
@@ -363,8 +368,10 @@ export default function HomePage() {
       info: row.order.info || "",
       lkwId: row.lkw?.id || "",
       lkw: row.lkw?.number || "-",
+      lkwCompany: row.lkw?.company || "",
       driverId: row.driver?.id || "",
       driver: row.driver?.fullName || "-",
+      driverCompany: row.driver?.company || "",
       city: [row.order.plz, row.order.city, row.order.country].filter(Boolean).join(" ") || "-",
       time: row.order.plannedTime || "-",
       status: row.order.status || row.status,
@@ -383,8 +390,10 @@ export default function HomePage() {
       info: order.info || "",
       lkwId: "",
       lkw: "-",
+      lkwCompany: "",
       driverId: "",
       driver: "-",
+      driverCompany: "",
       city: [order.plz, order.city, order.country].filter(Boolean).join(" ") || "-",
       time: order.plannedTime || "-",
       status: order.status,
@@ -395,12 +404,15 @@ export default function HomePage() {
       .filter((row) => {
         const lkwMatch = !lkwFilter || row.lkw.toLowerCase().includes(lkwFilter.toLowerCase());
         const driverMatch = !driverFilter || row.driver.toLowerCase().includes(driverFilter.toLowerCase());
+        const companyMatch = !companyFilter || [row.lkwCompany, row.driverCompany].some((value) => (
+          value.toLowerCase().includes(companyFilter.toLowerCase())
+        ));
         const statusMatch = !statusFilter || row.status === statusFilter;
         const rundeMatch = !rundeFilter || String(row.runde) === rundeFilter;
-        return lkwMatch && driverMatch && statusMatch && rundeMatch;
+        return lkwMatch && driverMatch && companyMatch && statusMatch && rundeMatch;
       })
       .sort((a, b) => a.runde - b.runde || a.description.localeCompare(b.description));
-  }, [planning, lkwFilter, driverFilter, statusFilter, rundeFilter]);
+  }, [planning, lkwFilter, driverFilter, companyFilter, statusFilter, rundeFilter]);
 
   const planningLkw = useMemo(() => (
     lkw.filter((item) => isLkwVisibleForPlanning(item, selectedDate))
@@ -409,6 +421,13 @@ export default function HomePage() {
   const planningDrivers = useMemo(() => (
     drivers.filter((item) => isDriverVisibleForPlanning(item, selectedDate))
   ), [drivers, selectedDate]);
+
+  const companyOptions = useMemo(() => (
+    Array.from(new Set([
+      ...lkw.map((item) => item.company?.name),
+      ...drivers.map((item) => item.company?.name),
+    ].filter((value): value is string => Boolean(value)))).sort((a, b) => a.localeCompare(b))
+  ), [lkw, drivers]);
 
   const lkwDriverSuggestions = useMemo(() => {
     const suggestions: Record<string, string> = {};
@@ -863,6 +882,7 @@ export default function HomePage() {
     const params = new URLSearchParams({ date: selectedDate });
     if (lkwFilter) params.set("lkw", lkwFilter);
     if (driverFilter) params.set("driver", driverFilter);
+    if (companyFilter) params.set("company", companyFilter);
     if (statusFilter) params.set("status", statusFilter);
     if (rundeFilter) params.set("runde", rundeFilter);
     window.location.href = `${apiBaseUrl}/api/exports/tagesplanung.xls?${params.toString()}`;
@@ -1006,6 +1026,15 @@ export default function HomePage() {
           <input value={driverFilter} onChange={(event) => setDriverFilter(event.target.value)} placeholder="Name" />
         </label>
         <label>
+          Company
+          <select value={companyFilter} onChange={(event) => setCompanyFilter(event.target.value)}>
+            <option value="">All</option>
+            {companyOptions.map((company) => (
+              <option key={company} value={company}>{company}</option>
+            ))}
+          </select>
+        </label>
+        <label>
           Status
           <select value={statusFilter} onChange={(event) => setStatusFilter(event.target.value)}>
             <option value="">All</option>
@@ -1031,6 +1060,7 @@ export default function HomePage() {
           onClick={() => {
             setLkwFilter("");
             setDriverFilter("");
+            setCompanyFilter("");
             setStatusFilter("");
             setRundeFilter("");
           }}
