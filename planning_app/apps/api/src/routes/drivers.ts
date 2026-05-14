@@ -24,6 +24,15 @@ const updateSchema = z.object({
   isActive: z.boolean().optional(),
 });
 
+const createSchema = z.object({
+  fullName: z.string().trim().min(1).max(160),
+  surname: z.string().trim().max(100).nullable().optional(),
+  phone: z.string().trim().max(80).nullable().optional(),
+  status: z.nativeEnum(MasterStatus).default(MasterStatus.ACTIVE),
+  dismissedDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).nullable().optional(),
+  isActive: z.boolean().default(true),
+});
+
 function dateOrNull(value: string | null | undefined): Date | null | undefined {
   if (value === undefined) return undefined;
   if (value === null || value === "") return null;
@@ -105,6 +114,64 @@ export async function registerDriverRoutes(app: FastifyInstance, config: AppConf
     });
 
     return { ok: true, items };
+  });
+
+  app.post("/api/drivers", async (request, reply) => {
+    const user = await requireUser(request, reply, config, "MANAGER");
+    if (!user) return;
+
+    const parsed = createSchema.safeParse(request.body);
+    if (!parsed.success) {
+      return reply.code(400).send({ ok: false, error: "Invalid driver payload" });
+    }
+
+    const input = parsed.data;
+    const created = await prisma.$transaction(async (tx) => {
+      const saved = await tx.driver.create({
+        data: {
+          fullName: input.fullName,
+          surname: cleanText(input.surname),
+          phone: cleanText(input.phone),
+          status: input.status,
+          rawStatus: input.status,
+          dismissedDate: dateOrNull(input.dismissedDate) ?? null,
+          isActive: input.isActive,
+          rawPayload: { source: "manual-planning-ui" },
+        },
+        select: {
+          id: true,
+          externalId: true,
+          fullName: true,
+          surname: true,
+          phone: true,
+          status: true,
+          rawStatus: true,
+          dismissedDate: true,
+          isActive: true,
+          telegramLookupHint: true,
+          company: { select: { id: true, name: true } },
+          availability: {
+            where: { date: new Date("1900-01-01T00:00:00.000Z") },
+            select: { status: true, rawStatus: true, source: true },
+          },
+        },
+      });
+
+      await tx.auditLog.create({
+        data: {
+          eventType: AuditEventType.STATUS_CHANGED,
+          entityType: "Driver",
+          entityId: saved.id,
+          userId: user.id,
+          message: `Driver created: ${saved.fullName}`,
+          after: saved,
+        },
+      });
+
+      return saved;
+    });
+
+    return { ok: true, item: created };
   });
 
   app.patch("/api/drivers/:id", async (request, reply) => {

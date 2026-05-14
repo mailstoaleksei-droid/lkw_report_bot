@@ -282,6 +282,8 @@ const translations = {
     confirmNewPassword: "Confirm new password",
     country: "Country",
     createOrder: "Create order",
+    createDriver: "Create driver",
+    createLkw: "Create LKW",
     createUser: "Create user",
     currentTemporaryPassword: "Current temporary password",
     customer: "Customer",
@@ -375,6 +377,8 @@ const translations = {
     confirmNewPassword: "Neues Passwort bestätigen",
     country: "Land",
     createOrder: "Auftrag erstellen",
+    createDriver: "Fahrer erstellen",
+    createLkw: "LKW erstellen",
     createUser: "Benutzer erstellen",
     currentTemporaryPassword: "Aktuelles temporäres Passwort",
     customer: "Kunde",
@@ -468,6 +472,8 @@ const translations = {
     confirmNewPassword: "Повторите новый пароль",
     country: "Страна",
     createOrder: "Создать заказ",
+    createDriver: "Создать водителя",
+    createLkw: "Создать LKW",
     createUser: "Создать пользователя",
     currentTemporaryPassword: "Текущий временный пароль",
     customer: "Клиент",
@@ -646,6 +652,12 @@ export default function HomePage() {
   const [newOrderCountry, setNewOrderCountry] = useState("");
   const [newOrderTime, setNewOrderTime] = useState("");
   const [newOrderInfo, setNewOrderInfo] = useState("");
+  const [newLkwNumber, setNewLkwNumber] = useState("");
+  const [newLkwType, setNewLkwType] = useState("");
+  const [newLkwStatus, setNewLkwStatus] = useState("ACTIVE");
+  const [newDriverName, setNewDriverName] = useState("");
+  const [newDriverPhone, setNewDriverPhone] = useState("");
+  const [newDriverStatus, setNewDriverStatus] = useState("ACTIVE");
   const [assignmentDrafts, setAssignmentDrafts] = useState<Record<string, { lkwId: string; driverId: string }>>({});
   const [orderDrafts, setOrderDrafts] = useState<Record<string, OrderDraft>>({});
   const [periodFilter, setPeriodFilter] = useState<PeriodFilter>("day");
@@ -1189,6 +1201,31 @@ export default function HomePage() {
     }
   }
 
+  async function createLkwItem(event: FormEvent<HTMLFormElement>): Promise<void> {
+    event.preventDefault();
+    setError(null);
+    setManagementBusy("create-lkw");
+    try {
+      await apiFetch("/api/lkw", {
+        method: "POST",
+        body: JSON.stringify({
+          number: newLkwNumber,
+          type: newLkwType || null,
+          status: newLkwStatus,
+          isActive: newLkwStatus === "ACTIVE",
+        }),
+      });
+      setNewLkwNumber("");
+      setNewLkwType("");
+      setNewLkwStatus("ACTIVE");
+      await loadDashboardData(selectedDate);
+    } catch (caught) {
+      setError(caught instanceof Error ? caught.message : "LKW create failed");
+    } finally {
+      setManagementBusy(null);
+    }
+  }
+
   async function saveDriverItem(item: DriverItem): Promise<void> {
     setError(null);
     setManagementBusy(item.id);
@@ -1206,6 +1243,31 @@ export default function HomePage() {
       await loadDashboardData(selectedDate);
     } catch (caught) {
       setError(caught instanceof Error ? caught.message : "Driver update failed");
+    } finally {
+      setManagementBusy(null);
+    }
+  }
+
+  async function createDriverItem(event: FormEvent<HTMLFormElement>): Promise<void> {
+    event.preventDefault();
+    setError(null);
+    setManagementBusy("create-driver");
+    try {
+      await apiFetch("/api/drivers", {
+        method: "POST",
+        body: JSON.stringify({
+          fullName: newDriverName,
+          phone: newDriverPhone || null,
+          status: newDriverStatus,
+          isActive: newDriverStatus === "ACTIVE",
+        }),
+      });
+      setNewDriverName("");
+      setNewDriverPhone("");
+      setNewDriverStatus("ACTIVE");
+      await loadDashboardData(selectedDate);
+    } catch (caught) {
+      setError(caught instanceof Error ? caught.message : "Driver create failed");
     } finally {
       setManagementBusy(null);
     }
@@ -1856,6 +1918,16 @@ export default function HomePage() {
             <h2>{t("lkwManagement")}</h2>
             <span className="muted">{filteredManagementLkw.length} / {lkw.length}</span>
           </div>
+          {canManageMasterData ? (
+            <form className="management-create-form" onSubmit={createLkwItem}>
+              <input value={newLkwNumber} onChange={(event) => setNewLkwNumber(event.target.value)} placeholder="LKW" required />
+              <input value={newLkwType} onChange={(event) => setNewLkwType(event.target.value)} placeholder={t("type")} />
+              <select value={newLkwStatus} onChange={(event) => setNewLkwStatus(event.target.value)}>
+                {masterStatusOptions.map((status) => <option key={status} value={status}>{status}</option>)}
+              </select>
+              <button type="submit" disabled={managementBusy === "create-lkw"}>{t("createLkw")}</button>
+            </form>
+          ) : null}
           <input
             value={lkwManagementFilter}
             onChange={(event) => setLkwManagementFilter(event.target.value)}
@@ -1937,6 +2009,16 @@ export default function HomePage() {
             <h2>{t("driverManagement")}</h2>
             <span className="muted">{filteredManagementDrivers.length} / {drivers.length}</span>
           </div>
+          {canManageMasterData ? (
+            <form className="management-create-form" onSubmit={createDriverItem}>
+              <input value={newDriverName} onChange={(event) => setNewDriverName(event.target.value)} placeholder={t("driver")} required />
+              <input value={newDriverPhone} onChange={(event) => setNewDriverPhone(event.target.value)} placeholder={t("phone")} />
+              <select value={newDriverStatus} onChange={(event) => setNewDriverStatus(event.target.value)}>
+                {masterStatusOptions.map((status) => <option key={status} value={status}>{status}</option>)}
+              </select>
+              <button type="submit" disabled={managementBusy === "create-driver"}>{t("createDriver")}</button>
+            </form>
+          ) : null}
           <input
             value={driverManagementFilter}
             onChange={(event) => setDriverManagementFilter(event.target.value)}

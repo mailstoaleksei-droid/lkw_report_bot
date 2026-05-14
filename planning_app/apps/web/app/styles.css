@@ -617,6 +617,20 @@ th {
   width: 100%;
 }
 
+.management-create-form {
+  display: grid;
+  gap: 8px;
+  grid-template-columns: minmax(160px, 1fr) minmax(140px, 1fr) minmax(130px, 160px) auto;
+  margin: 0 0 10px;
+}
+
+.management-create-form input,
+.management-create-form select,
+.management-create-form button {
+  min-height: 34px;
+  padding: 6px 10px;
+}
+
 .imports-panel {
   grid-column: 1 / -1;
 }
