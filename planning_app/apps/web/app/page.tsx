@@ -84,6 +84,15 @@ type PlanningDayResponse = {
     status: string;
     problemReason: string | null;
   }>;
+  lkwDriverPairings: Array<{
+    id: string;
+    lkwId: string;
+    driverId: string;
+    lkwNumber: string;
+    driverName: string;
+    source: string;
+    confidence: number;
+  }>;
 };
 
 type LkwItem = {
@@ -207,6 +216,12 @@ const importActions: ImportAction[] = [
     title: "Driver availability",
     previewPath: "/api/imports/reporting-driver-availability/preview",
     executePath: "/api/imports/reporting-driver-availability/execute",
+  },
+  {
+    key: "pairings",
+    title: "LKW-driver pairings",
+    previewPath: "/api/imports/lkw-driver-pairings/preview",
+    executePath: "/api/imports/lkw-driver-pairings/execute",
   },
 ];
 
@@ -447,6 +462,11 @@ export default function HomePage() {
 
   const lkwDriverSuggestions = useMemo(() => {
     const suggestions: Record<string, string> = {};
+    (planning?.lkwDriverPairings || []).forEach((pairing) => {
+      if (pairing.lkwId && pairing.driverId && !suggestions[pairing.lkwId]) {
+        suggestions[pairing.lkwId] = pairing.driverId;
+      }
+    });
     (planning?.rows || []).forEach((row) => {
       if (row.lkw?.id && row.driver?.id && !suggestions[row.lkw.id]) {
         suggestions[row.lkw.id] = row.driver.id;

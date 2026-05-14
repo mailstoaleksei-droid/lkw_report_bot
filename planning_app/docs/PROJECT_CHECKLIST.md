@@ -127,7 +127,10 @@ Status legend:
   - Docker API preview and execute endpoints verified on 2026-05-13.
 - [ ] Direct Excel `Urlaub` import fallback, if reporting DB ETL is unavailable.
 - [ ] Import from Excel daily Tagesplan source.
-- [ ] Import `Kalender` LKW-driver pairings from `LKW_Fahrer_Data.xlsm`.
+- [~] Import `Kalender` LKW-driver pairings from `LKW_Fahrer_Data.xlsm`.
+  - MVP pairing table added in the planning database.
+  - Current import derives date-specific LKW-driver pairings from imported planning assignments.
+  - Direct `Kalender` sheet parsing from `LKW_Fahrer_Data.xlsm` remains pending as the Excel fallback source.
 - [x] Identify exact source sheet for daily Tagesplan.
   - Source workbook: `Dispo 2026 Wochenplanung_.xlsm`.
   - Each date sheet is one planning date, for example `04.05`.
@@ -200,6 +203,7 @@ Status legend:
   - LKW-first dropdowns hide LKW and drivers already assigned in the same Runde.
   - Driver dropdowns hide drivers who are on imported vacation/sick status for the selected planning date.
   - Selecting a LKW auto-fills the driver when a same-date LKW-driver pairing is already known.
+  - LKW-driver pairings are now persisted in the planning database and returned by the planning API.
   - Orders can be edited inline, including Runde, Auftrag, customer, country, and info.
   - Orders-first hides PLZ, city, and time in the main table.
   - Orders can be edited and soft-deleted from the Orders-first table.
@@ -221,6 +225,7 @@ Status legend:
   - Edit/create actions are pending.
 - [~] Import page with preview.
   - Root UI now includes import cards for reporting master data, weekly schedules, and driver availability.
+  - Import page includes an LKW-driver pairings card derived from imported assignments.
   - Imports tab is visible only for Manager/Admin; execute buttons are enabled only for Admin.
 - [~] Audit Log page.
   - Web UI shows the latest 200 audit events in a searchable table.

@@ -126,6 +126,7 @@ model Lkw {
   deletedAt      DateTime?
   assignments    Assignment[]
   aliases        LkwAlias[]
+  driverPairings LkwDriverPairing[]
 
   @@index([companyId])
   @@index([status])
@@ -170,6 +171,7 @@ model Driver {
   deletedAt          DateTime?
   availability       DriverAvailability[]
   assignments        Assignment[]
+  lkwPairings        LkwDriverPairing[]
   telegramAccounts   TelegramAccount[]
 
   @@index([companyId])
@@ -199,6 +201,27 @@ model DriverAvailability {
   @@index([date])
   @@index([driverId, date])
   @@index([status])
+  @@schema("planning")
+}
+
+model LkwDriverPairing {
+  id          String   @id @default(uuid())
+  lkwId       String
+  lkw         Lkw      @relation(fields: [lkwId], references: [id])
+  driverId    String
+  driver      Driver   @relation(fields: [driverId], references: [id])
+  validFrom   DateTime
+  validTo     DateTime?
+  source      String   @default("planning-assignment")
+  confidence  Int      @default(100)
+  rawPayload  Json     @default("{}")
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@unique([lkwId, driverId, validFrom, source])
+  @@index([lkwId, validFrom])
+  @@index([driverId, validFrom])
+  @@index([source])
   @@schema("planning")
 }
 

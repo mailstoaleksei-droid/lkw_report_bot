@@ -15,6 +15,10 @@ import {
   executeReportingScheduleImport,
   previewReportingScheduleImport,
 } from "../services/reporting-schedule-import.js";
+import {
+  executeLkwDriverPairingImport,
+  previewLkwDriverPairingImport,
+} from "../services/lkw-driver-pairing-import.js";
 
 const statusPreviewSchema = z.object({
   values: z.array(z.string()).default([]),
@@ -101,6 +105,28 @@ export async function registerImportRoutes(app: FastifyInstance, config: AppConf
 
     try {
       return await executeReportingDriverAvailabilityImport();
+    } catch (error) {
+      requestImportError(reply, error);
+    }
+  });
+
+  app.get("/api/imports/lkw-driver-pairings/preview", async (request, reply) => {
+    const user = await requireUser(request, reply, config, "MANAGER");
+    if (!user) return;
+
+    try {
+      return await previewLkwDriverPairingImport();
+    } catch (error) {
+      requestImportError(reply, error);
+    }
+  });
+
+  app.post("/api/imports/lkw-driver-pairings/execute", async (request, reply) => {
+    const user = await requireUser(request, reply, config, "ADMIN");
+    if (!user) return;
+
+    try {
+      return await executeLkwDriverPairingImport();
     } catch (error) {
       requestImportError(reply, error);
     }

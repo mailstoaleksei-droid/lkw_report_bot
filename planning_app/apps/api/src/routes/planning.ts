@@ -4,7 +4,7 @@ import { z } from "zod";
 import { requireUser } from "../auth/guards.js";
 import type { AppConfig } from "../config.js";
 import { getGermanHamburgHolidays } from "../domain/holidays.js";
-import { lkwPlanningWhere } from "../domain/planning-availability.js";
+import { driverPlanningWhere, lkwPlanningWhere } from "../domain/planning-availability.js";
 import { prisma } from "../prisma.js";
 
 const dayQuerySchema = z.object({
@@ -43,7 +43,7 @@ export async function registerPlanningRoutes(app: FastifyInstance, config: AppCo
     }
 
     const { start, end } = planningRange(parsed.data.date, parsed.data.scope);
-    const [orders, assignments, totalPlanningLkw] = await Promise.all([
+    const [orders, assignments, totalPlanningLkw, lkwDriverPairings] = await Promise.all([
       prisma.order.findMany({
         where: {
           planningDate: { gte: start, lt: end },
@@ -84,6 +84,25 @@ export async function registerPlanningRoutes(app: FastifyInstance, config: AppCo
       }),
       prisma.lkw.count({
         where: lkwPlanningWhere(start),
+      }),
+      prisma.lkwDriverPairing.findMany({
+        where: {
+          validFrom: { lte: start },
+          OR: [
+            { validTo: null },
+            { validTo: { gte: start } },
+          ],
+          lkw: lkwPlanningWhere(start),
+          driver: driverPlanningWhere(start),
+        },
+        orderBy: [
+          { confidence: "desc" },
+          { updatedAt: "desc" },
+        ],
+        include: {
+          lkw: true,
+          driver: true,
+        },
       }),
     ]);
 
@@ -162,6 +181,15 @@ export async function registerPlanningRoutes(app: FastifyInstance, config: AppCo
         info: order.info,
         status: order.status,
         problemReason: order.problemReason,
+      })),
+      lkwDriverPairings: lkwDriverPairings.map((pairing) => ({
+        id: pairing.id,
+        lkwId: pairing.lkwId,
+        driverId: pairing.driverId,
+        lkwNumber: pairing.lkw.number,
+        driverName: pairing.driver.fullName,
+        source: pairing.source,
+        confidence: pairing.confidence,
       })),
     };
   });
