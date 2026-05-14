@@ -161,7 +161,7 @@ label {
 }
 
 .planning-controls {
-  align-items: stretch;
+  align-items: start;
   display: grid;
   gap: 12px;
   grid-template-columns: minmax(0, 1fr) 320px;
@@ -175,12 +175,13 @@ label {
   border: 1px solid var(--line);
   border-radius: 8px;
   display: grid;
-  gap: 12px;
-  padding: 14px;
+  gap: 8px;
+  padding: 10px;
 }
 
 .filters-panel {
   grid-template-columns: repeat(6, minmax(120px, 1fr)) auto auto;
+  min-height: 0;
 }
 
 .planning-actions-panel {
