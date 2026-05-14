@@ -184,6 +184,7 @@ Status legend:
   - The LKW-first table is now the assignment view for created orders.
   - The LKW-first table includes created orders even when no LKW/driver has been assigned yet.
   - Only LKW and driver are editable in LKW-first.
+  - The Time column is hidden in LKW-first.
   - LKW status and driver check columns were removed from the planning table.
   - Operators/Admins mark a row as assigned from the right-side action column; this saves LKW/driver and sets the order to `DONE`.
   - Assigned rows move into the `Assigned orders` block for viewing.
@@ -195,12 +196,13 @@ Status legend:
   - LKW-first dropdowns hide LKW and drivers already assigned in the same Runde.
   - Driver dropdowns hide drivers who are on imported vacation/sick status for the selected planning date.
   - Selecting a LKW auto-fills the driver when a same-date LKW-driver pairing is already known.
-  - Orders can be edited inline, including Runde, Auftrag, customer, PLZ/city/country, time, and info.
+  - Orders can be edited inline, including Runde, Auftrag, customer, country, and info.
+  - Orders-first hides PLZ, city, and time in the main table.
   - Orders can be edited and soft-deleted from the Orders-first table.
   - Orders-first action column is at the right edge and includes `Save` and `Delete`.
 - [~] Filters: date, week, month, Auftrag, company, LKW, driver, status, Runde.
   - Date, Auftrag, company, LKW, driver, status, and Runde filters are implemented in the web UI.
-  - Planning filters are displayed directly below the planning date toolbar.
+  - Planning date is part of the compact filter panel; there is no separate planning-date toolbar.
   - Week and month filters are pending.
 - [x] Conflict/problem indicators.
   - Problem rows are highlighted and problem status is shown.

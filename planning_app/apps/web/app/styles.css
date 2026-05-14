@@ -143,17 +143,6 @@ label {
   background: #912018;
 }
 
-.toolbar {
-  align-items: end;
-  background: var(--panel);
-  border: 1px solid var(--line);
-  border-radius: 8px;
-  display: flex;
-  gap: 12px;
-  margin: 20px 0;
-  padding: 14px;
-}
-
 .dashboard {
   display: grid;
   grid-template-columns: repeat(6, minmax(120px, 1fr));
@@ -178,7 +167,7 @@ label {
   border-radius: 8px;
   display: grid;
   gap: 12px;
-  grid-template-columns: repeat(6, minmax(130px, 1fr)) auto auto;
+  grid-template-columns: repeat(7, minmax(120px, 1fr)) auto auto auto auto;
   margin: 0 0 20px;
   padding: 14px;
 }
@@ -398,21 +387,16 @@ table {
 
 .lkw-first-table th:nth-child(8),
 .lkw-first-table td:nth-child(8) {
-  width: 170px;
+  width: 140px;
 }
 
 .lkw-first-table th:nth-child(9),
 .lkw-first-table td:nth-child(9) {
-  width: 140px;
+  width: 260px;
 }
 
 .lkw-first-table th:nth-child(10),
 .lkw-first-table td:nth-child(10) {
-  width: 260px;
-}
-
-.lkw-first-table th:nth-child(11),
-.lkw-first-table td:nth-child(11) {
   width: 206px;
 }
 
@@ -636,7 +620,6 @@ th {
 @media (max-width: 980px) {
   .topbar,
   .planner-header,
-  .toolbar,
   .userbar {
     align-items: stretch;
     flex-direction: column;

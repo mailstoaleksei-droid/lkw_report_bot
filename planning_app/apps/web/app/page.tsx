@@ -954,20 +954,6 @@ export default function HomePage() {
         ))}
       </nav>
 
-      <section className="toolbar">
-        <label>
-          Planning date
-          <input type="date" value={selectedDate || todayDate()} onChange={(event) => setSelectedDate(event.target.value)} />
-        </label>
-        <button type="button" onClick={() => loadDashboardData(selectedDate)} disabled={loading}>
-          Refresh
-        </button>
-        <button type="button" className="secondary-button" onClick={exportTagesplanung}>
-          Export Excel
-        </button>
-        {error ? <span className="error">{error}</span> : null}
-      </section>
-
       {activeSection === "dashboard" ? (
         <section className="dashboard">
           {metrics.map(([label, value]) => (
@@ -981,6 +967,10 @@ export default function HomePage() {
 
       {activeSection === "planning" ? (
       <section className="filters-panel">
+        <label>
+          Planning date
+          <input type="date" value={selectedDate || todayDate()} onChange={(event) => setSelectedDate(event.target.value)} />
+        </label>
         <label>
           Auftrag
           <input value={auftragFilter} onChange={(event) => setAuftragFilter(event.target.value)} placeholder="Order text" />
@@ -1036,11 +1026,18 @@ export default function HomePage() {
         >
           Clear filters
         </button>
+        <button type="button" onClick={() => loadDashboardData(selectedDate)} disabled={loading}>
+          Refresh
+        </button>
+        <button type="button" className="secondary-button" onClick={exportTagesplanung}>
+          Export Excel
+        </button>
         <span className="muted">
           {viewMode === "lkw-first"
             ? `${ordersFirstRows.length} visible / ${(planning?.rows.length || 0) + (planning?.unassignedOrders.length || 0)} total`
             : `${ordersFirstRows.length} visible / ${(planning?.rows.length || 0) + (planning?.unassignedOrders.length || 0)} total`}
         </span>
+        {error ? <span className="error">{error}</span> : null}
       </section>
       ) : null}
 
@@ -1110,7 +1107,6 @@ export default function HomePage() {
                     <th>Driver</th>
                     <th>Customer</th>
                     <th>Country</th>
-                    <th>Time</th>
                     <th>Info</th>
                     <th>Status</th>
                     <th>Problem</th>
@@ -1163,7 +1159,6 @@ export default function HomePage() {
                         </td>
                         <td>{row.customer || "-"}</td>
                         <td>{row.city}</td>
-                        <td>{row.time}</td>
                         <td>{row.info || "-"}</td>
                         <td>
                           <span className={`status status-${row.status.toLowerCase()}`}>
@@ -1183,7 +1178,7 @@ export default function HomePage() {
                   })}
                   {planning && activeRows.length === 0 ? (
                     <tr>
-                      <td colSpan={canEditPlanning ? 11 : 10}>No active planning rows match the current filters.</td>
+                      <td colSpan={canEditPlanning ? 10 : 9}>No active planning rows match the current filters.</td>
                     </tr>
                   ) : null}
                 </tbody>
@@ -1204,7 +1199,6 @@ export default function HomePage() {
                         <th>Driver</th>
                         <th>Customer</th>
                         <th>Country</th>
-                        <th>Time</th>
                         <th>Info</th>
                         <th>Status</th>
                         <th>Problem</th>
@@ -1219,7 +1213,6 @@ export default function HomePage() {
                           <td>{row.driver}</td>
                           <td>{row.customer || "-"}</td>
                           <td>{row.city}</td>
-                          <td>{row.time}</td>
                           <td>{row.info || "-"}</td>
                           <td>
                             <span className={`status status-${row.status.toLowerCase()}`}>
@@ -1242,7 +1235,6 @@ export default function HomePage() {
                   <th>Auftrag</th>
                   <th>Customer</th>
                   <th>Country</th>
-                  <th>Time</th>
                   <th>Info</th>
                   <th>Status</th>
                   <th>Problem</th>
@@ -1284,22 +1276,13 @@ export default function HomePage() {
                       </td>
                       <td>
                         {canEditPlanning ? (
-                          <div className="city-edit">
-                            <input value={orderDraft.plz} onChange={(event) => updateOrderDraft(row.orderId, "plz", event.target.value, row)} placeholder="PLZ" />
-                            <input value={orderDraft.city} onChange={(event) => updateOrderDraft(row.orderId, "city", event.target.value, row)} placeholder="City" />
-                            <select value={orderDraft.country} onChange={(event) => updateOrderDraft(row.orderId, "country", event.target.value, row)}>
-                              <option value="">Country</option>
-                              {countryOptions.map((country) => (
-                                <option key={country.value} value={country.value}>{country.label}</option>
-                              ))}
-                            </select>
-                          </div>
+                          <select value={orderDraft.country} onChange={(event) => updateOrderDraft(row.orderId, "country", event.target.value, row)}>
+                            <option value="">Country</option>
+                            {countryOptions.map((country) => (
+                              <option key={country.value} value={country.value}>{country.label}</option>
+                            ))}
+                          </select>
                         ) : row.city}
-                      </td>
-                      <td>
-                        {canEditPlanning ? (
-                          <input className="time-input" value={orderDraft.plannedTime} onChange={(event) => updateOrderDraft(row.orderId, "plannedTime", event.target.value, row)} />
-                        ) : row.time}
                       </td>
                       <td>
                         {canEditPlanning ? (
@@ -1327,7 +1310,7 @@ export default function HomePage() {
                 })}
                 {planning && ordersFirstRows.length === 0 ? (
                   <tr>
-                    <td colSpan={canEditPlanning ? 9 : 8}>No orders match the current filters.</td>
+                    <td colSpan={canEditPlanning ? 8 : 7}>No orders match the current filters.</td>
                   </tr>
                 ) : null}
               </tbody>
