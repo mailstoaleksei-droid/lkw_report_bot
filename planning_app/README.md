@@ -66,13 +66,33 @@ planning_app/
     schema.prisma        Planning database schema
   scripts/
     backup_postgres.ps1  Windows backup helper
+    install_daily_backup_task.ps1
   docs/
     TECHNICAL_AUDIT.md   Existing system audit
     ARCHITECTURE.md      Target architecture
+    BACKUP_AND_RESTORE.md
     ROADMAP.md           MVP and phase 2 plan
   docker-compose.yml
   .env.example
 ```
+
+## Backups
+
+Create a manual PostgreSQL backup:
+
+```powershell
+.\scripts\backup_postgres.ps1
+```
+
+Install the daily Windows backup task:
+
+```powershell
+.\scripts\install_daily_backup_task.ps1
+```
+
+Backups are stored in `storage/backups` and retention is controlled by
+`BACKUP_RETENTION_DAYS` in `.env`. Restore test steps are documented in
+`docs/BACKUP_AND_RESTORE.md`.
 
 ## Safety Rules
 
@@ -82,4 +102,3 @@ planning_app/
 - Import Excel data through preview, validation, and transaction steps.
 - Use soft deletes for business records.
 - Record important business changes in `audit_log`.
-

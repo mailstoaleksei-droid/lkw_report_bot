@@ -279,12 +279,17 @@ Status legend:
 ## 8. Operations
 
 - [x] Backup script draft added.
-- [ ] Daily PostgreSQL backup job.
-- [ ] Backup stored outside main VPS.
-- [ ] Backup retention configured.
-- [ ] Monthly restore test procedure documented.
-- [ ] Healthchecks verified.
-- [ ] Docker healthchecks verified.
+- [x] Daily PostgreSQL backup job.
+  - Windows Scheduled Task `LKW Planning PostgreSQL Backup` installed for 02:30 daily on 2026-05-15.
+  - Test backup was created successfully in `planning_app/storage/backups`.
+- [~] Backup stored outside main VPS.
+  - Local backup folder is ready.
+  - Production still needs external storage target such as Hetzner Storage Box or S3-compatible storage.
+- [x] Backup retention configured.
+  - `BACKUP_RETENTION_DAYS` controls cleanup in `scripts/backup_postgres.ps1`.
+- [x] Monthly restore test procedure documented.
+  - See `docs/BACKUP_AND_RESTORE.md`.
+- [x] Healthchecks verified.
 - [x] Docker healthchecks verified.
   - `lkw_planning_postgres` healthy.
   - `lkw_planning_api` healthy.

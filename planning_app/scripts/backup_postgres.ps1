@@ -1,40 +1,72 @@
 param(
-    [string]$EnvFile = ".env",
-    [string]$BackupDir = "./storage/backups"
+    [string]$ProjectDir = (Resolve-Path (Join-Path $PSScriptRoot "..")).Path,
+    [string]$EnvFile = "",
+    [string]$BackupDir = "",
+    [int]$RetentionDays = 0
 )
 
 $ErrorActionPreference = "Stop"
 
-if (-not (Test-Path $EnvFile)) {
-    throw "Env file not found: $EnvFile"
+function Import-DotEnv {
+    param([string]$Path)
+
+    if (-not (Test-Path $Path)) {
+        throw "Env file not found: $Path"
+    }
+
+    Get-Content $Path | ForEach-Object {
+        $line = $_.Trim()
+        if ($line -eq "" -or $line.StartsWith("#") -or $line -notmatch "=") { return }
+        $parts = $line.Split("=", 2)
+        $name = $parts[0].Trim()
+        $value = $parts[1].Trim().Trim('"').Trim("'")
+        [Environment]::SetEnvironmentVariable($name, $value, "Process")
+    }
 }
 
-$envLines = Get-Content $EnvFile
-foreach ($line in $envLines) {
-    if ($line -match "^\s*#" -or $line -notmatch "=") { continue }
-    $parts = $line.Split("=", 2)
-    [Environment]::SetEnvironmentVariable($parts[0].Trim(), $parts[1].Trim(), "Process")
+$ProjectDir = (Resolve-Path $ProjectDir).Path
+if ($EnvFile -eq "") {
+    $EnvFile = Join-Path $ProjectDir ".env"
+}
+if ($BackupDir -eq "") {
+    $BackupDir = Join-Path $ProjectDir "storage\backups"
 }
 
-if (-not $env:DATABASE_URL) {
-    throw "DATABASE_URL is missing"
+Import-DotEnv -Path $EnvFile
+
+if (-not $env:POSTGRES_DB -or -not $env:POSTGRES_USER) {
+    throw "POSTGRES_DB and POSTGRES_USER must be configured in .env"
 }
 
 New-Item -ItemType Directory -Force -Path $BackupDir | Out-Null
 
 $stamp = Get-Date -Format "yyyyMMdd_HHmmss"
-$target = Join-Path $BackupDir "lkw_planning_$stamp.dump"
+$fileName = "lkw_planning_$stamp.dump"
+$target = Join-Path $BackupDir $fileName
 
-pg_dump --format=custom --file="$target" "$env:DATABASE_URL"
+Push-Location $ProjectDir
+try {
+    $dumpCommand = "pg_dump --format=custom --file=/backups/$fileName --username=`"`$POSTGRES_USER`" --dbname=`"`$POSTGRES_DB`""
+    docker compose exec -T postgres sh -lc $dumpCommand
+}
+finally {
+    Pop-Location
+}
 
-$retentionDays = 30
-if ($env:BACKUP_RETENTION_DAYS -match "^\d+$") {
-    $retentionDays = [int]$env:BACKUP_RETENTION_DAYS
+if (-not (Test-Path $target)) {
+    throw "Backup was not created: $target"
+}
+
+if ($RetentionDays -le 0) {
+    $RetentionDays = 30
+    if ($env:BACKUP_RETENTION_DAYS -match "^\d+$") {
+        $RetentionDays = [int]$env:BACKUP_RETENTION_DAYS
+    }
 }
 
 Get-ChildItem $BackupDir -Filter "lkw_planning_*.dump" |
-    Where-Object { $_.LastWriteTime -lt (Get-Date).AddDays(-$retentionDays) } |
+    Where-Object { $_.LastWriteTime -lt (Get-Date).AddDays(-$RetentionDays) } |
     Remove-Item -Force
 
 Write-Output "Backup created: $target"
-
+Write-Output "Retention days: $RetentionDays"
