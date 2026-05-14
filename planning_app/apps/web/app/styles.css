@@ -137,6 +137,24 @@ label {
   margin: 18px 0 0;
 }
 
+.sticky-planning-toolbar {
+  background: var(--bg);
+  border-bottom: 1px solid var(--line);
+  padding-bottom: 8px;
+  position: sticky;
+  top: 0;
+  z-index: 50;
+}
+
+.sticky-planning-toolbar .app-tabs {
+  margin-top: 0;
+  padding-top: 0;
+}
+
+.sticky-planning-toolbar .planning-controls {
+  margin-bottom: 0;
+}
+
 .secondary-button {
   background: #e7edf5;
   color: var(--text);
@@ -167,7 +185,7 @@ label {
   border-radius: 8px;
   color: #4a3500;
   font-weight: 700;
-  margin: 0 0 20px;
+  margin: 0 0 14px;
   padding: 14px 16px;
 }
 

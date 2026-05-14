@@ -219,6 +219,7 @@ Status legend:
 - [~] Filters: date, week, month, Auftrag, company, LKW, driver, status, Runde.
   - Date, week, month, Auftrag, company, LKW, driver, status, and Runde filters are implemented in the web UI.
   - Planning date, Refresh, and Export Excel are grouped in a separate right-side tile next to the filters and dashboard column.
+  - Planning tabs, filters, dashboard counters, and date/export controls stay sticky at the top while scrolling the planning table.
 - [x] Conflict/problem indicators.
   - Problem rows are highlighted and problem status is shown.
 - [x] Holiday warning banner.

@@ -1309,127 +1309,129 @@ export default function HomePage() {
         </div>
       </header>
 
-      <nav className="app-tabs" aria-label={t("applicationSections")}>
-        {visibleSections.map((section) => (
-          <button
-            key={section.key}
-            type="button"
-            className={activeSection === section.key ? "" : "secondary-button"}
-            onClick={() => setActiveSection(section.key)}
-          >
-            {section.label}
-          </button>
-        ))}
-      </nav>
-
-      {activeSection === "planning" ? (
-      <section className="planning-controls">
-        <div className="planning-main-column">
-          <div className="filters-panel">
-            <label>
-              {t("auftrag")}
-              <input value={auftragFilter} onChange={(event) => setAuftragFilter(event.target.value)} placeholder={t("orderText")} />
-            </label>
-            <label>
-              {t("period")}
-              <select value={periodFilter} onChange={(event) => setPeriodFilter(event.target.value as PeriodFilter)}>
-                <option value="day">{t("day")}</option>
-                <option value="week">{t("week")}</option>
-                <option value="month">{t("month")}</option>
-              </select>
-            </label>
-            <label>
-              LKW
-              <input value={lkwFilter} onChange={(event) => setLkwFilter(event.target.value)} placeholder="GR-OO..." />
-            </label>
-            <label>
-              {t("driver")}
-              <input value={driverFilter} onChange={(event) => setDriverFilter(event.target.value)} placeholder={t("name")} />
-            </label>
-            <label>
-              {t("company")}
-              <select value={companyFilter} onChange={(event) => setCompanyFilter(event.target.value)}>
-                <option value="">{t("all")}</option>
-                {companyOptions.map((company) => (
-                  <option key={company} value={company}>{company}</option>
-                ))}
-              </select>
-            </label>
-            <label>
-              {t("status")}
-              <select value={statusFilter} onChange={(event) => setStatusFilter(event.target.value)}>
-                <option value="">{t("all")}</option>
-                <option value="OPEN">OPEN</option>
-                <option value="PLANNED">PLANNED</option>
-                <option value="PROBLEM">PROBLEM</option>
-                <option value="DONE">DONE</option>
-                <option value="CANCELLED">CANCELLED</option>
-              </select>
-            </label>
-            <label>
-              {t("runde")}
-              <select value={rundeFilter} onChange={(event) => setRundeFilter(event.target.value)}>
-                <option value="">{t("all")}</option>
-                <option value="1">1</option>
-                <option value="2">2</option>
-                <option value="3">3</option>
-              </select>
-            </label>
+      <div className={activeSection === "planning" ? "sticky-planning-toolbar" : undefined}>
+        <nav className="app-tabs" aria-label={t("applicationSections")}>
+          {visibleSections.map((section) => (
             <button
+              key={section.key}
               type="button"
-              className="secondary-button"
-              onClick={() => {
-                setAuftragFilter("");
-                setLkwFilter("");
-                setDriverFilter("");
-                setCompanyFilter("");
-                setStatusFilter("");
-                setRundeFilter("");
-              }}
+              className={activeSection === section.key ? "" : "secondary-button"}
+              onClick={() => setActiveSection(section.key)}
             >
-              {t("clearFilters")}
+              {section.label}
             </button>
-            <span className="muted">
-              {viewMode === "lkw-first"
-                ? `${ordersFirstRows.length} ${t("visible")} / ${(planning?.rows.length || 0) + (planning?.unassignedOrders.length || 0)} ${t("total")}`
-                : `${ordersFirstRows.length} ${t("visible")} / ${(planning?.rows.length || 0) + (planning?.unassignedOrders.length || 0)} ${t("total")}`}
-            </span>
-            {error ? <span className="error">{error}</span> : null}
-          </div>
-          <section className="dashboard planning-dashboard">
-            {metrics.map(([label, value]) => (
-              <div className="metric" key={label}>
-                <span>{label}</span>
-                <strong>{value}</strong>
-              </div>
-            ))}
-          </section>
-        </div>
-        <div className="planning-actions-panel">
-          <label>
-            {t("planningDate")}
-            <input type="date" value={selectedDate || todayDate()} onChange={(event) => setSelectedDate(event.target.value)} />
-          </label>
-          <button type="button" onClick={() => loadDashboardData(selectedDate)} disabled={loading}>
-            {t("refresh")}
-          </button>
-          <div className="export-actions">
-            <button type="button" className="secondary-button" onClick={() => exportTagesplanung("xls")}>
-              {t("exportExcel")}
-            </button>
-            <button type="button" className="secondary-button" onClick={() => exportTagesplanung("pdf")}>
-              {t("exportPdf")}
-            </button>
-          </div>
-        </div>
-      </section>
-      ) : null}
+          ))}
+        </nav>
 
-      {activeSection === "planning" && planning?.holidays?.length ? (
-        <section className="warning-banner">
-          Holiday warning: {planning.holidays.map((holiday) => `${holiday.name} (${holiday.region})`).join(", ")}
+        {activeSection === "planning" ? (
+        <section className="planning-controls">
+          <div className="planning-main-column">
+            <div className="filters-panel">
+              <label>
+                {t("auftrag")}
+                <input value={auftragFilter} onChange={(event) => setAuftragFilter(event.target.value)} placeholder={t("orderText")} />
+              </label>
+              <label>
+                {t("period")}
+                <select value={periodFilter} onChange={(event) => setPeriodFilter(event.target.value as PeriodFilter)}>
+                  <option value="day">{t("day")}</option>
+                  <option value="week">{t("week")}</option>
+                  <option value="month">{t("month")}</option>
+                </select>
+              </label>
+              <label>
+                LKW
+                <input value={lkwFilter} onChange={(event) => setLkwFilter(event.target.value)} placeholder="GR-OO..." />
+              </label>
+              <label>
+                {t("driver")}
+                <input value={driverFilter} onChange={(event) => setDriverFilter(event.target.value)} placeholder={t("name")} />
+              </label>
+              <label>
+                {t("company")}
+                <select value={companyFilter} onChange={(event) => setCompanyFilter(event.target.value)}>
+                  <option value="">{t("all")}</option>
+                  {companyOptions.map((company) => (
+                    <option key={company} value={company}>{company}</option>
+                  ))}
+                </select>
+              </label>
+              <label>
+                {t("status")}
+                <select value={statusFilter} onChange={(event) => setStatusFilter(event.target.value)}>
+                  <option value="">{t("all")}</option>
+                  <option value="OPEN">OPEN</option>
+                  <option value="PLANNED">PLANNED</option>
+                  <option value="PROBLEM">PROBLEM</option>
+                  <option value="DONE">DONE</option>
+                  <option value="CANCELLED">CANCELLED</option>
+                </select>
+              </label>
+              <label>
+                {t("runde")}
+                <select value={rundeFilter} onChange={(event) => setRundeFilter(event.target.value)}>
+                  <option value="">{t("all")}</option>
+                  <option value="1">1</option>
+                  <option value="2">2</option>
+                  <option value="3">3</option>
+                </select>
+              </label>
+              <button
+                type="button"
+                className="secondary-button"
+                onClick={() => {
+                  setAuftragFilter("");
+                  setLkwFilter("");
+                  setDriverFilter("");
+                  setCompanyFilter("");
+                  setStatusFilter("");
+                  setRundeFilter("");
+                }}
+              >
+                {t("clearFilters")}
+              </button>
+              <span className="muted">
+                {viewMode === "lkw-first"
+                  ? `${ordersFirstRows.length} ${t("visible")} / ${(planning?.rows.length || 0) + (planning?.unassignedOrders.length || 0)} ${t("total")}`
+                  : `${ordersFirstRows.length} ${t("visible")} / ${(planning?.rows.length || 0) + (planning?.unassignedOrders.length || 0)} ${t("total")}`}
+              </span>
+              {error ? <span className="error">{error}</span> : null}
+            </div>
+            <section className="dashboard planning-dashboard">
+              {metrics.map(([label, value]) => (
+                <div className="metric" key={label}>
+                  <span>{label}</span>
+                  <strong>{value}</strong>
+                </div>
+              ))}
+            </section>
+          </div>
+          <div className="planning-actions-panel">
+            <label>
+              {t("planningDate")}
+              <input type="date" value={selectedDate || todayDate()} onChange={(event) => setSelectedDate(event.target.value)} />
+            </label>
+            <button type="button" onClick={() => loadDashboardData(selectedDate)} disabled={loading}>
+              {t("refresh")}
+            </button>
+            <div className="export-actions">
+              <button type="button" className="secondary-button" onClick={() => exportTagesplanung("xls")}>
+                {t("exportExcel")}
+              </button>
+              <button type="button" className="secondary-button" onClick={() => exportTagesplanung("pdf")}>
+                {t("exportPdf")}
+              </button>
+            </div>
+          </div>
         </section>
-      ) : null}
+        ) : null}
+
+        {activeSection === "planning" && planning?.holidays?.length ? (
+          <section className="warning-banner">
+            Holiday warning: {planning.holidays.map((holiday) => `${holiday.name} (${holiday.region})`).join(", ")}
+          </section>
+        ) : null}
+      </div>
 
       {activeSection === "planning" ? (
       <section className="planner">
