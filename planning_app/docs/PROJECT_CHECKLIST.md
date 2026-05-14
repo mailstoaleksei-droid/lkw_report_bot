@@ -181,9 +181,10 @@ Status legend:
   - Root page includes the MVP Tagesplanung read view.
 - [x] LKW-first table starting with LKW column.
   - The first table column is LKW.
-  - The LKW-first table now shows `Status` before `Info`; `Time` is hidden in this view.
-  - The `Info` column shows problem details first, then order info when no problem exists.
-  - Operators/Admins can mark a row as assigned from the right-side action column.
+  - The LKW-first table now mirrors the Orders-first editable columns, with LKW as the first column.
+  - LKW status and driver check columns were removed from the planning table.
+  - The planning location column is now labelled `Country` and uses a nearby-country dropdown for editing.
+  - Operators/Admins can save, soft-delete, or mark an active row as assigned from the right-side action column.
   - Assigned rows move into the `Assigned orders` block and can be returned to active planning.
 - [x] Orders-first mode.
   - Web UI can switch between LKW-first and Orders-first tables.
@@ -191,12 +192,14 @@ Status legend:
   - Operators/Admins can create a new order from the Tagesplanung view.
   - Operators/Admins can assign or update LKW and driver from the Orders-first table.
   - Orders-first dropdowns hide LKW and drivers already assigned in the same Runde.
+  - Driver dropdowns hide drivers who are on imported vacation/sick status for the selected planning date.
   - Selecting a LKW auto-fills the driver when a same-date LKW-driver pairing is already known.
   - Orders can be edited inline, including Runde, Auftrag, customer, PLZ/city/country, time, and info.
   - Orders can be edited and soft-deleted from the Orders-first table.
   - Orders-first action column is at the right edge and includes `Save` and `Delete`.
-- [~] Filters: date, week, month, company, LKW, driver, status, Runde.
-  - Date, company, LKW, driver, status, and Runde filters are implemented in the web UI.
+- [~] Filters: date, week, month, Auftrag, company, LKW, driver, status, Runde.
+  - Date, Auftrag, company, LKW, driver, status, and Runde filters are implemented in the web UI.
+  - Planning filters are displayed directly below the planning date toolbar.
   - Week and month filters are pending.
 - [x] Conflict/problem indicators.
   - Problem rows are highlighted and problem status is shown.
@@ -215,7 +218,7 @@ Status legend:
   - Imports tab is visible only for Manager/Admin; execute buttons are enabled only for Admin.
 - [~] Audit Log page.
   - Web UI shows the latest 200 audit events in a searchable table.
-  - Order and assignment audit messages now include field-level before/after change summaries for new changes.
+  - Order and assignment audit messages include only field-level before/after change summaries for actual changes.
   - Audit rows now show the linked Auftrag when the audit event belongs to an order or assignment.
   - Audit tab is visible only for Manager/Admin.
   - Separate route/page and advanced filters are pending.
@@ -237,7 +240,7 @@ Status legend:
 - [ ] Excel Wochenplan.
 - [~] Export respects filters.
   - Date filter is supported by the export endpoint.
-  - Company, LKW, driver, status, and Runde filters are supported by the Excel export endpoint.
+  - Auftrag, company, LKW, driver, status, and Runde filters are supported by the Excel export endpoint.
   - Week and month export filters are pending.
 - [x] Export log records created.
 

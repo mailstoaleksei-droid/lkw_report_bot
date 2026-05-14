@@ -26,8 +26,9 @@ export async function registerDriverRoutes(app: FastifyInstance, config: AppConf
     }
 
     const { q, companyId, status, activeOnly, planningDate, limit } = parsed.data;
+    const selectedPlanningDate = planningDate ? toPlanningDate(planningDate) : new Date("1900-01-01T00:00:00.000Z");
     const dateAwareActiveWhere = activeOnly && planningDate
-      ? driverPlanningWhere(toPlanningDate(planningDate))
+      ? driverPlanningWhere(selectedPlanningDate)
       : {};
     const items = await prisma.driver.findMany({
       where: {
@@ -62,6 +63,10 @@ export async function registerDriverRoutes(app: FastifyInstance, config: AppConf
         isActive: true,
         telegramLookupHint: true,
         company: { select: { id: true, name: true } },
+        availability: {
+          where: { date: selectedPlanningDate },
+          select: { status: true, rawStatus: true, source: true },
+        },
       },
     });
 

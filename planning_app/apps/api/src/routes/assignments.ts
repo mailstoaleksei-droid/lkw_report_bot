@@ -48,7 +48,7 @@ async function assignmentAuditSnapshot(
   };
 }
 
-function summarizeAssignmentChanges(before: AssignmentAuditSnapshot, after: AssignmentAuditSnapshot): string {
+function summarizeAssignmentChanges(before: AssignmentAuditSnapshot, after: AssignmentAuditSnapshot): string | null {
   const changes = [
     before.lkw !== after.lkw ? `LKW: ${before.lkw} -> ${after.lkw}` : null,
     before.driver !== after.driver ? `driver: ${before.driver} -> ${after.driver}` : null,
@@ -57,7 +57,7 @@ function summarizeAssignmentChanges(before: AssignmentAuditSnapshot, after: Assi
       ? `problem: ${before.problemReason || "-"} -> ${after.problemReason || "-"}`
       : null,
   ].filter(Boolean);
-  return changes.length > 0 ? `Assignment updated: ${changes.join("; ")}` : "Assignment updated";
+  return changes.length > 0 ? changes.join("; ") : null;
 }
 
 async function checkAssignmentProblems(
@@ -185,30 +185,18 @@ export async function registerAssignmentRoutes(app: FastifyInstance, config: App
         },
       });
 
-      await tx.auditLog.create({
-        data: {
-          eventType: before ? AuditEventType.ASSIGNMENT_UPDATED : AuditEventType.LKW_ASSIGNED,
-          entityType: "Assignment",
-          entityId: assignment.id,
-          orderId: input.orderId,
-          assignmentId: assignment.id,
-          userId: user.id,
-          message: before ? summarizeAssignmentChanges(beforeSnapshot, afterSnapshot) : `Assignment created: LKW ${afterSnapshot.lkw}; driver ${afterSnapshot.driver}`,
-          before: before || undefined,
-          after: assignment,
-        },
-      });
-
-      if (input.driverId) {
+      const message = summarizeAssignmentChanges(beforeSnapshot, afterSnapshot);
+      if (message) {
         await tx.auditLog.create({
           data: {
-            eventType: AuditEventType.DRIVER_ASSIGNED,
+            eventType: before ? AuditEventType.ASSIGNMENT_UPDATED : AuditEventType.LKW_ASSIGNED,
             entityType: "Assignment",
             entityId: assignment.id,
             orderId: input.orderId,
             assignmentId: assignment.id,
             userId: user.id,
-            message: `Driver assigned: ${afterSnapshot.driver}`,
+            message,
+            before: before || undefined,
             after: assignment,
           },
         });

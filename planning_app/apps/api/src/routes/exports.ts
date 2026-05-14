@@ -6,6 +6,7 @@ import { prisma } from "../prisma.js";
 
 const exportQuerySchema = z.object({
   date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
+  auftrag: z.string().trim().optional(),
   lkw: z.string().trim().optional(),
   driver: z.string().trim().optional(),
   company: z.string().trim().optional(),
@@ -69,6 +70,7 @@ export async function registerExportRoutes(app: FastifyInstance, config: AppConf
     });
     const filteredRows = rows.filter((row) => {
       const statusValue = row.order.status || row.status;
+      const auftragMatch = includesFilter(row.order.description, query.auftrag);
       const lkwMatch = includesFilter(row.lkw?.number, query.lkw);
       const driverMatch = includesFilter(row.driver?.fullName, query.driver);
       const companyMatch = !query.company || [
@@ -77,7 +79,7 @@ export async function registerExportRoutes(app: FastifyInstance, config: AppConf
       ].some((value) => includesFilter(value, query.company));
       const statusMatch = !query.status || statusValue === query.status;
       const rundeMatch = !query.runde || String(row.runde) === query.runde;
-      return lkwMatch && driverMatch && companyMatch && statusMatch && rundeMatch;
+      return auftragMatch && lkwMatch && driverMatch && companyMatch && statusMatch && rundeMatch;
     });
 
     const header = [
@@ -137,6 +139,7 @@ export async function registerExportRoutes(app: FastifyInstance, config: AppConf
         format: "xls",
         filters: {
           date: query.date,
+          auftrag: query.auftrag || null,
           lkw: query.lkw || null,
           driver: query.driver || null,
           company: query.company || null,

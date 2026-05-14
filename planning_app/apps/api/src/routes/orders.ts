@@ -33,7 +33,7 @@ function normalizeAuditValue(value: unknown): string {
   return String(value);
 }
 
-function summarizeOrderChanges(before: Record<string, unknown>, after: Record<string, unknown>): string {
+function summarizeOrderChanges(before: Record<string, unknown>, after: Record<string, unknown>): string | null {
   const labels: Record<string, string> = {
     planningDate: "date",
     runde: "Runde",
@@ -49,7 +49,7 @@ function summarizeOrderChanges(before: Record<string, unknown>, after: Record<st
   const changes = Object.entries(labels)
     .filter(([field]) => normalizeAuditValue(before[field]) !== normalizeAuditValue(after[field]))
     .map(([field, label]) => `${label}: ${normalizeAuditValue(before[field])} -> ${normalizeAuditValue(after[field])}`);
-  return changes.length > 0 ? `Order updated: ${changes.join("; ")}` : "Order updated";
+  return changes.length > 0 ? changes.join("; ") : null;
 }
 
 export async function registerOrderRoutes(app: FastifyInstance, config: AppConfig): Promise<void> {
@@ -142,18 +142,21 @@ export async function registerOrderRoutes(app: FastifyInstance, config: AppConfi
           ...(input.status ? { status: input.status } : {}),
         },
       });
-      await tx.auditLog.create({
-        data: {
-          eventType: AuditEventType.ORDER_UPDATED,
-          entityType: "Order",
-          entityId: saved.id,
-          orderId: saved.id,
-          userId: user.id,
-          message: summarizeOrderChanges(before, saved),
-          before,
-          after: saved,
-        },
-      });
+      const message = summarizeOrderChanges(before, saved);
+      if (message) {
+        await tx.auditLog.create({
+          data: {
+            eventType: AuditEventType.ORDER_UPDATED,
+            entityType: "Order",
+            entityId: saved.id,
+            orderId: saved.id,
+            userId: user.id,
+            message,
+            before,
+            after: saved,
+          },
+        });
+      }
       return saved;
     });
 
