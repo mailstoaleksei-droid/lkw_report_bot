@@ -170,6 +170,13 @@ type ManagedUser = {
   updatedAt: string;
 };
 
+type AppSettings = {
+  defaultCountry: string;
+  defaultPeriod: PeriodFilter;
+  rundeCount: string;
+  holidayRegion: string;
+};
+
 type ImportAction = {
   key: string;
   title: string;
@@ -253,7 +260,7 @@ const masterStatusOptions = [
 ];
 
 type ViewMode = "lkw-first" | "orders-first";
-type AppSection = "planning" | "imports" | "lkw" | "drivers" | "audit" | "users";
+type AppSection = "planning" | "imports" | "lkw" | "drivers" | "audit" | "users" | "settings";
 type PeriodFilter = "day" | "week" | "month";
 type Language = "de" | "en" | "ru";
 
@@ -290,6 +297,8 @@ const translations = {
     delete: "Delete",
     dailyPlanning: "Tagesplanung",
     day: "Day",
+    defaultCountry: "Default country",
+    defaultPeriod: "Default period",
     dismissDate: "Dismissed",
     driver: "Driver",
     driverManagement: "Driver management",
@@ -335,12 +344,15 @@ const translations = {
     returned: "Returned",
     role: "Role",
     runde: "Runde",
+    rundeCount: "Runde count",
     save: "Save",
     saveNewPassword: "Save new password",
     searchAudit: "Search event, Auftrag, entity, user",
     searchDriver: "Search driver, phone, status, company",
     searchLkw: "Search LKW, status, company",
     setActive: "Set active",
+    settings: "Settings",
+    holidayRegion: "Holiday region",
     show: "Show",
     signIn: "Sign in",
     signingIn: "Signing in...",
@@ -385,6 +397,8 @@ const translations = {
     delete: "Löschen",
     dailyPlanning: "Tagesplanung",
     day: "Tag",
+    defaultCountry: "Standardland",
+    defaultPeriod: "Standardzeitraum",
     dismissDate: "Entlassen",
     driver: "Fahrer",
     driverManagement: "Fahrerverwaltung",
@@ -430,12 +444,15 @@ const translations = {
     returned: "Rückgabe",
     role: "Rolle",
     runde: "Runde",
+    rundeCount: "Runde-Anzahl",
     save: "Speichern",
     saveNewPassword: "Neues Passwort speichern",
     searchAudit: "Event, Auftrag, Entität, Benutzer suchen",
     searchDriver: "Fahrer, Telefon, Status, Firma suchen",
     searchLkw: "LKW, Status, Firma suchen",
     setActive: "Aktiv setzen",
+    settings: "Einstellungen",
+    holidayRegion: "Feiertagsregion",
     show: "Anzeigen",
     signIn: "Anmelden",
     signingIn: "Anmeldung...",
@@ -480,6 +497,8 @@ const translations = {
     delete: "Удалить",
     dailyPlanning: "Планирование дня",
     day: "День",
+    defaultCountry: "Страна по умолчанию",
+    defaultPeriod: "Период по умолчанию",
     dismissDate: "Уволен",
     driver: "Водитель",
     driverManagement: "Водители",
@@ -525,12 +544,15 @@ const translations = {
     returned: "Возврат",
     role: "Роль",
     runde: "Рейс",
+    rundeCount: "Количество рейсов",
     save: "Сохранить",
     saveNewPassword: "Сохранить новый пароль",
     searchAudit: "Поиск: событие, заказ, объект, пользователь",
     searchDriver: "Поиск: водитель, телефон, статус, компания",
     searchLkw: "Поиск: LKW, статус, компания",
     setActive: "Сделать активным",
+    settings: "Настройки",
+    holidayRegion: "Регион праздников",
     show: "Показать",
     signIn: "Войти",
     signingIn: "Вход...",
@@ -631,11 +653,18 @@ export default function HomePage() {
   const [drivers, setDrivers] = useState<DriverItem[]>([]);
   const [audit, setAudit] = useState<AuditItem[]>([]);
   const [managedUsers, setManagedUsers] = useState<ManagedUser[]>([]);
+  const [settings, setSettings] = useState<AppSettings>({
+    defaultCountry: "DE",
+    defaultPeriod: "day",
+    rundeCount: "3",
+    holidayRegion: "HH",
+  });
   const [importResults, setImportResults] = useState<Record<string, ImportResult>>({});
   const [importBusy, setImportBusy] = useState<string | null>(null);
   const [userBusy, setUserBusy] = useState<string | null>(null);
   const [orderBusy, setOrderBusy] = useState<string | null>(null);
   const [managementBusy, setManagementBusy] = useState<string | null>(null);
+  const [settingsBusy, setSettingsBusy] = useState(false);
   const [newUserEmail, setNewUserEmail] = useState("");
   const [newUserDisplayName, setNewUserDisplayName] = useState("");
   const [newUserPassword, setNewUserPassword] = useState("");
@@ -896,11 +925,15 @@ export default function HomePage() {
       const usersResult = currentUser.role === "ADMIN"
         ? await apiFetch<{ ok: true; items: ManagedUser[] }>("/api/users")
         : { ok: true as const, items: [] };
+      const settingsResult = hasManagerAccess(currentUser.role)
+        ? await apiFetch<{ ok: true; settings: AppSettings }>("/api/settings")
+        : { ok: true as const, settings };
       setPlanning(planningResult);
       setLkw(lkwResult.items);
       setDrivers(driversResult.items);
       setAudit(auditResult.items);
       setManagedUsers(usersResult.items);
+      setSettings(settingsResult.settings);
     } catch (caught) {
       setError(caught instanceof Error ? caught.message : "Failed to load data");
     } finally {
@@ -1273,6 +1306,26 @@ export default function HomePage() {
     }
   }
 
+  async function saveSettings(event: FormEvent<HTMLFormElement>): Promise<void> {
+    event.preventDefault();
+    setError(null);
+    setSettingsBusy(true);
+    try {
+      const result = await apiFetch<{ ok: true; settings: AppSettings }>("/api/settings", {
+        method: "PATCH",
+        body: JSON.stringify(settings),
+      });
+      setSettings(result.settings);
+      setPeriodFilter(result.settings.defaultPeriod);
+      setNewOrderCountry(result.settings.defaultCountry);
+      await loadDashboardData(selectedDate);
+    } catch (caught) {
+      setError(caught instanceof Error ? caught.message : "Settings save failed");
+    } finally {
+      setSettingsBusy(false);
+    }
+  }
+
   function updateOrderDraft(orderId: string, field: keyof OrderDraft, value: string, row: { runde: number; description: string; customer: string; plz: string; cityName: string; country: string; plannedTime: string; info: string }): void {
     setOrderDrafts((current) => ({
       ...current,
@@ -1429,6 +1482,7 @@ export default function HomePage() {
     { key: "drivers", label: t("driverManagement") },
     ...(canViewAudit ? [{ key: "audit" as AppSection, label: t("auditLog") }] : []),
     ...(user.role === "ADMIN" ? [{ key: "users" as AppSection, label: t("userManagement") }] : []),
+    ...(hasManagerAccess(user.role) ? [{ key: "settings" as AppSection, label: t("settings") }] : []),
   ];
 
   return (
@@ -2131,6 +2185,65 @@ export default function HomePage() {
             </table>
           </div>
         </div>
+        </section>
+      ) : null}
+
+      {activeSection === "settings" && hasManagerAccess(user.role) ? (
+        <section className="section-grid">
+          <div className="list-panel audit-panel management-panel">
+            <div className="panel-header">
+              <h2>{t("settings")}</h2>
+              <span className="muted">planning DB</span>
+            </div>
+            <form className="settings-form" onSubmit={saveSettings}>
+              <label>
+                {t("defaultCountry")}
+                <select
+                  disabled={user.role !== "ADMIN"}
+                  value={settings.defaultCountry}
+                  onChange={(event) => setSettings((current) => ({ ...current, defaultCountry: event.target.value }))}
+                >
+                  {countryOptions.map((country) => (
+                    <option key={country.value} value={country.value}>{country.label}</option>
+                  ))}
+                </select>
+              </label>
+              <label>
+                {t("defaultPeriod")}
+                <select
+                  disabled={user.role !== "ADMIN"}
+                  value={settings.defaultPeriod}
+                  onChange={(event) => setSettings((current) => ({ ...current, defaultPeriod: event.target.value as PeriodFilter }))}
+                >
+                  <option value="day">{t("day")}</option>
+                  <option value="week">{t("week")}</option>
+                  <option value="month">{t("month")}</option>
+                </select>
+              </label>
+              <label>
+                {t("rundeCount")}
+                <input
+                  disabled={user.role !== "ADMIN"}
+                  min="1"
+                  max="9"
+                  type="number"
+                  value={settings.rundeCount}
+                  onChange={(event) => setSettings((current) => ({ ...current, rundeCount: event.target.value }))}
+                />
+              </label>
+              <label>
+                {t("holidayRegion")}
+                <input
+                  disabled={user.role !== "ADMIN"}
+                  value={settings.holidayRegion}
+                  onChange={(event) => setSettings((current) => ({ ...current, holidayRegion: event.target.value }))}
+                />
+              </label>
+              {user.role === "ADMIN" ? (
+                <button type="submit" disabled={settingsBusy}>{t("save")}</button>
+              ) : null}
+            </form>
+          </div>
         </section>
       ) : null}
 

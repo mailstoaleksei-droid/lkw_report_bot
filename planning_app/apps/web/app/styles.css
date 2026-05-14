@@ -631,6 +631,16 @@ th {
   padding: 6px 10px;
 }
 
+.settings-form {
+  display: grid;
+  gap: 12px;
+  grid-template-columns: repeat(4, minmax(140px, 1fr)) auto;
+}
+
+.settings-form button {
+  align-self: end;
+}
+
 .imports-panel {
   grid-column: 1 / -1;
 }
@@ -805,6 +815,7 @@ th {
   .planning-controls,
   .filters-panel,
   .order-create-form,
+  .settings-form,
   .user-create-form,
   .side-grid,
   .imports-grid {
@@ -821,6 +832,7 @@ th {
   .planning-controls,
   .filters-panel,
   .order-create-form,
+  .settings-form,
   .user-create-form,
   .side-grid,
   .imports-grid {

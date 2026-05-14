@@ -14,6 +14,7 @@ import { registerLkwRoutes } from "./routes/lkw.js";
 import { registerMetaRoutes } from "./routes/meta.js";
 import { registerOrderRoutes } from "./routes/orders.js";
 import { registerPlanningRoutes } from "./routes/planning.js";
+import { registerSettingsRoutes } from "./routes/settings.js";
 import { registerUserRoutes } from "./routes/users.js";
 
 const app = Fastify({ logger: true });
@@ -38,6 +39,7 @@ await registerPlanningRoutes(app, config);
 await registerAuditRoutes(app, config);
 await registerExportRoutes(app, config);
 await registerUserRoutes(app, config);
+await registerSettingsRoutes(app, config);
 
 for (const signal of ["SIGINT", "SIGTERM"] as const) {
   process.on(signal, async () => {

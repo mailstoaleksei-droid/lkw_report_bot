@@ -253,7 +253,10 @@ Status legend:
   - Users with a temporary password are forced into a change-password screen before using the app.
   - Self role change and self deactivation are blocked by API and disabled in UI.
   - Separate route/page is pending.
-- [ ] Settings page.
+- [x] Settings page.
+  - Manager/Admin can view planning app settings.
+  - Admin can update default country, default period, Runde count, and holiday region in the planning database.
+  - Settings changes are recorded in Audit Log.
 
 ## 7. Exports
 
