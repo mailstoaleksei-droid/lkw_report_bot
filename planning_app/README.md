@@ -71,6 +71,7 @@ planning_app/
     TECHNICAL_AUDIT.md   Existing system audit
     ARCHITECTURE.md      Target architecture
     BACKUP_AND_RESTORE.md
+    DEPLOYMENT_HETZNER_CLOUDFLARE.md
     ROADMAP.md           MVP and phase 2 plan
   docker-compose.yml
   .env.example

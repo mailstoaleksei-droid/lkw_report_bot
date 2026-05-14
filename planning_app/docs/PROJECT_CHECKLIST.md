@@ -295,9 +295,12 @@ Status legend:
   - `lkw_planning_api` healthy.
   - `lkw_planning_migrate` exited 0.
   - `lkw_planning_seed` exited 0.
-- [ ] Log rotation configured.
-- [ ] Hetzner deployment notes.
-- [ ] Cloudflare DNS/SSL notes.
+- [x] Log rotation configured.
+  - Docker JSON logs are limited to 10 MB x 5 files per service in `docker-compose.yml`.
+- [x] Hetzner deployment notes.
+  - See `docs/DEPLOYMENT_HETZNER_CLOUDFLARE.md`.
+- [x] Cloudflare DNS/SSL notes.
+  - See `docs/DEPLOYMENT_HETZNER_CLOUDFLARE.md`.
 
 ## 9. Manual Decisions Needed
 
