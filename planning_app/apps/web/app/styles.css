@@ -146,7 +146,7 @@ label {
 .dashboard {
   display: grid;
   grid-template-columns: repeat(6, minmax(120px, 1fr));
-  gap: 12px;
+  gap: 8px;
   margin: 0 0 20px;
 }
 
@@ -163,14 +163,14 @@ label {
 .planning-controls {
   align-items: start;
   display: grid;
-  gap: 12px;
-  grid-template-columns: minmax(0, 1fr) 320px;
-  margin: 0 0 20px;
+  gap: 8px;
+  grid-template-columns: minmax(0, 1fr) 260px;
+  margin: 0 0 14px;
 }
 
 .planning-main-column {
   display: grid;
-  gap: 12px;
+  gap: 8px;
   min-width: 0;
 }
 
@@ -181,12 +181,12 @@ label {
   border: 1px solid var(--line);
   border-radius: 8px;
   display: grid;
-  gap: 8px;
-  padding: 10px;
+  gap: 6px;
+  padding: 8px;
 }
 
 .filters-panel {
-  grid-template-columns: repeat(7, minmax(108px, 1fr)) auto auto;
+  grid-template-columns: repeat(7, minmax(96px, 1fr)) auto auto;
   min-height: 0;
 }
 
@@ -195,7 +195,28 @@ label {
 }
 
 .planning-dashboard {
+  grid-template-columns: repeat(7, minmax(100px, 1fr));
   margin: 0;
+}
+
+.filters-panel label,
+.planning-actions-panel label {
+  font-size: 12px;
+  gap: 4px;
+}
+
+.filters-panel input,
+.filters-panel select,
+.planning-actions-panel input,
+.planning-actions-panel select {
+  min-height: 34px;
+  padding: 6px 8px;
+}
+
+.filters-panel button,
+.planning-actions-panel button {
+  min-height: 34px;
+  padding: 7px 12px;
 }
 
 .metric,
@@ -207,19 +228,20 @@ label {
 }
 
 .metric {
-  padding: 16px;
+  min-height: 58px;
+  padding: 10px 12px;
 }
 
 .metric span {
   color: var(--muted);
   display: block;
-  font-size: 13px;
+  font-size: 12px;
 }
 
 .metric strong {
   display: block;
-  font-size: 28px;
-  margin-top: 8px;
+  font-size: 22px;
+  margin-top: 4px;
 }
 
 .planner {
