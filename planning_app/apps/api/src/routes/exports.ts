@@ -206,6 +206,107 @@ function makePdf(lines: string[]): Buffer {
   return Buffer.from(body, "utf8");
 }
 
+async function writeExportLog(
+  userId: string,
+  format: "xls" | "pdf",
+  query: ExportQuery,
+  fileName: string,
+): Promise<void> {
+  await prisma.exportLog.create({
+    data: {
+      exportType: query.scope === "week" ? "wochenplan" : "tagesplanung",
+      format,
+      filters: {
+        date: query.date,
+        scope: query.scope,
+        auftrag: query.auftrag || null,
+        lkw: query.lkw || null,
+        lkwMissing: query.lkwMissing || null,
+        driver: query.driver || null,
+        company: query.company || null,
+        status: query.status || null,
+        runde: query.runde || null,
+      },
+      outputPath: fileName,
+      createdById: userId,
+    },
+  });
+}
+
+function buildExcelBody(rows: ExportRow[]): string {
+  const header = [
+    "LKW",
+    "Runde",
+    "Auftrag",
+    "Driver",
+    "Chassis",
+    "Customer",
+    "PLZ",
+    "City",
+    "Country",
+    "Time",
+    "Info",
+    "Status",
+    "Problem",
+  ];
+  const tableRows = [
+    xmlRow(header),
+    ...rows.map((row) => [
+      row.lkw,
+      row.runde,
+      row.auftrag,
+      row.driver,
+      row.chassis,
+      row.customer,
+      row.plz,
+      row.city,
+      row.country,
+      row.time,
+      row.info,
+      row.status,
+      row.problem,
+    ]).map(xmlRow),
+  ];
+  return `<?xml version="1.0" encoding="UTF-8"?>
+<?mso-application progid="Excel.Sheet"?>
+<Workbook xmlns="urn:schemas-microsoft-com:office:spreadsheet"
+ xmlns:o="urn:schemas-microsoft-com:office:office"
+ xmlns:x="urn:schemas-microsoft-com:office:excel"
+ xmlns:ss="urn:schemas-microsoft-com:office:spreadsheet">
+ <Worksheet ss:Name="Tagesplanung">
+  <Table>
+   ${tableRows.join("\n   ")}
+  </Table>
+ </Worksheet>
+</Workbook>`;
+}
+
+function buildPdfBuffer(rows: ExportRow[], query: ExportQuery): Buffer {
+  const header = `${fit("LKW", 12)} ${fit("R", 2)} ${fit("Auftrag", 30)} ${fit("Driver", 22)} ${fit("Country", 8)} ${fit("Status", 9)} ${fit("Problem", 28)}`;
+  const separator = "-".repeat(header.length);
+  const title = query.scope === "week" ? "Wochenplan" : "Tagesplanung";
+  const lines = [
+    `${title} ${query.scope} ${query.date}`,
+    `Rows: ${rows.length}`,
+    "",
+    header,
+    separator,
+    ...rows.slice(0, 48).map((row) => [
+      fit(row.lkw, 12),
+      fit(row.runde, 2),
+      fit(row.auftrag, 30),
+      fit(row.driver, 22),
+      fit(row.country, 8),
+      fit(row.status, 9),
+      fit(row.problem, 28),
+    ].join(" ")),
+  ];
+  if (rows.length > 48) {
+    lines.push(`... ${rows.length - 48} more rows. Use Excel export for the full list.`);
+  }
+  return makePdf(lines);
+}
+
 export async function registerExportRoutes(app: FastifyInstance, config: AppConfig): Promise<void> {
   app.get("/api/exports/tagesplanung.xls", async (request, reply) => {
     const user = await requireUser(request, reply, config, "VIEWER");
@@ -218,76 +319,13 @@ export async function registerExportRoutes(app: FastifyInstance, config: AppConf
 
     const query = parsed.data;
     const rows = await loadExportRows(query);
-    const header = [
-      "LKW",
-      "Runde",
-      "Auftrag",
-      "Driver",
-      "Chassis",
-      "Customer",
-      "PLZ",
-      "City",
-      "Country",
-      "Time",
-      "Info",
-      "Status",
-      "Problem",
-    ];
-    const tableRows = [
-      xmlRow(header),
-      ...rows.map((row) => [
-        row.lkw,
-        row.runde,
-        row.auftrag,
-        row.driver,
-        row.chassis,
-        row.customer,
-        row.plz,
-        row.city,
-        row.country,
-        row.time,
-        row.info,
-        row.status,
-        row.problem,
-      ]).map(xmlRow),
-    ];
-    const body = `<?xml version="1.0" encoding="UTF-8"?>
-<?mso-application progid="Excel.Sheet"?>
-<Workbook xmlns="urn:schemas-microsoft-com:office:spreadsheet"
- xmlns:o="urn:schemas-microsoft-com:office:office"
- xmlns:x="urn:schemas-microsoft-com:office:excel"
- xmlns:ss="urn:schemas-microsoft-com:office:spreadsheet">
- <Worksheet ss:Name="Tagesplanung">
-  <Table>
-   ${tableRows.join("\n   ")}
-  </Table>
- </Worksheet>
-</Workbook>`;
     const fileName = `tagesplanung-${query.scope}-${query.date}.xls`;
 
-    await prisma.exportLog.create({
-      data: {
-        exportType: "tagesplanung",
-        format: "xls",
-        filters: {
-          date: query.date,
-          scope: query.scope,
-          auftrag: query.auftrag || null,
-          lkw: query.lkw || null,
-          lkwMissing: query.lkwMissing || null,
-          driver: query.driver || null,
-          company: query.company || null,
-          status: query.status || null,
-          runde: query.runde || null,
-        },
-        outputPath: fileName,
-        createdById: user.id,
-      },
-    });
+    await writeExportLog(user.id, "xls", query, fileName);
 
     reply.header("Content-Type", "application/vnd.ms-excel; charset=utf-8");
     reply.header("Content-Disposition", `attachment; filename="${fileName}"`);
-    return reply.send(body);
+    return reply.send(buildExcelBody(rows));
   });
 
   app.get("/api/exports/tagesplanung.pdf", async (request, reply) => {
@@ -302,50 +340,48 @@ export async function registerExportRoutes(app: FastifyInstance, config: AppConf
     const query = parsed.data;
     const rows = await loadExportRows(query);
     const fileName = `tagesplanung-${query.scope}-${query.date}.pdf`;
-    const header = `${fit("LKW", 12)} ${fit("R", 2)} ${fit("Auftrag", 30)} ${fit("Driver", 22)} ${fit("Country", 8)} ${fit("Status", 9)} ${fit("Problem", 28)}`;
-    const separator = "-".repeat(header.length);
-    const lines = [
-      `Tagesplanung ${query.scope} ${query.date}`,
-      `Rows: ${rows.length}`,
-      "",
-      header,
-      separator,
-      ...rows.slice(0, 48).map((row) => [
-        fit(row.lkw, 12),
-        fit(row.runde, 2),
-        fit(row.auftrag, 30),
-        fit(row.driver, 22),
-        fit(row.country, 8),
-        fit(row.status, 9),
-        fit(row.problem, 28),
-      ].join(" ")),
-    ];
-    if (rows.length > 48) {
-      lines.push(`... ${rows.length - 48} more rows. Use Excel export for the full list.`);
-    }
-
-    await prisma.exportLog.create({
-      data: {
-        exportType: "tagesplanung",
-        format: "pdf",
-        filters: {
-          date: query.date,
-          scope: query.scope,
-          auftrag: query.auftrag || null,
-          lkw: query.lkw || null,
-          lkwMissing: query.lkwMissing || null,
-          driver: query.driver || null,
-          company: query.company || null,
-          status: query.status || null,
-          runde: query.runde || null,
-        },
-        outputPath: fileName,
-        createdById: user.id,
-      },
-    });
+    await writeExportLog(user.id, "pdf", query, fileName);
 
     reply.header("Content-Type", "application/pdf");
     reply.header("Content-Disposition", `attachment; filename="${fileName}"`);
-    return reply.send(makePdf(lines));
+    return reply.send(buildPdfBuffer(rows, query));
+  });
+
+  app.get("/api/exports/wochenplan.xls", async (request, reply) => {
+    const user = await requireUser(request, reply, config, "VIEWER");
+    if (!user) return;
+
+    const parsed = exportQuerySchema.safeParse(request.query);
+    if (!parsed.success) {
+      return reply.code(400).send({ ok: false, error: "Invalid export query" });
+    }
+
+    const query: ExportQuery = { ...parsed.data, scope: "week" };
+    const rows = await loadExportRows(query);
+    const fileName = `wochenplan-${query.date}.xls`;
+    await writeExportLog(user.id, "xls", query, fileName);
+
+    reply.header("Content-Type", "application/vnd.ms-excel; charset=utf-8");
+    reply.header("Content-Disposition", `attachment; filename="${fileName}"`);
+    return reply.send(buildExcelBody(rows));
+  });
+
+  app.get("/api/exports/wochenplan.pdf", async (request, reply) => {
+    const user = await requireUser(request, reply, config, "VIEWER");
+    if (!user) return;
+
+    const parsed = exportQuerySchema.safeParse(request.query);
+    if (!parsed.success) {
+      return reply.code(400).send({ ok: false, error: "Invalid export query" });
+    }
+
+    const query: ExportQuery = { ...parsed.data, scope: "week" };
+    const rows = await loadExportRows(query);
+    const fileName = `wochenplan-${query.date}.pdf`;
+    await writeExportLog(user.id, "pdf", query, fileName);
+
+    reply.header("Content-Type", "application/pdf");
+    reply.header("Content-Disposition", `attachment; filename="${fileName}"`);
+    return reply.send(buildPdfBuffer(rows, query));
   });
 }

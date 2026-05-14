@@ -266,12 +266,14 @@ Status legend:
 - [x] Excel Tagesplan.
   - MVP exports Excel-compatible XML `.xls` without unsafe third-party XLSX dependencies.
   - Excel export now includes assigned and unassigned Orders-first rows.
-- [ ] PDF Wochenplan.
-- [ ] Excel Wochenplan.
-- [~] Export respects filters.
-  - Date filter is supported by the export endpoint.
-  - Week/month scope, Auftrag, company, LKW, driver, status, and Runde filters are supported by the Excel export endpoint.
-  - PDF Tagesplan uses the same filters as Excel Tagesplan.
+- [x] PDF Wochenplan.
+  - `GET /api/exports/wochenplan.pdf?date=YYYY-MM-DD` exports the Monday-Sunday week containing the selected date.
+- [x] Excel Wochenplan.
+  - `GET /api/exports/wochenplan.xls?date=YYYY-MM-DD` exports the Monday-Sunday week containing the selected date.
+- [x] Export respects filters.
+  - Date filter is supported by the export endpoints.
+  - Week/month scope, Auftrag, company, LKW, empty LKW, driver, status, and Runde filters are supported by the Excel and PDF export endpoints.
+  - Wochenplan alias endpoints use the same row filters and force weekly scope.
 - [x] Export log records created.
 
 ## 8. Operations
