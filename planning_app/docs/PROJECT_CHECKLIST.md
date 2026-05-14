@@ -214,6 +214,7 @@ Status legend:
   - LKW-driver pairings are now persisted in the planning database and returned by the planning API.
   - Orders can be edited inline, including Runde, Auftrag, customer, country, and info.
   - Orders-first hides PLZ, city, and time in the main table.
+  - Order creation form now uses only Runde, Auftrag, customer, country, and info.
   - Orders can be edited and soft-deleted from the Orders-first table.
   - Orders-first action column is at the right edge and includes `Save` and `Delete`.
 - [~] Filters: date, week, month, Auftrag, company, LKW, driver, status, Runde.

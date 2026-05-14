@@ -346,7 +346,7 @@ label {
   border-bottom: 1px solid var(--line);
   display: grid;
   gap: 10px;
-  grid-template-columns: 110px minmax(220px, 2fr) repeat(6, minmax(120px, 1fr)) auto;
+  grid-template-columns: 110px minmax(260px, 2fr) minmax(150px, 1fr) minmax(150px, 1fr) minmax(180px, 1fr) auto;
   padding: 14px 18px;
 }
 

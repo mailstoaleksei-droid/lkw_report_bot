@@ -1491,15 +1491,12 @@ export default function HomePage() {
             </select>
             <input value={newOrderDescription} onChange={(event) => setNewOrderDescription(event.target.value)} placeholder={t("auftrag")} required />
             <input value={newOrderCustomer} onChange={(event) => setNewOrderCustomer(event.target.value)} placeholder={t("customer")} />
-            <input value={newOrderPlz} onChange={(event) => setNewOrderPlz(event.target.value)} placeholder="PLZ" />
-            <input value={newOrderCity} onChange={(event) => setNewOrderCity(event.target.value)} placeholder={t("city")} />
             <select value={newOrderCountry} onChange={(event) => setNewOrderCountry(event.target.value)}>
               <option value="">{t("country")}</option>
               {countryOptions.map((country) => (
                 <option key={country.value} value={country.value}>{country.label}</option>
               ))}
             </select>
-            <input value={newOrderTime} onChange={(event) => setNewOrderTime(event.target.value)} placeholder={t("time")} />
             <input value={newOrderInfo} onChange={(event) => setNewOrderInfo(event.target.value)} placeholder={t("info")} />
             <button type="submit" disabled={Boolean(orderBusy)}>{t("createOrder")}</button>
           </form>
