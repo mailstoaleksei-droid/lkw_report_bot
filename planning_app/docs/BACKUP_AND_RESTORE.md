@@ -26,6 +26,8 @@ planning_app/storage/backups/lkw_planning_YYYYMMDD_HHMMSS.dump
 
 Retention is controlled by `BACKUP_RETENTION_DAYS` in `.env`.
 
+If `OFFSITE_BACKUP_ENABLED=true`, the same scheduled run also uploads the new dump to Backblaze B2 through `scripts/upload_backups_to_b2.ps1`.
+
 ## Restore Test
 
 Run this once per month against a temporary restore database. Do not restore into production until a backup has been verified.
@@ -64,4 +66,10 @@ docker compose exec -T postgres sh -lc "dropdb --if-exists --username=`"`$POSTGR
 
 ## Production Note
 
-For Hetzner production, copy backups to storage outside the main VPS, for example Hetzner Storage Box, S3-compatible storage, or another secured backup host.
+The preferred production design is:
+
+- local daily backup on the VPS;
+- independent offsite backup in Backblaze B2 EU Central;
+- Backblaze Object Lock default retention for recent immutable backups.
+
+Setup details are documented in `OFFSITE_BACKUP_BACKBLAZE_B2.md`.

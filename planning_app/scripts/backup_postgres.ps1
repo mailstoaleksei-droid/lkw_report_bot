@@ -70,3 +70,12 @@ Get-ChildItem $BackupDir -Filter "lkw_planning_*.dump" |
 
 Write-Output "Backup created: $target"
 Write-Output "Retention days: $RetentionDays"
+
+if ($env:OFFSITE_BACKUP_ENABLED -eq "true") {
+    $offsiteScript = Join-Path $ProjectDir "scripts\upload_backups_to_b2.ps1"
+    if (-not (Test-Path $offsiteScript)) {
+        throw "Offsite backup is enabled but upload script is missing: $offsiteScript"
+    }
+
+    & $offsiteScript -ProjectDir $ProjectDir -EnvFile $EnvFile -BackupDir $BackupDir -FilePath $target
+}

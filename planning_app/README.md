@@ -72,6 +72,7 @@ planning_app/
     ARCHITECTURE.md      Target architecture
     BACKUP_AND_RESTORE.md
     DEPLOYMENT_HETZNER_CLOUDFLARE.md
+    OFFSITE_BACKUP_BACKBLAZE_B2.md
     ROADMAP.md           MVP and phase 2 plan
   docker-compose.yml
   .env.example
@@ -94,6 +95,13 @@ Install the daily Windows backup task:
 Backups are stored in `storage/backups` and retention is controlled by
 `BACKUP_RETENTION_DAYS` in `.env`. Restore test steps are documented in
 `docs/BACKUP_AND_RESTORE.md`.
+
+For production, use the preferred two-layer design:
+
+- local daily dumps;
+- independent Backblaze B2 EU Central offsite copies with Object Lock.
+
+The one-time setup steps are documented in `docs/OFFSITE_BACKUP_BACKBLAZE_B2.md`.
 
 ## Safety Rules
 

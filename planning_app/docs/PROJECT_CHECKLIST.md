@@ -283,8 +283,9 @@ Status legend:
   - Windows Scheduled Task `LKW Planning PostgreSQL Backup` installed for 02:30 daily on 2026-05-15.
   - Test backup was created successfully in `planning_app/storage/backups`.
 - [~] Backup stored outside main VPS.
-  - Local backup folder is ready.
-  - Production still needs external storage target such as Hetzner Storage Box or S3-compatible storage.
+  - Preferred target selected: Backblaze B2 EU Central as an independent provider.
+  - Offsite upload script and `.env.example` variables are prepared.
+  - Manual Backblaze bucket/key setup is still required before enabling uploads.
 - [x] Backup retention configured.
   - `BACKUP_RETENTION_DAYS` controls cleanup in `scripts/backup_postgres.ps1`.
 - [x] Monthly restore test procedure documented.
@@ -301,6 +302,8 @@ Status legend:
   - See `docs/DEPLOYMENT_HETZNER_CLOUDFLARE.md`.
 - [x] Cloudflare DNS/SSL notes.
   - See `docs/DEPLOYMENT_HETZNER_CLOUDFLARE.md`.
+- [x] Offsite backup architecture documented.
+  - See `docs/OFFSITE_BACKUP_BACKBLAZE_B2.md`.
 
 ## 9. Manual Decisions Needed
 
