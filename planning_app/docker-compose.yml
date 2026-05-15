@@ -79,6 +79,7 @@ services:
       IMPORT_STAGING_DIR: /app/storage/imports
       EXPORT_OUTPUT_DIR: /app/storage/exports
       BACKUP_DIR: /app/storage/backups
+      DAILY_PLAN_WORKBOOK_PATH: /data/excel/${DAILY_PLAN_WORKBOOK_FILENAME:-Dispo 2026 Wochenplanung_.xlsm}
     depends_on:
       seed:
         condition: service_completed_successfully
@@ -86,6 +87,7 @@ services:
       - "4000:4000"
     volumes:
       - ./storage:/app/storage
+      - ${DAILY_PLAN_EXCEL_DIR}:/data/excel:ro
     healthcheck:
       test: ["CMD", "node", "-e", "fetch('http://localhost:4000/healthz').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"]
       interval: 15s
@@ -100,6 +102,7 @@ services:
     restart: unless-stopped
     logging: *default-logging
     environment:
+      HOSTNAME: "0.0.0.0"
       NEXT_PUBLIC_API_BASE_URL: http://localhost:4000
     depends_on:
       api:

@@ -127,7 +127,17 @@ Status legend:
   - Marked 15 assignments and 15 linked orders as `PROBLEM` where the assigned driver is unavailable.
   - Docker API preview and execute endpoints verified on 2026-05-13.
 - [ ] Direct Excel `Urlaub` import fallback, if reporting DB ETL is unavailable.
-- [ ] Import from Excel daily Tagesplan source.
+- [x] Import from Excel daily Tagesplan source.
+  - Service: `apps/api/src/services/daily-plan-import.ts`
+  - Endpoints: `GET /api/imports/daily-plan/preview?date=YYYY-MM-DD`, `POST /api/imports/daily-plan/execute`
+  - Reads `Dispo 2026 Wochenplanung_.xlsm` via `DAILY_PLAN_EXCEL_DIR` / `DAILY_PLAN_WORKBOOK_FILENAME` env vars.
+  - Parses all date sheets (DD.MM format); supports optional `date` filter for single-day import.
+  - Resolves `Wagen` → LKW via `LkwAlias` table; unresolved aliases saved as `ImportError`.
+  - Creates `Order` + `Assignment` per Runde per row; staging data saved in `DailyPlanImportRow`.
+  - Preview verified on 2026-05-15: 1 sheet, 56 orders, 54/56 LKW resolved.
+  - Full-year preview: 181 sheets, 7373 orders, 89.9% LKW resolved.
+  - Docker volume mount added: `DAILY_PLAN_EXCEL_DIR:/data/excel:ro`.
+  - UI card added to Imports tab.
 - [~] Import `Kalender` LKW-driver pairings from `LKW_Fahrer_Data.xlsm`.
   - MVP pairing table added in the planning database.
   - Current import derives date-specific LKW-driver pairings from imported planning assignments.
@@ -136,9 +146,16 @@ Status legend:
   - Source workbook: `Dispo 2026 Wochenplanung_.xlsm`.
   - Each date sheet is one planning date, for example `04.05`.
   - Header row is row 1.
-- [ ] Parse `Runde_1`, `Runde_2`, `Runde_3`.
+- [x] Parse `Runde_1`, `Runde_2`, `Runde_3`.
+  - Implemented in `daily-plan-import.ts`: Runde_* columns are detected dynamically; one Order+Assignment is created per non-empty Runde cell per row.
 - [~] Map `Wagen` values to LKW.
   - Confirmed examples: `2206 -> GR-OO2206`, `411 -> KO-HH411`, `4295 -> WI-QY4295`.
+  - Full-year import: 10.1% of orders unresolved (7373 total, ~745 without LKW).
+  - Unresolved aliases are saved as `ImportError` rows.
+  - Still needs full alias import table from LKW master data for all edge cases.
+- [ ] Resolve remaining Wagen alias gaps.
+  - Run import, read `ImportError` rows, add missing `LkwAlias` entries via master import or direct DB insert.
+  - Known unresolved example: `Wagen '2016'` — verify if LKW exists and add alias.
 - [x] Add preview before import.
 - [x] Add validation report.
 - [x] Add duplicate detection.
@@ -277,15 +294,18 @@ Status legend:
 - [x] Export log records created.
 
 ## 8. Operations
+> **See also:** `IMPLEMENTATION_CHECKLIST.md` — Telegram Mini App reporting (separate system)
 
 - [x] Backup script draft added.
 - [x] Daily PostgreSQL backup job.
   - Windows Scheduled Task `LKW Planning PostgreSQL Backup` installed for 02:30 daily on 2026-05-15.
   - Test backup was created successfully in `planning_app/storage/backups`.
-- [~] Backup stored outside main VPS.
-  - Preferred target selected: Backblaze B2 EU Central as an independent provider.
-  - Offsite upload script and `.env.example` variables are prepared.
-  - Manual Backblaze bucket/key setup is still required before enabling uploads.
+- [x] Backup stored outside main VPS.
+  - Backblaze B2 EU Central (`s3.eu-central-003.backblazeb2.com`).
+  - Bucket: `groo-lkw-planning-backups`, prefix `daily/`.
+  - Key: `groo-lkw-planning-backup-key-2` (`keyID: 003245713f3a52c0000000003`).
+  - First upload verified on 2026-05-15: 4 dump files in `daily/`.
+  - `OFFSITE_BACKUP_ENABLED=true` in `.env`; `backup_postgres.ps1` uploads automatically after each local dump.
 - [x] Backup retention configured.
   - `BACKUP_RETENTION_DAYS` controls cleanup in `scripts/backup_postgres.ps1`.
 - [x] Monthly restore test procedure documented.
@@ -298,12 +318,49 @@ Status legend:
   - `lkw_planning_seed` exited 0.
 - [x] Log rotation configured.
   - Docker JSON logs are limited to 10 MB x 5 files per service in `docker-compose.yml`.
+- [x] Docker web container HOSTNAME binding fixed.
+  - Added `HOSTNAME: "0.0.0.0"` to web service in `docker-compose.yml`.
+  - Without this, Next.js standalone server bound to container IP only; `localhost:3000` returned empty page.
+  - Fixed on 2026-05-15; verified `http://localhost:3000` returns HTTP 200.
+- [x] SharePoint sync path migrated to `Communication site - Documents`.
+  - All hardcoded paths updated in `.env`, `etl_sim_cards_to_postgres.py`, `etl_watch_sources.py`, `yf_tagessummenreport.py`, `docs/`.
+  - Old path `Intranet - Groo GmbH - Dokumente` fully removed from all source files.
+  - Completed on 2026-05-15.
 - [x] Hetzner deployment notes.
   - See `docs/DEPLOYMENT_HETZNER_CLOUDFLARE.md`.
 - [x] Cloudflare DNS/SSL notes.
   - See `docs/DEPLOYMENT_HETZNER_CLOUDFLARE.md`.
 - [x] Offsite backup architecture documented.
   - See `docs/OFFSITE_BACKUP_BACKBLAZE_B2.md`.
+- [ ] Deploy to Hetzner VPS.
+  - See `docs/DEPLOYMENT_HETZNER_CLOUDFLARE.md` for requirements.
+  - Minimum: Ubuntu LTS, 2 vCPU / 4 GB RAM, 80 GB disk.
+  - Steps: provision VPS, install Docker, copy repo + `.env`, `docker compose up -d`.
+- [ ] Connect Cloudflare DNS/SSL for planning app subdomain.
+  - Add A record pointing to Hetzner VPS IP.
+  - Set `CORS_ORIGIN` and `NEXT_PUBLIC_API_BASE_URL` to production HTTPS domain.
+  - Configure Caddy or Traefik reverse proxy for `/` (web:3000) and `/api/*` (api:4000).
+- [ ] Configure offsite backup on Hetzner (Linux cron instead of Windows Task Scheduler).
+  - Install rclone on VPS.
+  - Add cron job: `30 2 * * * /app/scripts/backup_postgres.sh`.
+- [ ] Production smoke test.
+  - Login works at production URL.
+  - Tagesplanung loads with live data.
+  - Export PDF/Excel works.
+  - Import daily plan preview returns data.
+  - Backup cron runs and uploads to B2.
+
+## 11. Known Risks
+
+| Risk | Вероятность | Impact | Mitigation |
+|------|------------|--------|------------|
+| Docker on Windows shuts down with PC | Высокая | Planning app offline | **Deploy to Hetzner VPS** (section 8, priority #1) |
+| Wagen aliases not exhaustive (10.1% unresolved) | Высокая | Orders imported without LKW | Run import → read `ImportError` rows → add aliases (section 4) |
+| SharePoint sync path changes again | Средняя | ETL/import reads stale files | Update `EXCEL_FILE_PATH` and `DAILY_PLAN_EXCEL_DIR` in `.env`; happened and fixed 2026-05-15 |
+| Neon DB free tier (0.5 GB) | Средняя | Planning DB stops growing | Planning DB is isolated (`lkw_planning`); monitor size, upgrade if needed |
+| Excel file locked by SharePoint sync during import | Низкая | Import fails | Service reads file via Docker volume mount (read-only); retry import after sync settles |
+| Docker Desktop on Windows crashes / update restart | Низкая | App offline until manual restart | Configure Docker Desktop auto-start; mitigated by VPS deploy |
+| No import rollback | Низкая | Bad import data cannot be undone | Add rollback strategy (section 4) |
 
 ## 9. Manual Decisions Needed
 

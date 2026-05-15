@@ -24,7 +24,7 @@ import openpyxl
 
 BASE_DIR = Path(__file__).resolve().parent
 DEFAULT_SIM_CARDS_PATH = Path(
-    r"C:\Users\Aleksei Samosvat\Groo GmbH\Intranet - Groo GmbH - Dokumente\Groo Cargo Logistic\GC_IT\GC_Sim-Karten_LOG_IN\LOG_INs 2.xlsx"
+    r"C:\Users\Aleksei Samosvat\Groo GmbH\Communication site - Documents\Groo Cargo Logistic\GC_IT\GC_Sim-Karten_LOG_IN\LOG_INs 2.xlsx"
 )
 CONTADO_SHEET = "Contado"
 VODAFONE_SHEET = "Vodafone&O2 SIM-Karten  Neu"

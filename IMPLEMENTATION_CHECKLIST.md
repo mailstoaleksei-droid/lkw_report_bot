@@ -269,6 +269,9 @@
 - [ ] Optional PDF caching layer (R2/KV)
 - [ ] Browser-rendering fallback if needed for complex PDF layouts
 - [ ] Full cleanup of legacy local-server/Excel-COM paths (if decommission approved)
+  - Tasks 4.1, 4.2, 4.4, 4.5 from Phase 4 — deferred, no timeline set
+
+> **See also:** `planning_app/docs/PROJECT_CHECKLIST.md` — web planning app (separate MVP)
 
 ## 7) Control Result
 - [x] User opens Telegram -> `Open App`

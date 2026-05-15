@@ -22,7 +22,7 @@ from dotenv import load_dotenv
 BASE_DIR = Path(__file__).resolve().parent
 LOG_FILE = BASE_DIR / "etl_watch.log"
 DEFAULT_SIM_CARDS_FILE_PATH = Path(
-    r"C:\Users\Aleksei Samosvat\Groo GmbH\Intranet - Groo GmbH - Dokumente\Groo Cargo Logistic\GC_IT\GC_Sim-Karten_LOG_IN\LOG_INs 2.xlsx"
+    r"C:\Users\Aleksei Samosvat\Groo GmbH\Communication site - Documents\Groo Cargo Logistic\GC_IT\GC_Sim-Karten_LOG_IN\LOG_INs 2.xlsx"
 )
 
 

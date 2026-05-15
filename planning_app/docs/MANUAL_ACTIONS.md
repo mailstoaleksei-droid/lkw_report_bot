@@ -82,7 +82,7 @@ No Docker manual action is currently pending.
 Confirmed source:
 
 ```text
-C:\Users\Aleksei Samosvat\Groo GmbH\Intranet - Groo GmbH - Dokumente\Groo Cargo Logistic\GC_Dispo\Dispo 2026 Wochenplanung_.xlsm
+C:\Users\Aleksei Samosvat\Groo GmbH\Communication site - Documents\Groo Cargo Logistic\GC_Dispo\Dispo 2026 Wochenplanung_.xlsm
 ```
 
 Confirmed columns:
