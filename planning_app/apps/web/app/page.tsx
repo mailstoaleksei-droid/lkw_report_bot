@@ -1,6 +1,7 @@
 "use client";
 
 import { FormEvent, useEffect, useMemo, useState } from "react";
+import { KalenderView } from "./kalender-view";
 
 const apiBaseUrl = process.env.NEXT_PUBLIC_API_BASE_URL || "http://localhost:4000";
 
@@ -230,6 +231,12 @@ const importActions: ImportAction[] = [
     previewPath: "/api/imports/lkw-driver-pairings/preview",
     executePath: "/api/imports/lkw-driver-pairings/execute",
   },
+  {
+    key: "daily-plan",
+    title: "Daily plan (Tagesplanung Excel)",
+    previewPath: "/api/imports/daily-plan/preview",
+    executePath: "/api/imports/daily-plan/execute",
+  },
 ];
 
 const countryOptions = [
@@ -260,7 +267,7 @@ const masterStatusOptions = [
 ];
 
 type ViewMode = "lkw-first" | "orders-first";
-type AppSection = "planning" | "imports" | "lkw" | "drivers" | "audit" | "users" | "settings";
+type AppSection = "planning" | "kalender" | "imports" | "lkw" | "drivers" | "audit" | "users" | "settings";
 type PeriodFilter = "day" | "week" | "month";
 type Language = "de" | "en" | "ru";
 
@@ -313,6 +320,7 @@ const translations = {
     imports: "Imports",
     info: "Info",
     internalLogistics: "Internal logistics",
+    kalender: "Kalender",
     language: "Language",
     lastLogin: "Last login",
     lkwManagement: "LKW management",
@@ -413,6 +421,7 @@ const translations = {
     imports: "Importe",
     info: "Info",
     internalLogistics: "Interne Logistik",
+    kalender: "Kalender",
     language: "Sprache",
     lastLogin: "Letzter Login",
     lkwManagement: "LKW-Verwaltung",
@@ -513,6 +522,7 @@ const translations = {
     imports: "Импорты",
     info: "Инфо",
     internalLogistics: "Внутренняя логистика",
+    kalender: "Календарь",
     language: "Язык",
     lastLogin: "Последний вход",
     lkwManagement: "LKW",
@@ -1477,6 +1487,7 @@ export default function HomePage() {
   const canManageMasterData = hasManagerAccess(user.role);
   const visibleSections: Array<{ key: AppSection; label: string }> = [
     { key: "planning", label: t("dailyPlanning") },
+    { key: "kalender", label: t("kalender") },
     ...(canViewImports ? [{ key: "imports" as AppSection, label: t("imports") }] : []),
     { key: "lkw", label: t("lkwManagement") },
     { key: "drivers", label: t("driverManagement") },
@@ -2383,6 +2394,15 @@ export default function HomePage() {
           </div>
           </section>
         ) : null}
+
+      {activeSection === "kalender" ? (
+        <section className="section-grid kalender-section">
+          <KalenderView
+            apiBase={apiBaseUrl}
+            canEdit={user.role === "ADMIN" || user.role === "OPERATOR" || user.role === "MANAGER"}
+          />
+        </section>
+      ) : null}
     </main>
   );
 }
