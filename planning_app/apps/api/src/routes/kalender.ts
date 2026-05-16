@@ -464,4 +464,190 @@ export async function registerKalenderRoutes(app: FastifyInstance, config: AppCo
 
     return { ok: true, deleted: count };
   });
+
+  // ── GET /api/kalender/multi ──────────────────────────────────────────────────
+  // Returns aggregated week cells for N consecutive ISO weeks
+  app.get("/api/kalender/multi", async (request, reply) => {
+    const user = await requireUser(request, reply, config, "VIEWER");
+    if (!user) return;
+
+    const parsed = z.object({
+      startIsoWeek: z.string().regex(/^\d{6}$/),
+      weeks: z.coerce.number().int().min(1).max(26).default(8),
+    }).safeParse(request.query);
+
+    if (!parsed.success) {
+      return reply.code(400).send({ ok: false, error: "startIsoWeek (YYYYWW) required" });
+    }
+
+    const { startIsoWeek, weeks: weekCount } = parsed.data;
+    const startYear = parseInt(startIsoWeek.slice(0, 4), 10);
+    const startWeek = parseInt(startIsoWeek.slice(4, 6), 10);
+
+    // Build list of ISO weeks and date ranges
+    type WeekRange = { isoWeek: string; start: Date; end: Date; days: string[] };
+    const weekRanges: WeekRange[] = [];
+    let yr = startYear;
+    let wk = startWeek;
+    for (let i = 0; i < weekCount; i++) {
+      const r = isoWeekToRange(yr, wk);
+      weekRanges.push({ isoWeek: `${yr}${String(wk).padStart(2, "0")}`, ...r });
+      // advance one week
+      const nextMon = new Date(r.start);
+      nextMon.setUTCDate(r.start.getUTCDate() + 7);
+      yr = nextMon.getUTCFullYear();
+      const jan4 = new Date(Date.UTC(yr, 0, 4));
+      const jan4Day = jan4.getUTCDay() || 7;
+      const week1Mon = new Date(jan4);
+      week1Mon.setUTCDate(jan4.getUTCDate() - jan4Day + 1);
+      const diffDays = Math.round((nextMon.getTime() - week1Mon.getTime()) / 86400000);
+      wk = Math.floor(diffDays / 7) + 1;
+    }
+
+    const rangeStart = weekRanges[0].start;
+    const rangeEnd = weekRanges[weekRanges.length - 1].end;
+
+    // Single DB pass for the whole range
+    const [lkws, assignments, webPairings, allAvailabilities] = await Promise.all([
+      prisma.lkw.findMany({
+        where: {
+          deletedAt: null,
+          NOT: { status: MasterStatus.INACTIVE },
+          OR: [
+            { isActive: true },
+            { status: MasterStatus.SOLD, soldDate: { gte: rangeStart } },
+            { status: MasterStatus.RETURNED, returnedDate: { gte: rangeStart } },
+            { status: MasterStatus.WORKSHOP },
+            { status: MasterStatus.RESERVE },
+          ],
+        },
+        orderBy: [{ number: "asc" }],
+        select: {
+          id: true, number: true, status: true,
+          soldDate: true, returnedDate: true,
+          company: { select: { name: true } },
+        },
+      }),
+      prisma.assignment.findMany({
+        where: { planningDate: { gte: rangeStart, lt: rangeEnd }, deletedAt: null, lkwId: { not: null } },
+        select: { lkwId: true, driverId: true, planningDate: true, driver: { select: { id: true, fullName: true } } },
+      }),
+      prisma.lkwDriverPairing.findMany({
+        where: { source: SOURCE_WEB, validFrom: { gte: rangeStart, lt: rangeEnd } },
+        select: { lkwId: true, driverId: true, validFrom: true, driver: { select: { id: true, fullName: true } } },
+      }),
+      prisma.driverAvailability.findMany({
+        where: { date: { gte: rangeStart, lt: rangeEnd } },
+        select: { driverId: true, date: true, status: true },
+      }),
+    ]);
+
+    // Build lookup maps
+    // "lkwId::YYYY-MM-DD" → { driverId, driverName }
+    type DayEntry = { driverId: string | null; driverName: string | null };
+    const dayMap = new Map<string, DayEntry>();
+    for (const p of webPairings) {
+      const dk = p.validFrom.toISOString().slice(0, 10);
+      dayMap.set(`${p.lkwId}::${dk}`, { driverId: p.driverId, driverName: p.driver?.fullName ?? null });
+    }
+    for (const a of assignments) {
+      if (!a.lkwId) continue;
+      const dk = a.planningDate.toISOString().slice(0, 10);
+      dayMap.set(`${a.lkwId}::${dk}`, { driverId: a.driverId, driverName: a.driver?.fullName ?? null });
+    }
+
+    // "driverId::YYYY-MM-DD" → MasterStatus
+    const availMap = new Map<string, MasterStatus>();
+    for (const av of allAvailabilities) {
+      availMap.set(`${av.driverId}::${av.date.toISOString().slice(0, 10)}`, av.status);
+    }
+
+    function shortName(fullName: string): string {
+      const parts = fullName.trim().split(/\s+/);
+      if (parts.length === 1) return fullName.slice(0, 12);
+      // Return last word (usually surname) capitalized first letter only
+      const surname = parts[parts.length - 1];
+      return surname.length > 12 ? surname.slice(0, 12) : surname;
+    }
+
+    // Build aggregated week cells for each LKW
+    const lkwRows = lkws.map((lkw) => {
+      const weekCells = weekRanges.map(({ isoWeek, start, days }) => {
+        // Check LKW status at start of week
+        if (lkw.status === MasterStatus.SOLD && lkw.soldDate) {
+          const soldDay = new Date(lkw.soldDate.toISOString().slice(0, 10) + "T00:00:00.000Z");
+          if (soldDay <= start) return { isoWeek, label: "sold" as CellLabel, color: CELL_COLORS.sold, driverSummary: null, note: null };
+        }
+        if (lkw.status === MasterStatus.RETURNED && lkw.returnedDate) {
+          const retDay = new Date(lkw.returnedDate.toISOString().slice(0, 10) + "T00:00:00.000Z");
+          if (retDay <= start) return { isoWeek, label: "returned" as CellLabel, color: CELL_COLORS.returned, driverSummary: null, note: null };
+        }
+        if (lkw.status === MasterStatus.WORKSHOP) {
+          return { isoWeek, label: "workshop" as CellLabel, color: CELL_COLORS.workshop, driverSummary: null, note: null };
+        }
+
+        // Collect Mon-Fri driver entries
+        const workDays = days.slice(0, 5);
+        const driverEntries = workDays.map((day) => dayMap.get(`${lkw.id}::${day}`) ?? null);
+        const driverIds = [...new Set(driverEntries.map((e) => e?.driverId).filter(Boolean) as string[])];
+        const driverNames = [...new Set(driverEntries.map((e) => e?.driverName).filter(Boolean) as string[])];
+
+        if (driverIds.length === 0) {
+          const label: CellLabel = lkw.status === MasterStatus.RESERVE ? "reserve" : "no-driver";
+          return { isoWeek, label, color: CELL_COLORS[label], driverSummary: null, note: null };
+        }
+
+        // Check Friday (index 4) driver vacation
+        let note: string | null = null;
+        const fridayEntry = driverEntries[4];
+        if (fridayEntry?.driverId) {
+          const fridayAvail = availMap.get(`${fridayEntry.driverId}::${workDays[4]}`);
+          if (fridayAvail === MasterStatus.VACATION) note = "→U";
+        }
+        // Check if multiple drivers (transfer)
+        if (driverIds.length > 1) note = (note ? `${note} ` : "") + "↔";
+
+        const driverSummary = driverNames.length === 1
+          ? shortName(driverNames[0])
+          : driverNames.length === 2
+            ? `${shortName(driverNames[0])} / ${shortName(driverNames[1])}`
+            : `${shortName(driverNames[0])} …`;
+
+        // Check if any driver has vacation/sick this week → color accordingly
+        let label: CellLabel = "assigned";
+        const allVacation = driverEntries.every((e) =>
+          !e?.driverId || availMap.get(`${e.driverId}::${workDays[driverEntries.indexOf(e)]}`) === MasterStatus.VACATION,
+        );
+        const anyVacation = driverEntries.some((e) =>
+          e?.driverId && availMap.get(`${e.driverId}::${workDays[driverEntries.indexOf(e)]}`) === MasterStatus.VACATION,
+        );
+        const anySick = driverEntries.some((e) =>
+          e?.driverId && availMap.get(`${e.driverId}::${workDays[driverEntries.indexOf(e)]}`) === MasterStatus.SICK,
+        );
+        if (anySick) label = "sick";
+        else if (allVacation) label = "vacation";
+
+        return { isoWeek, label, color: CELL_COLORS[label], driverSummary, note };
+      });
+
+      return {
+        lkwId: lkw.id,
+        lkwNumber: lkw.number,
+        company: lkw.company?.name ?? null,
+        status: lkw.status,
+        weekCells,
+      };
+    });
+
+    return {
+      ok: true,
+      startIsoWeek,
+      weeks: weekRanges.map((r) => ({
+        isoWeek: r.isoWeek,
+        startDate: r.days[0],
+        endDate: r.days[4],
+      })),
+      lkwRows,
+    };
+  });
 }

@@ -1257,3 +1257,76 @@ th {
   gap: 8px;
   flex-wrap: wrap;
 }
+
+/* ── view mode switch ──────────────────────────────────────────────────────── */
+
+.view-mode-switch {
+  display: flex;
+  gap: 2px;
+  background: var(--line);
+  border-radius: 8px;
+  padding: 2px;
+}
+
+.view-mode-switch button {
+  border-radius: 6px;
+  font-size: 13px;
+  font-weight: 600;
+  min-height: 32px;
+  padding: 4px 14px;
+}
+
+/* ── multi-week overview table ─────────────────────────────────────────────── */
+
+.multi-week-table {
+  table-layout: auto;
+}
+
+.multi-week-table .kalender-td-lkw {
+  min-width: 70px;
+  width: 70px;
+}
+
+.multi-week-th {
+  cursor: pointer;
+  min-width: 90px;
+  text-align: center;
+  white-space: nowrap;
+}
+
+.multi-week-th:hover {
+  background: #e0e7ff;
+}
+
+.multi-week-kw {
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.multi-week-cell {
+  cursor: pointer;
+  text-align: center;
+  padding: 4px 6px;
+  min-width: 90px;
+}
+
+.multi-week-cell:hover {
+  filter: brightness(0.92);
+}
+
+.multi-driver {
+  display: block;
+  font-size: 12px;
+  font-weight: 600;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.multi-note {
+  font-size: 10px;
+  font-weight: 700;
+  opacity: 0.75;
+}

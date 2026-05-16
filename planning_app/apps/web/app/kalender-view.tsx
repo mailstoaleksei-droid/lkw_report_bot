@@ -31,6 +31,37 @@ interface AvailableDriver {
   unavailableStatus: string | null;
 }
 
+type KalenderViewMode = "week" | "multi";
+
+interface MultiWeekCell {
+  isoWeek: string;
+  label: CellLabel;
+  color: string;
+  driverSummary: string | null;
+  note: string | null;
+}
+
+interface MultiWeekLkwRow {
+  lkwId: string;
+  lkwNumber: string;
+  company: string | null;
+  status: string;
+  weekCells: MultiWeekCell[];
+}
+
+interface WeekHeader {
+  isoWeek: string;
+  startDate: string;
+  endDate: string;
+}
+
+interface MultiWeekData {
+  ok: boolean;
+  startIsoWeek: string;
+  weeks: WeekHeader[];
+  lkwRows: MultiWeekLkwRow[];
+}
+
 interface LkwRow {
   lkwId: string;
   lkwNumber: string;
@@ -167,6 +198,122 @@ const LABEL_COLORS: Record<CellLabel, string> = {
   "no-driver": "#FECDD3",
   inactive: "#9CA3AF",
 };
+
+// ── MultiWeekGrid ──────────────────────────────────────────────────────────────
+
+const MONTH_NAMES = ["Jan", "Feb", "Mär", "Apr", "Mai", "Jun", "Jul", "Aug", "Sep", "Okt", "Nov", "Dez"];
+
+function formatWeekHeader(startDate: string, endDate: string): string {
+  const s = new Date(startDate + "T00:00:00Z");
+  const e = new Date(endDate + "T00:00:00Z");
+  const sM = MONTH_NAMES[s.getUTCMonth()];
+  const eM = MONTH_NAMES[e.getUTCMonth()];
+  return sM === eM
+    ? `${s.getUTCDate()}–${e.getUTCDate()} ${sM}`
+    : `${s.getUTCDate()} ${sM} – ${e.getUTCDate()} ${eM}`;
+}
+
+interface MultiWeekGridProps {
+  apiBase: string;
+  startIsoWeek: string;
+  lkwFilter: string;
+  showSold: boolean;
+  onWeekClick: (isoWeek: string) => void;
+}
+
+function MultiWeekGrid({ apiBase, startIsoWeek, lkwFilter, showSold, onWeekClick }: MultiWeekGridProps) {
+  const [data, setData] = useState<MultiWeekData | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    void (async () => {
+      setLoading(true);
+      setError(null);
+      try {
+        const res = await fetch(
+          `${apiBase}/api/kalender/multi?startIsoWeek=${startIsoWeek}&weeks=8`,
+          { credentials: "include" },
+        );
+        const json = await res.json() as MultiWeekData;
+        if (!json.ok) throw new Error("API error");
+        setData(json);
+      } catch (err) {
+        setError(err instanceof Error ? err.message : String(err));
+      } finally {
+        setLoading(false);
+      }
+    })();
+  }, [apiBase, startIsoWeek]);
+
+  if (loading) return <div className="kalender-loading">Lade Übersicht…</div>;
+  if (error) return <div className="kalender-error">Fehler: {error}</div>;
+  if (!data) return null;
+
+  const visibleRows = data.lkwRows.filter((row) => {
+    const matchFilter = lkwFilter.trim() === "" || row.lkwNumber.toLowerCase().includes(lkwFilter.toLowerCase());
+    const allInactive = row.weekCells.every((c) => c.label === "sold" || c.label === "returned");
+    return matchFilter && (showSold || !allInactive);
+  });
+
+  return (
+    <div className="kalender-table-wrap">
+      <table className="kalender-table multi-week-table">
+        <thead>
+          <tr>
+            <th className="kalender-th-lkw">LKW</th>
+            {data.weeks.map((w) => (
+              <th
+                key={w.isoWeek}
+                className="kalender-th-day multi-week-th"
+                onClick={() => onWeekClick(w.isoWeek)}
+                title="Klicken für Wochenansicht"
+              >
+                <div className="multi-week-kw">KW {w.isoWeek.slice(4)}</div>
+                <div className="kalender-th-date">{formatWeekHeader(w.startDate, w.endDate)}</div>
+              </th>
+            ))}
+          </tr>
+        </thead>
+        <tbody>
+          {visibleRows.map((row) => (
+            <tr key={row.lkwId}>
+              <td className="kalender-td-lkw" title={row.company ?? undefined}>{row.lkwNumber}</td>
+              {row.weekCells.map((cell) => {
+                const textColor = cell.label === "sold" ? "#f3f4f6" : "#111827";
+                return (
+                  <td
+                    key={cell.isoWeek}
+                    className="kalender-cell multi-week-cell"
+                    style={{ background: cell.color, color: textColor }}
+                    title={cell.driverSummary ?? cell.label}
+                    onClick={() => onWeekClick(cell.isoWeek)}
+                  >
+                    {cell.driverSummary
+                      ? (
+                        <span className="multi-driver">
+                          {cell.driverSummary}
+                          {cell.note && <span className="multi-note"> {cell.note}</span>}
+                        </span>
+                      )
+                      : cell.label !== "assigned"
+                        ? <span className="cell-badge">{LABEL_DISPLAY[cell.label]}</span>
+                        : null}
+                  </td>
+                );
+              })}
+            </tr>
+          ))}
+          {visibleRows.length === 0 && (
+            <tr>
+              <td colSpan={data.weeks.length + 1} className="kalender-empty">Keine LKW gefunden.</td>
+            </tr>
+          )}
+        </tbody>
+      </table>
+    </div>
+  );
+}
 
 // ── AssignModal ────────────────────────────────────────────────────────────────
 
@@ -402,7 +549,9 @@ interface KalenderViewProps {
 }
 
 export function KalenderView({ apiBase, canEdit = false }: KalenderViewProps) {
+  const [viewMode, setViewMode] = useState<KalenderViewMode>("week");
   const [isoWeek, setIsoWeek] = useState<string>(currentIsoWeek);
+  const [multiStart, setMultiStart] = useState<string>(currentIsoWeek);
   const [data, setData] = useState<KalenderData | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -452,15 +601,40 @@ export function KalenderView({ apiBase, canEdit = false }: KalenderViewProps) {
 
   const weekYear = data ? `KW ${data.week} / ${data.year}` : `KW ${isoWeek.slice(4)} / ${isoWeek.slice(0, 4)}`;
 
+  const multiWeekCount = 8;
+
   return (
     <div className="kalender-wrap">
       {/* ── toolbar ── */}
       <div className="kalender-toolbar">
         <div className="kalender-nav">
-          <button type="button" className="secondary-button" onClick={goToPrev} disabled={loading}>‹</button>
-          <span className="kalender-week-label">{weekYear}</span>
-          <button type="button" className="secondary-button" onClick={goToNext} disabled={loading}>›</button>
-          <button type="button" className="secondary-button" onClick={goToToday} disabled={loading}>Heute</button>
+          {viewMode === "week" ? (
+            <>
+              <button type="button" className="secondary-button" onClick={goToPrev} disabled={loading}>‹</button>
+              <span className="kalender-week-label">{weekYear}</span>
+              <button type="button" className="secondary-button" onClick={goToNext} disabled={loading}>›</button>
+              <button type="button" className="secondary-button" onClick={goToToday} disabled={loading}>Heute</button>
+            </>
+          ) : (
+            <>
+              <button type="button" className="secondary-button" onClick={() => setMultiStart((w) => prevIsoWeek(prevIsoWeek(prevIsoWeek(prevIsoWeek(w)))))}>‹‹</button>
+              <span className="kalender-week-label">KW {multiStart.slice(4)} – KW {String(parseInt(multiStart.slice(4)) + multiWeekCount - 1).padStart(2, "0")} / {multiStart.slice(0, 4)}</span>
+              <button type="button" className="secondary-button" onClick={() => setMultiStart((w) => nextIsoWeek(nextIsoWeek(nextIsoWeek(nextIsoWeek(w)))))}>››</button>
+              <button type="button" className="secondary-button" onClick={() => setMultiStart(currentIsoWeek())}>Heute</button>
+            </>
+          )}
+          <div className="view-mode-switch">
+            <button
+              type="button"
+              className={viewMode === "week" ? "" : "secondary-button"}
+              onClick={() => setViewMode("week")}
+            >Woche</button>
+            <button
+              type="button"
+              className={viewMode === "multi" ? "" : "secondary-button"}
+              onClick={() => setViewMode("multi")}
+            >Übersicht</button>
+          </div>
         </div>
         <div className="kalender-controls">
           <input
@@ -492,10 +666,21 @@ export function KalenderView({ apiBase, canEdit = false }: KalenderViewProps) {
       </div>
 
       {/* ── error ── */}
-      {error && <div className="kalender-error">Fehler: {error}</div>}
+      {viewMode === "week" && error && <div className="kalender-error">Fehler: {error}</div>}
 
-      {/* ── grid ── */}
-      {!error && (
+      {/* ── multi-week overview ── */}
+      {viewMode === "multi" && (
+        <MultiWeekGrid
+          apiBase={apiBase}
+          startIsoWeek={multiStart}
+          lkwFilter={lkwFilter}
+          showSold={showSold}
+          onWeekClick={(w) => { setIsoWeek(w); setViewMode("week"); }}
+        />
+      )}
+
+      {/* ── week grid ── */}
+      {viewMode === "week" && !error && (
         <div className="kalender-table-wrap">
           <table className="kalender-table">
             <thead>
