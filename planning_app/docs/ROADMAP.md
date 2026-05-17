@@ -1,92 +1,628 @@
-# Development Roadmap
+# GROO Fleet Portal — Roadmap & Checklist
+> Версия: 1.0 | Дата: 2026-05-17 | Статус: Фазы 1-3 завершены ✅, данные Dispo 2026 импортированы ✅, переход к Фазе 4 (Deploy)
 
-## MVP Breakdown
+---
 
-1. Repository hardening
-   - Keep `planning_app/` isolated from existing reporting.
-   - Add CI only after package installation and first tests.
+## Цель проекта
 
-2. Database
-   - Review `prisma/schema.prisma`.
-   - Create initial migration.
-   - Seed Admin user and app settings.
+Единый веб-портал для управления автопарком Groo GmbH:
+- Расписание водителей с привязкой к машинам по дням
+- Статусы машин и водителей (отпуск, больничный, ремонт)
+- Отчёты (PDF/Excel) прямо в браузере
+- Автоматический импорт данных из внешних источников
+- Планирование заказов
+- Работает 24/7 в облаке без зависимости от локального ПК
 
-3. Auth and users
-   - Email/password login.
-   - Bcrypt password hashing.
-   - JWT/session cookie.
-   - Admin-created users.
-   - Role guards for Admin, Operator, Viewer, Manager.
+---
 
-4. Master data
-   - LKW CRUD.
-   - Driver CRUD.
-   - Status normalization.
-   - Soft delete.
+## Что уже построено
 
-5. Excel import
-   - Upload/select file.
-   - Preview.
-   - Validation report.
-   - Duplicate detection.
-   - Safe transaction execution.
-   - Import rollback strategy.
+### planning_app (основа портала)
+- [x] Frontend: Next.js 16 + React 19 (порт 3000)
+- [x] Backend API: Fastify + TypeScript (порт 4000)
+- [x] База данных: PostgreSQL (Neon) + Prisma ORM, схема `planning`
+- [x] Аутентификация: JWT + роли (ADMIN, OPERATOR, VIEWER, MANAGER)
+- [x] Модели БД: Lkw, Driver, DriverAvailability, Assignment, LkwDriverPairing, Order, Chassis
+- [x] Import pipeline: ImportRun → PREVIEW → VALIDATED → EXECUTED
+- [x] Audit log: все изменения записываются
+- [x] Soft deletes по всей схеме
+- [x] Routes: /lkw, /drivers, /assignments, /planning, /orders, /imports, /exports, /users, /audit
 
-6. Availability
-   - Import Urlaub/Krank grid.
-   - Check planning date against driver availability.
+### Telegram Bot (lkw_report_bot)
+- [x] Python бот с отчётами через VBA COM → PDF/Excel
+- [x] ETL pipeline: Excel (xlsm) → PostgreSQL
+- [x] Планировщик (scheduler.py)
+- [x] Web server (aiohttp) для Telegram Mini App
+- [x] Автовотчер файлов (запускает ETL при изменении Excel)
 
-7. Orders and assignments
-   - Orders-first mode.
-   - LKW-first mode.
-   - Conflict detection.
-   - Problem status without blocking save.
+### Данные
+- [x] LKW_Fahrer_Data.xlsm — мастер-файл (~30 листов)
+- [x] SharePoint (Communication site) — файл синхронизирован локально
+- [x] Microsoft 365 — подписка есть (Outlook, Teams, SharePoint, OneDrive)
+- [x] Neon PostgreSQL — облачная БД уже работает
 
-8. Tagesplanung
-   - Date/week/month filters.
-   - Company, LKW, driver, status, Runde filters.
-   - Counters.
-   - Germany/Hamburg holiday warning.
-   - Excel-style fast table.
+---
 
-9. Dashboard
-   - Orders today.
-   - Assigned LKW.
-   - Free LKW.
-   - Open orders.
-   - LKW usage percent.
-   - Weekly/monthly statistics.
-   - Conflicts/problems.
+## Масштаб данных
 
-10. Audit log
-   - Entity audit events.
-   - Order card audit timeline.
-   - Separate Audit Log page.
+| Тип | Кол-во |
+|---|---|
+| Машины (LKW) | ~80 |
+| Шасси | ~120 |
+| Водители | ~120 |
+| Назначения в день | ~80 строк |
+| Объём БД за год | < 100 MB |
 
-11. Export
-   - PDF Tagesplan.
-   - Excel Tagesplan.
-   - PDF Wochenplan.
-   - Excel Wochenplan.
-   - Export logs.
+---
 
-12. Operations
-   - Docker Compose.
-   - Healthchecks.
-   - Daily backup script.
-   - Restore test procedure.
-   - Deployment README.
+## Листы Excel (источники данных)
 
-## Phase 2
+### Мастер-данные
+- `LKW` — список машин: ID, номер, тип, фирма, статус, тахограф (Drucker), ADR, телефон, DKV карта
+- `Fahrer` — список водителей: ID, имя, фирма, телефон, тип лицензии, рабочий план, статус, документы
 
-- Full chassis management.
-- Telegram bot integration for driver plan lookup.
-- Accounting/order system integration.
-- `external_order_id` synchronization.
-- Automatic accounting order number import.
-- Advanced mobile view.
-- Automatic LKW suggestions.
-- Advanced KPI dashboard.
-- Planning change notifications.
-- Optional read-only connector to existing reporting app.
+### Расписание и доступность
+- `Kalender` — машино-центричный вид: строки=LKW, колонки=даты, ячейки=имя водителя
+- `Urlaub` — водитель-центричный вид: строки=Fahrer, колонки=даты, ячейки=U/K
 
+### Финансовые и операционные данные
+- `Bericht` / `Bericht_Dispo` / `Daten_Dispo` — отчёты по выручке
+- `Diesel` — топливо
+- `Tankkarten` — топливные карты
+- `Bonus` / `BonusCalc` / `BonusDynamik` — бонусы водителей
+- `Repair` — ремонты: дата, работа, стоимость, фирма
+- `YF` / `YF_Fahrer` — данные Yellow Fox
+- `Fahrzeuganalyse` — анализ автопарка
+
+### Внешние источники (загружаются в Excel вручную)
+- `Shell` — Shell fuel cards
+- `DKV` — DKV cards
+- `Staack` / `Contado` / `Carlo` — партнёрские компании
+- `Diesel` — ежемесячная сводка по топливу (Staack + Shell + DKV), KPI: 1.3 €/л, 0.416 €/км
+- `Toll Collect` — **устарел**, дорожные сборы теперь в Shell (Toll4Europe)
+- `Genset` — генераторы-рефрижераторы: ручной учёт, **вне scope** (доля слишком мала)
+- `Alenada` / `Adepot` — дубли бонусных данных для конкретных фирм (быстрая выгрузка бонусов по их водителям)
+- `Data_Kalender` — справочные данные для листа Kalender: списки статусов машин, названий фирм, вариантов рабочих смен (источник выпадающих списков)
+
+---
+
+## Статусы
+
+### Водители (в календаре)
+| Код | Значение | Цвет |
+|---|---|---|
+| U | Urlaub (отпуск) | Жёлтый |
+| K | Krank (больничный) | Красный |
+| *(пусто)* | Назначен на машину | Зелёный |
+
+> Водитель с U или K не может быть назначен на машину в этот день
+
+### LKW (статусы машины)
+| Статус | Значение |
+|---|---|
+| Aktiv / ACTIVE | Активна |
+| Verkauft / SOLD | Продана |
+| Ruckgabe / RETURNED | Возврат |
+| Werkstatt / WORKSHOP | В ремонте |
+| Ohne Fahrer / RESERVE | Без водителя |
+| Ersatzwagen | Замена |
+| Miete | Аренда |
+
+### Ячейки в Kalender (машино-центричный вид)
+| Значение | Смысл |
+|---|---|
+| Имя водителя | Назначен |
+| Werkstatt | Машина в ремонте |
+| Ohne Fahrer | Машина без водителя |
+| Ersatzwagen | Запасная |
+| Verkauft | Продана |
+| Miete | Аренда |
+
+---
+
+## Отчёты (Telegram бот — текущее состояние)
+
+| Отчёт | Описание |
+|---|---|
+| Bericht | Еженедельный отчёт по LKW (машины по фирмам, 5 недель) |
+| Data/Plan | Расписание водителей и машин |
+| LKW (отчёт) | Данные по автопарку |
+| Fahrer (отчёт) | Отчёт по водителям + сводка отпуск/больничный |
+| Yellow Fox | Данные YF по водителям и машинам |
+| Einnahmen | Выручка по фирмам и партнёрам |
+| Diesel | Отчёт по топливу |
+| Bonus | Бонусы водителей |
+| LKW (список) | Текущий список машин |
+| Fahrer (список) | Текущий список водителей |
+| Tankkarten | Список топливных карт |
+| Historie | История скачанных отчётов |
+
+---
+
+## Архитектура (целевая)
+
+```
+[Источники данных]
+SharePoint/Excel → Microsoft Graph API
+YF, DKV, Shell, Staack, Contado, Carlo, Toll Collect → парсеры
+Прямой ввод → Web Portal
+
+[ETL Layer — Python, Railway Cron]
+Нормализация данных (даты DD.MM.YYYY, номера GR-OO1234)
+Upsert в PostgreSQL
+Telegram алерт при ошибке
+
+[PostgreSQL Neon — единственный источник правды]
+
+[API — Fastify/TypeScript, порт 4000]
+Auth, Business logic, Export trigger
+
+[Report Generator — Python микросервис]
+openpyxl + reportlab → PDF/Excel без VBA
+
+[Frontend — Next.js, порт 3000]
+Календарь | Статистика недели | Дашборд KPI | Отчёты | LKW | Fahrer | Заказы
+
+[Telegram Bot — опционально]
+Вызывает те же API endpoints что и веб
+```
+
+---
+
+## Уточнения по архитектуре (зафиксировано 2026-05-17)
+
+### Внешние API и интеграции
+
+| Источник | Статус API | Примечание |
+|---|---|---|
+| Yellow Fox | ❓ Уточнить | Carlo предположительно использует YF API — возможен косвенный доступ |
+| Carlo | ❓ Уточнить | Нужно выяснить наличие API / SFTP / webhook |
+| Contado | ❓ Уточнить | Нужно выяснить возможность автоэкспорта |
+| DKV | ❓ Уточнить | DKV Data API существует — уточнить договор |
+| Shell | ❓ Уточнить | Shell EDI-интеграция — уточнить доступность |
+| Staack | ✅ Экспорт CSV+PDF | API нет, но ручной экспорт доступен |
+| Toll Collect | 🚫 Не нужен | Дорожные сборы уже в Shell (Toll4Europe) |
+
+> **Промежуточное решение для всех источников без API:** загрузка CSV/Excel через интерфейс портала вручную. Автоматизация — после получения API-доступов.
+
+### Бонусная система (алгоритм)
+
+- Расчёт **пропорционально отработанным дням**
+- Целевые значения: **10 000 км** ИЛИ **40 контейнеров** в месяц
+- Поток: авторасчёт → если нет санций у водителя → данные отправляются в фирмы → фирмы выплачивают водителю
+- Детальная документация алгоритма — на этапе реализации блока Bonus
+
+### Отчёты (Bericht)
+
+- Листы `Bericht` / `Bericht_Dispo` / `Daten_Dispo` — финансовые показатели по месяцам
+- Источники: **Carlo + Contado**
+- Список всех отчётов > 8 — будет уточнён отдельно на этапе работы над отчётами
+
+### Роли и доступ
+
+| Роль | Описание |
+|---|---|
+| Admin | Aleksei Samosvat — полный доступ ко всему |
+| Management | Руководство — чтение, отчёты |
+| Manager | Диспетчеры / операционные менеджеры |
+| User | Прочие пользователи (ограниченный доступ) |
+| Restricted | Минимальный доступ (будет уточнено) |
+
+> Детальная матрица прав (кто что может видеть) — уточняется на этапе разработки аутентификации.
+
+### Обновление данных
+
+| Модуль | Режим обновления |
+|---|---|
+| Расписание водителей (Kalender) | **Реальное время (online)** |
+| Документы водителей / алерты | Ежедневно |
+| Топливо / ремонты / финансы | Уточняется по модулю |
+| ETL приоритет | Автоматизация в первую очередь, ручная загрузка как fallback |
+
+### Прочие решения
+
+- **Мобильный доступ**: нужен — адаптивный дизайн (responsive)
+- **Telegram бот**: уйдёт после реализации всего функционала в портале (~99%)
+- **Дедлайн**: нет. Работа параллельно со старым инструментом. Качество > скорость
+- **Фокус**: современный, быстрый, безопасный инструмент с перспективой на будущее
+
+---
+
+## Проблемы текущей архитектуры
+
+- [ ] **КРИТИЧНО:** ETL бота и planning_app, вероятно, пишут в разные таблицы одной БД — данные не синхронизированы, нужно проверить
+- [ ] **КРИТИЧНО:** VBA COM — отчёты работают только на Windows с Excel, нельзя деплоить в облако
+- [ ] Два параллельных web server (aiohttp + Next.js) — нужно унифицировать
+- [ ] Два ETL (бот + planning_app import) — нужно оставить один
+
+---
+
+## Дорожная карта
+
+### Текущее состояние всех табов (аудит 2026-05-17)
+
+Все вкладки уже присутствуют в UI (`page.tsx`, ~2400 строк). API маршруты: health, auth, users, lkw, drivers, orders, assignments, planning, imports, exports, audit, settings, kalender.
+
+#### ✅ Tagesplanung (Дневное планирование)
+- Два режима: LKW-first / Orders-first
+- Фильтры: Auftrag, Period (day/week/month), LKW, Driver, Company, Status, Runde
+- Dashboard: ordersToday, assignedLkw, freeLkw, openOrders, lkwUsagePercent и др.
+- Выбор даты, кнопки "Export Excel" и "Export PDF"
+- Форма создания заказа (Orders-first)
+- Статусы заказов: OPEN → PLANNED → DONE / PROBLEM / CANCELLED
+- Отображение праздников (Feiertage)
+- LKW-Driver pairings панель (источники назначений)
+- **Проблема:** Export Excel/PDF вызывает VBA COM через bot → работает только на Windows с Excel → заблокирует облачный деплой (Фаза 2)
+
+#### ✅ Kalender (Календарь) — основная разработка Фазы 1
+- Wochenansicht: LKW × 7 дней, цвета, назначения, трансферы
+- Übersicht: LKW × 8 ISO-недель, агрегация водителей
+- AssignModal, WeekStatsPanel, Excel экспорт
+- Подробно: см. Фаза 1 ниже
+
+#### ✅ Imports (Импорты)
+- Preview + Execute для мастер-данных из reporting DB (LKW, Fahrer, Companies)
+- Отображение результатов (counts, applied, issues)
+- **Отсутствует:** загрузка CSV/Excel файлов вручную (Shell, DKV, Staack, Carlo, Contado)
+
+#### ✅ LKW management
+- CRUD: создание, список, поиск, смена статуса, soft-delete
+- Поля: номер, тип, компания, статус, isActive, soldDate, returnedDate
+- **Отсутствует:** Drucker, ADR, телефон, DKV-карта, tachograph ID в форме редактирования
+- **Отсутствует:** полная форма редактирования (сейчас только смена статуса)
+- **Отсутствует:** отслеживание истечения документов (TÜV, страховка)
+
+#### ✅ Driver management
+- CRUD: создание, список, поиск, смена статуса, dismissDate
+- Поля: имя, телефон, компания, статус, isActive, dismissedDate
+- **Отсутствует:** тип лицензии, рабочий план, даты истечения документов (Führerschein, 95-Code, Aufenthaltstitel, паспорт)
+- **Отсутствует:** ввод отпуска/больничного прямо из Driver management
+- **Отсутствует:** алерты на истекающие документы
+
+#### ✅ Audit Log
+- Полный лог событий: eventType, entityType, entityId, orderId, user, message
+- Поиск по тексту
+- **Отсутствует:** фильтр по дате, пагинация (сейчас грузит всё сразу)
+
+#### ✅ User management (ADMIN)
+- Создание пользователей (email, имя, пароль, роль)
+- Смена роли inline
+- Сброс пароля, активация/деактивация
+- Роли: VIEWER / OPERATOR / MANAGER / ADMIN
+
+#### ✅ Settings
+- defaultCountry, defaultPeriod (day/week/month), rundeCount, holidayRegion
+- ADMIN-only сохранение
+- **Отсутствует:** настройки уведомлений, конфигурация источников данных
+
+#### Будущие связи между блоками (Фаза 5)
+- Клик на LKW в Tagesplanung → открыть LKW management
+- Клик на водителя в Kalender → открыть Driver management
+- Заявка на отпуск из Driver management → отражается в Kalender (DriverAvailability)
+- Import завершён → авто-обновление LKW и Driver management
+- Kalender ↔ Tagesplanung: общий источник (Assignment + LkwDriverPairing)
+
+---
+
+### Фаза 0 — Аудит и запуск (1-2 дня) ✅ ВЫПОЛНЕНО 2026-05-17
+- [x] Запустить planning_app локально (web + api) — работает на портах 3000 / 4000
+- [x] Убедиться что данные из ETL попадают в таблицы Prisma схемы — 78 LKW, 92 Fahrer, 1587 Assignments подтверждено
+- [x] Проверить что уже работает в UI портала — логин, Tagesplanung, импорты работают
+- [x] Зафиксировать что нужно доделать в приоритете — Kalender Grid + Stats
+
+### Фаза 1 — Календарь водителей ✅ ВЫПОЛНЕНО 2026-05-17
+
+**Выполнено (2026-05-17):**
+- [x] `GET /api/kalender/week?isoWeek=YYYYWW` — API возвращает LKW-сетку × 7 дней с цветами
+- [x] `GET /api/kalender/available-drivers?date=YYYY-MM-DD` — доступные Fahrer на дату (не U/K, не занятые)
+- [x] `POST /api/kalender/assign` — ручная зависимость Fahrer → LKW → день (через LkwDriverPairing, source=kalender-web)
+- [x] `DELETE /api/kalender/assign` — удалить ручную зависимость
+- [x] Компонент KalenderView — таб "Kalender" в портале, навигация по неделям, фильтр LKW, легенда
+- [x] AssignModal — клик на ячейку → выбор Fahrer → сохранить (роль OPERATOR+), веб-назначения помечены синим
+- [x] Блок статистики недели — LKW (Auslastung %, Mit/Ohne Fahrer, Werkstatt, Reserve, Verkauft/Rückgabe) + Fahrer (Arbeiten, Urlaub, Krank, Frei со списками)
+- [x] Цветовая кодировка: зелёный=назначен, жёлтый=U, красный=K, тёмный=Verkauft, оранжевый=Werkstatt, розовый=O.F., фиолетовый=Reserve, серый=Rückgabe
+
+**Выполнено дополнительно (2026-05-17):**
+- [x] **Вид A: Übersicht (многонедельный)** — `GET /api/kalender/multi?startIsoWeek=YYYYWW&weeks=8`
+  - Строки = LKW, колонки = 8 ISO-недель (горизонтальный скролл)
+  - Ячейка = доминирующий водитель за неделю (Mon–Fri), логика: один водитель → имя, несколько → "↔", пятница в отпуске → "→U"
+  - Клик по ячейке / заголовку → переход в Wochenansicht (Вид B)
+  - Навигация ‹‹/›› по 4 недели, кнопка "Heute"
+  - Компонент `MultiWeekGrid` в kalender-view.tsx
+  - CSS: `.view-mode-switch`, `.multi-week-table/th/cell`, `.multi-driver`, `.multi-note`
+  - Переключатель "Woche / Übersicht" в тулбаре
+- [x] **Вид B: Wochenansicht (дневной)** — строки = LKW, колонки = 7 дней текущей недели *(было готово ранее)*
+
+**Завершено в Фазе 1 (дополнительно):**
+- [x] Блок свободных водителей — `freeList` в API + DriverList в WeekStatsPanel (уже было готово)
+- [x] Drucker (тахограф) — читается из `Lkw.rawPayload["Drucker"]`, показывается мелким текстом под номером LKW в обоих видах
+- [x] Экспорт расписания недели → Excel — `GET /api/kalender/export?isoWeek=YYYYWW` → `.xlsx` (ExcelJS, цветовая схема, кнопка "↓ Excel" в тулбаре)
+- [x] Transfer-индикатор ↔ — API строит `driverWeekLkws` map, если водитель на нескольких машинах за неделю → `isTransfer: true` → синий `↔` в ячейке
+- [x] **→U индикатор** — availability fetch расширен на +1 день (cross-week boundary), `vacationTomorrow: bool` в API, янтарный `→U` в ячейке при следующем отпуске водителя
+- [ ] ⚠ Истекают документы водителя — требует полей документов (Führerschein, 95-код, паспорт, Aufenthaltstitel) в Driver модели → перенесено в Фазу 5
+
+---
+
+## Цветовая схема календаря
+
+Единая система цветов для дневного и недельного вида.
+Приоритет применения: статус машины > статус водителя > предупреждения.
+
+### Статусы машины (фон всей ячейки)
+
+| Сценарий | Цвет фона | Цвет текста | Код |
+|---|---|---|---|
+| Активна, водитель назначен | Белый `#FFFFFF` | Тёмный `#1F2937` | — |
+| Продана (Verkauft) | Тёмно-серый `#374151` | Белый `#F9FAFB` | SOLD |
+| Запасная (Ersatzwagen) | Серый `#9CA3AF` | Белый `#F9FAFB` | RESERVE |
+| В ремонте (Werkstatt) | Оранжевый `#FED7AA` | Тёмный `#7C2D12` | WORKSHOP |
+| Без водителя (O.F.) | Розовый `#FECDD3` | Тёмный `#9F1239` | NO_DRIVER |
+| Аренда (Miete) | Фиолетовый `#DDD6FE` | Тёмный `#4C1D95` | RENTAL |
+| Возврат (Rückgabe) | Красно-серый `#D1D5DB` | Тёмный `#374151` | RETURNED |
+
+### Статусы водителя (фон ячейки если машина активна)
+
+| Сценарий | Цвет фона | Цвет текста | Код |
+|---|---|---|---|
+| Назначен, работает | Зелёный `#DCFCE7` | Тёмный `#14532D` | ACTIVE |
+| Сегодня в отпуске (U) | Жёлтый `#FEF08A` | Тёмный `#713F12` | VACATION |
+| Сегодня болеет (K) | Красный `#FCA5A5` | Тёмный `#7F1D1D` | SICK |
+
+### Предупреждения (индикаторы поверх ячейки)
+
+Показываются как цветная полоска сверху или иконка — не меняют основной фон.
+
+| Сценарий | Индикатор | Цвет полоски | Код |
+|---|---|---|---|
+| Завтра водитель уходит в отпуск | Полоска сверху + `→U` | Жёлтый `#EAB308` | VACATION_TOMORROW |
+| Послезавтра или в понедельник начинается отпуск | Полоска сверху + `→U` бледная | Светло-жёлтый `#FEF9C3` | VACATION_SOON |
+| Завтра водитель переходит на другую машину | Полоска снизу + `↔` синяя | Синий `#3B82F6` | TRANSFER_TOMORROW |
+| Водитель пришёл с другой машины сегодня | Полоска сверху + `↔` | Синий `#93C5FD` | TRANSFER_TODAY |
+| Последний день водителя (увольнение) | Полоска снизу | Красный `#EF4444` | DISMISSAL_SOON |
+| Истекает документ (паспорт / 95-код / вид на жительство) | Значок `⚠` | Оранжевый `#F97316` | DOC_EXPIRY |
+| Машина выходит из ремонта завтра | Полоска снизу | Оранжевый `#F97316` | WORKSHOP_END |
+
+### Особые состояния строк (целая строка LKW)
+
+| Сценарий | Стиль строки |
+|---|---|
+| Машина продана — строка неактивна | Весь фон тёмно-серый, текст затемнён |
+| Машина возвращена — строка неактивна | Серый фон, курсив |
+| Сегодняшняя дата | Колонка выделена тонкой синей рамкой |
+| Текущая неделя | Колонка слегка подсвечена `#EFF6FF` |
+
+### Легенда в UI
+
+- [ ] Постоянная легенда в углу страницы (раскрывающийся блок)
+- [ ] Tooltip при наведении на ячейку: причина цвета + детали
+
+---
+
+**Вид B: Wochenansicht (аналог Data!Kalender) ✅ ВЫПОЛНЕНО**
+- [x] Строки = LKW, колонки = 7 дней текущей недели
+- [x] Ячейка = конкретный водитель на конкретный день
+- [x] Навигация по неделям: ‹ / ›, "Heute"
+- [x] Форма назначения: водитель → машина → дата
+- [x] Валидация: нельзя назначить если водитель U или K
+- [x] Цветовое кодирование статусов
+
+**Остаётся в Фазе 1:**
+- [ ] Блок свободных водителей (список активных без назначения на неделю)
+- [ ] Отображение поля Drucker (тахограф) для менеджера
+- [ ] Transfer-индикаторы (↔ полоска если водитель меняет машину)
+- [ ] Предупреждения: →U (отпуск завтра), ⚠ (истекают документы)
+- [ ] Экспорт расписания недели → PDF / Excel
+
+### Фаза 1b — Статистика недели ✅ ВЫПОЛНЕНО 2026-05-17
+
+Блок сводки показывается над календарём за выбранную неделю.
+
+**Водители: ✅**
+- [x] Работают на этой неделе (кол-во уникальных Fahrer в назначениях)
+- [x] В отпуске (U) — кол-во и список имён
+- [x] На больничном (K) — кол-во и список имён
+- [x] Без назначения (активны, не назначены, не U/K) — кол-во и список имён
+
+**Машины: ✅**
+- [x] Активны и работают (есть Fahrer хотя бы в один рабочий день)
+- [x] Простаивают (Ohne Fahrer) — кол-во
+- [x] В ремонте (Werkstatt) — кол-во
+- [x] Reserve/Miete — кол-во
+- [x] Проданы / возврат — кол-во
+- [x] Процент использования автопарка за неделю (Ø Mon-Fri)
+
+**Топливо (из DKV / Shell):**
+- [ ] Сколько литров заправлено за период (по всему парку)
+- [ ] Средняя цена €/литр за период
+- [ ] Топливо по машинам — топ потребителей
+- [ ] Динамика цен по неделям (график)
+
+**Пробег (из Yellow Fox):**
+- [ ] Пробег каждой машины за период (км)
+- [ ] Общий пробег парка за период
+- [ ] Средний пробег на машину
+- [ ] Топ машин по пробегу
+
+**Ремонты:**
+- [ ] Стоимость ремонтов за период (€)
+- [ ] Кол-во ремонтных случаев
+- [ ] По машинам: что и сколько стоило
+
+**Финансы (из Einnahmen / Bericht_Dispo):**
+- [ ] Выручка за период по фирмам (Groo, AutoCompass, Andreas Groo H&T)
+- [ ] Сравнение с предыдущим периодом (Δ %)
+- [ ] Выручка на машину
+- [ ] Заработано vs потрачено (топливо + ремонт) за период
+
+**Бонусы:**
+- [ ] Начисленные бонусы за период по водителям
+- [ ] Топ водителей по бонусам
+
+### Фаза 2 — Отчёты в браузере ✅ ВЫПОЛНЕНО 2026-05-17
+
+> **Решение:** Отчёты реализованы напрямую в TypeScript API (ExcelJS + pdfkit), а не как отдельный Python микросервис — быстрее, нет лишних зависимостей, всё в одном деплое.
+
+- [x] `GET /api/exports/tagesplanung.xlsx` — Tagesplanung/Wochenplan, ExcelJS, замороженный заголовок, autoFilter, чередующиеся строки
+- [x] `GET /api/exports/tagesplanung.pdf` — pdfkit PDF, A4-landscape, многостраничный, таблица с колонками
+- [x] `GET /api/exports/lkw-liste.xlsx` — полный список LKW (статус, компания, drucker, даты)
+- [x] `GET /api/exports/fahrer-liste.xlsx` — полный список водителей (статус, компания, телефон)
+- [x] Legacy `/api/exports/*.xls` — перенаправление на новые .xlsx endpoints
+- [x] `GET /api/exports/history` — история экспортов из ExportLog (пагинация, фильтр по типу)
+- [x] **Таб "Exporte"** в портале — кнопки скачивания LKW/Fahrer списков, таблица истории экспортов (ленивая загрузка)
+- [x] @types/pdfkit добавлен как devDependency
+
+### Фаза 3 — ETL и мониторинг данных ✅ ЧАСТИЧНО ВЫПОЛНЕНО 2026-05-17
+
+**Выполнено:**
+- [x] `GET /api/imports/history` — история всех ImportRun (статус, ошибки, пользователь, пагинация)
+- [x] `GET /api/imports/freshness` — последний успешный импорт по каждому sourceType (distinct query)
+- [x] Imports tab: **freshness badges** — зелёная метка "✓ Последняя синхр.: HH:MM" на каждой карточке
+- [x] Imports tab: **Import history table** — таблица истории с цветами по статусу, ленивая загрузка
+- [x] Planning toolbar: **"✓ HH:MM:SS"** — метка времени последней загрузки данных (обновляется при Refresh)
+
+**Выполнено дополнительно (2026-05-17) — Excel Dispo импорт:**
+- [x] `daily-plan-import.ts` — сервис импорта из `Dispo 2026 Wochenplanung_.xlsm` (181 лист DD.MM, ~7420 строк)
+- [x] Парсинг листов: Wagen (LKW-номер), Aktiv (формула), PLZ, Land, Info, Runde_1/2/3
+- [x] Исправлена обработка formula-ячеек ExcelJS (`{ formula, result }` → читается `result`)
+- [x] Рефакторинг транзакций: per-sheet вместо одной гигантской (устранён timeout P2028 120s)
+- [x] `GET /api/imports/daily-plan/preview` + `POST /api/imports/daily-plan/execute` — API endpoints
+- [x] **Полный импорт выполнен:** 181 лист, 7420 заказов, 6686 назначений (90% LKW resolved), 734 UNRESOLVED_WAGEN
+- [x] LkwAlias таблица: 157 записей, алиасы "1708"/"1710"/etc. → UUID lkwId
+
+**Перенесено на после деплоя (Фаза 4):**
+- [ ] Cron задачи на Railway — автоматический запуск импортов по расписанию
+- [ ] Telegram алерт при ошибке ETL — нужен запущенный бот на сервере
+
+**Перенесено в Фазу 5 (внешние источники):**
+- [ ] Единый ETL: проверить и устранить дублирование между bot ETL и planning_app
+- [ ] Парсеры внешних источников:
+  - [ ] Yellow Fox → PostgreSQL (уточнить доступность API у Carlo)
+  - [ ] DKV → PostgreSQL (DKV Data API — уточнить договор)
+  - [ ] Shell → PostgreSQL (Shell EDI — уточнить)
+  - [ ] Staack → CSV upload (API нет, ручной экспорт CSV доступен)
+  - [ ] Contado / Carlo → уточнить
+  - [ ] ~~Toll Collect~~ — не нужен
+- [ ] Нормализация: даты DD.MM.YYYY, форматы номеров GR-OO1234
+
+### Фаза 4 — Деплой 24/7 (2-3 дня)
+- [ ] Deploy API (Fastify) → Railway
+- [ ] Deploy Frontend (Next.js) → Railway
+- [ ] Deploy ETL → Railway Cron или GitHub Actions
+- [ ] Переменные окружения в Railway Secrets
+- [ ] Prisma migrations автоматически при деплое
+- [ ] Health check + Uptime Robot мониторинг
+- [ ] Подключить Microsoft Graph API (читать Excel из SharePoint)
+  - [ ] Создать App Registration в Azure Portal
+  - [ ] Права: Sites.Read.All
+  - [ ] Добавить в .env: CLIENT_ID, CLIENT_SECRET, TENANT_ID
+
+### Фаза 5 — Расширение (после запуска)
+- [ ] Ремонты (Repair): таблица в БД, CRUD в портале
+- [ ] Финансовые данные: Diesel, Einnahmen, Bonus в портале
+- [ ] Планирование заказов (Orders module уже есть в API)
+- [ ] Расписание шасси
+- [ ] Ограниченный доступ для водителей (мобильный)
+  - Просмотр своего расписания
+  - Заявка на отпуск через портал
+- [ ] Telegram уведомления водителям о расписании
+
+### Фаза 5b — Дашборд и аналитика (после Фазы 3)
+
+Главный экран портала — обзор всего автопарка в реальном времени.
+
+**Виджеты верхнего уровня (сегодня / текущая неделя):**
+- [ ] Водителей работает / в отпуске / на больничном / без назначения
+- [ ] Машин активны / в ремонте / простаивают / проданы
+- [ ] % использования автопарка
+- [ ] Последнее обновление данных по каждому источнику
+
+**Графики и таблицы:**
+- [ ] Пробег по неделям (линейный график, все машины или выбранная)
+- [ ] Топливо: литры и €/литр по неделям (столбчатый + линия цены)
+- [ ] Выручка по фирмам по месяцам (сгруппированные столбцы)
+- [ ] Выручка vs расходы (топливо + ремонт) по месяцам
+- [ ] Топ машин по пробегу за период
+- [ ] Топ машин по расходу топлива за период
+- [ ] Топ машин по стоимости ремонтов за период
+- [ ] Бонусы водителей: таблица + сортировка
+
+**Фильтры дашборда:**
+- [ ] Период: эта неделя / прошлая / месяц / квартал / свой диапазон
+- [ ] Фирма: все / Groo / AutoCompass / Andreas Groo H&T / UAB Groo Transport
+- [ ] Тип LKW: все / Container / Planen
+
+---
+
+## Риски
+
+| Риск | Уровень | Митигация |
+|---|---|---|
+| ETL и planning_app в разных таблицах | КРИТИЧНО | Проверить и унифицировать в Фазе 0 |
+| VBA COM — только Windows | КРИТИЧНО | Переписать на Python в Фазе 2 |
+| Два источника правды (Excel + БД) | Высокий | PostgreSQL = единственная правда |
+| Нет бэкапа БД | Высокий | Настроить pg_dump в OneDrive |
+| SharePoint sync может зависнуть | Средний | Graph API убирает эту зависимость |
+| Конфликты при одновременном редактировании | Средний | Оптимистичные блокировки в API |
+| Один человек управляет данными | Средний | Роли + документация процесса |
+
+---
+
+## Настройки безопасности (чеклист)
+
+- [ ] JWT access token TTL: 15 минут
+- [ ] Refresh token: 7 дней, httpOnly cookie
+- [ ] Rate limiting на /api/auth (макс 10 запросов/мин)
+- [ ] CORS: только разрешённые домены
+- [ ] Все секреты в Railway Environment Variables (не в git)
+- [ ] HTTPS: Railway обеспечивает автоматически
+- [ ] Prisma schema: soft deletes везде (уже есть)
+
+---
+
+## Расходы (оценка)
+
+| Сервис | Стоимость |
+|---|---|
+| Neon PostgreSQL (Free tier) | €0/мес |
+| Railway (API + Frontend + Cron) | ~€12-17/мес |
+| Microsoft Graph API | €0 (входит в M365) |
+| GitHub (private repos) | €0 |
+| Telegram Bot | €0 |
+| Домен (опционально) | ~€10-15/год |
+| **Итого** | **~€12-17/мес** |
+
+---
+
+## Технологический стек
+
+| Слой | Технология |
+|---|---|
+| Frontend | Next.js 16, React 19, TypeScript |
+| Backend API | Fastify, TypeScript, Node.js |
+| Report Generator | Python, openpyxl, reportlab |
+| ETL | Python, openpyxl, psycopg |
+| База данных | PostgreSQL (Neon), Prisma ORM |
+| Хостинг | Railway.app |
+| Данные в облаке | SharePoint (Microsoft 365) |
+| Доступ к SharePoint | Microsoft Graph API |
+| Мониторинг | Uptime Robot + Telegram alerts |
+| CI/CD | GitHub → Railway autodeploy |
+
+---
+
+## Следующий шаг
+
+**Фаза 0:** Запустить planning_app локально и провести аудит текущего состояния данных.
+
+```powershell
+# В папке planning_app/apps/api
+npm install && npm run dev
+
+# В папке planning_app/apps/web  
+npm install && npm run dev
+```
+
+После запуска — проверить:
+1. Подключается ли API к Neon PostgreSQL
+2. Есть ли данные в таблицах (Lkw, Driver, DriverAvailability)
+3. Что уже работает в UI
