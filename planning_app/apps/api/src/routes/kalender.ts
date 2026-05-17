@@ -7,6 +7,15 @@ import { prisma } from "../prisma.js";
 
 const SOURCE_WEB = "kalender-web";
 
+function druckerFromPayload(rawPayload: unknown): string | null {
+  if (!rawPayload || typeof rawPayload !== "object") return null;
+  const p = rawPayload as Record<string, unknown>;
+  const val = p["Drucker"] ?? p["drucker"] ?? p["tachograph"] ?? p["Tachograph"];
+  if (val === null || val === undefined) return null;
+  const s = String(val).trim();
+  return s || null;
+}
+
 const weekQuerySchema = z.object({
   isoWeek: z.string().regex(/^\d{6}$/),
 });
@@ -126,6 +135,7 @@ export async function registerKalenderRoutes(app: FastifyInstance, config: AppCo
         select: {
           id: true, number: true, status: true,
           soldDate: true, returnedDate: true,
+          rawPayload: true,
           company: { select: { name: true } },
         },
       }),
@@ -218,6 +228,7 @@ export async function registerKalenderRoutes(app: FastifyInstance, config: AppCo
         lkwNumber: lkw.number,
         company: lkw.company?.name ?? null,
         status: lkw.status,
+        drucker: druckerFromPayload(lkw.rawPayload),
         cells,
       };
     });
@@ -525,6 +536,7 @@ export async function registerKalenderRoutes(app: FastifyInstance, config: AppCo
         select: {
           id: true, number: true, status: true,
           soldDate: true, returnedDate: true,
+          rawPayload: true,
           company: { select: { name: true } },
         },
       }),
@@ -635,6 +647,7 @@ export async function registerKalenderRoutes(app: FastifyInstance, config: AppCo
         lkwNumber: lkw.number,
         company: lkw.company?.name ?? null,
         status: lkw.status,
+        drucker: druckerFromPayload(lkw.rawPayload),
         weekCells,
       };
     });

@@ -46,6 +46,7 @@ interface MultiWeekLkwRow {
   lkwNumber: string;
   company: string | null;
   status: string;
+  drucker: string | null;
   weekCells: MultiWeekCell[];
 }
 
@@ -67,6 +68,7 @@ interface LkwRow {
   lkwNumber: string;
   company: string | null;
   status: string;
+  drucker: string | null;
   cells: KalenderCell[];
 }
 
@@ -278,7 +280,10 @@ function MultiWeekGrid({ apiBase, startIsoWeek, lkwFilter, showSold, onWeekClick
         <tbody>
           {visibleRows.map((row) => (
             <tr key={row.lkwId}>
-              <td className="kalender-td-lkw" title={row.company ?? undefined}>{row.lkwNumber}</td>
+              <td className="kalender-td-lkw" title={row.company ?? undefined}>
+                <div>{row.lkwNumber}</div>
+                {row.drucker && <div className="lkw-drucker">{row.drucker}</div>}
+              </td>
               {row.weekCells.map((cell) => {
                 const textColor = cell.label === "sold" ? "#f3f4f6" : "#111827";
                 return (
@@ -702,7 +707,10 @@ export function KalenderView({ apiBase, canEdit = false }: KalenderViewProps) {
               )}
               {visibleRows.map((row) => (
                 <tr key={row.lkwId}>
-                  <td className="kalender-td-lkw" title={row.company ?? undefined}>{row.lkwNumber}</td>
+                  <td className="kalender-td-lkw" title={row.company ?? undefined}>
+                    <div>{row.lkwNumber}</div>
+                    {row.drucker && <div className="lkw-drucker">{row.drucker}</div>}
+                  </td>
                   {row.cells.map((cell) => {
                     const badge = LABEL_DISPLAY[cell.label];
                     const textColor = cell.label === "sold" ? "#f3f4f6" : "#111827";

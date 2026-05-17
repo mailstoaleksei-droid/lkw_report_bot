@@ -1330,3 +1330,13 @@ th {
   font-weight: 700;
   opacity: 0.75;
 }
+
+.lkw-drucker {
+  color: var(--muted);
+  font-size: 10px;
+  font-weight: 400;
+  margin-top: 1px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
