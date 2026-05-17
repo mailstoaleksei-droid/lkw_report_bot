@@ -23,7 +23,7 @@ export function loadConfig(): AppConfig {
   return {
     nodeEnv,
     apiHost: process.env.API_HOST || "0.0.0.0",
-    apiPort: parsePort(process.env.API_PORT, 4000),
+    apiPort: parsePort(process.env.PORT ?? process.env.API_PORT, 4000),
     corsOrigin: process.env.CORS_ORIGIN || "http://localhost:3000",
     jwtSecret: process.env.JWT_SECRET || "development_only_change_me",
     sessionCookieName: process.env.SESSION_COOKIE_NAME || "lkw_planning_session",
