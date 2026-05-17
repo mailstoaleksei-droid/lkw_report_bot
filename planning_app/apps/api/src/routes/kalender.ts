@@ -190,11 +190,13 @@ export async function registerKalenderRoutes(app: FastifyInstance, config: AppCo
       });
     }
 
-    // Fetch availability for all active drivers
+    // Fetch availability for all active drivers (+1 day to detect "vacation starts tomorrow" on Sunday)
     const allDriverIds = allActiveDrivers.map((d) => d.id);
+    const endPlusOne = new Date(end);
+    endPlusOne.setUTCDate(end.getUTCDate() + 1);
     const availabilities = allDriverIds.length > 0
       ? await prisma.driverAvailability.findMany({
-          where: { driverId: { in: allDriverIds }, date: { gte: start, lt: end } },
+          where: { driverId: { in: allDriverIds }, date: { gte: start, lt: endPlusOne } },
           select: { driverId: true, date: true, status: true },
         })
       : [];
@@ -227,12 +229,19 @@ export async function registerKalenderRoutes(app: FastifyInstance, config: AppCo
         const isTransfer = entry?.driverId
           ? (driverWeekLkws.get(entry.driverId)?.size ?? 0) > 1
           : false;
+        const nextDay = new Date(`${day}T00:00:00.000Z`);
+        nextDay.setUTCDate(nextDay.getUTCDate() + 1);
+        const nextDayStr = nextDay.toISOString().slice(0, 10);
+        const vacationTomorrow = entry?.driverId
+          ? availMap.get(`${entry.driverId}::${nextDayStr}`) === MasterStatus.VACATION
+          : false;
         return {
           date: day,
           driverId: entry?.driverId ?? null,
           driverName,
           isWebAssigned: entry?.isWebAssigned ?? false,
           isTransfer,
+          vacationTomorrow,
           label,
           color: CELL_COLORS[label],
         };
