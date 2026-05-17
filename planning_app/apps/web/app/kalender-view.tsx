@@ -655,6 +655,15 @@ export function KalenderView({ apiBase, canEdit = false }: KalenderViewProps) {
           <button type="button" className="secondary-button" onClick={() => void loadWeek(isoWeek)} disabled={loading}>
             {loading ? "…" : "↺"}
           </button>
+          {viewMode === "week" && (
+            <a
+              className="secondary-button kalender-export-btn"
+              href={`${apiBase}/api/kalender/export?isoWeek=${isoWeek}`}
+              download
+            >
+              ↓ Excel
+            </a>
+          )}
         </div>
       </div>
 

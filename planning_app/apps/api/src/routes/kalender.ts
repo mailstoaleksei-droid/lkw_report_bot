@@ -1,4 +1,5 @@
 import { MasterStatus } from "@prisma/client";
+import ExcelJS from "exceljs";
 import type { FastifyInstance } from "fastify";
 import { z } from "zod";
 import { requireUser } from "../auth/guards.js";
@@ -662,5 +663,152 @@ export async function registerKalenderRoutes(app: FastifyInstance, config: AppCo
       })),
       lkwRows,
     };
+  });
+
+  // ── GET /api/kalender/export ──────────────────────────────────────────────────
+  // Returns week schedule as xlsx file
+  app.get("/api/kalender/export", async (request, reply) => {
+    const user = await requireUser(request, reply, config, "VIEWER");
+    if (!user) return;
+
+    const parsed = weekQuerySchema.safeParse(request.query);
+    if (!parsed.success) {
+      return reply.code(400).send({ ok: false, error: "isoWeek (YYYYWW) required" });
+    }
+
+    const raw = parsed.data.isoWeek;
+    const year = parseInt(raw.slice(0, 4), 10);
+    const week = parseInt(raw.slice(4, 6), 10);
+    if (week < 1 || week > 53) {
+      return reply.code(400).send({ ok: false, error: "Week must be 01–53" });
+    }
+
+    const { start, end, days } = isoWeekToRange(year, week);
+
+    const [lkws, assignments, webPairings] = await Promise.all([
+      prisma.lkw.findMany({
+        where: {
+          deletedAt: null,
+          NOT: { status: MasterStatus.INACTIVE },
+          OR: [
+            { isActive: true },
+            { status: MasterStatus.SOLD, soldDate: { gte: start } },
+            { status: MasterStatus.RETURNED, returnedDate: { gte: start } },
+            { status: MasterStatus.WORKSHOP },
+            { status: MasterStatus.RESERVE },
+          ],
+        },
+        orderBy: [{ number: "asc" }],
+        select: {
+          id: true, number: true, status: true,
+          soldDate: true, returnedDate: true,
+          rawPayload: true,
+          company: { select: { name: true } },
+        },
+      }),
+      prisma.assignment.findMany({
+        where: { planningDate: { gte: start, lt: end }, deletedAt: null, lkwId: { not: null } },
+        select: { lkwId: true, driverId: true, planningDate: true, driver: { select: { fullName: true } } },
+      }),
+      prisma.lkwDriverPairing.findMany({
+        where: { source: SOURCE_WEB, validFrom: { gte: start, lt: end } },
+        select: { lkwId: true, driverId: true, validFrom: true, driver: { select: { fullName: true } } },
+      }),
+    ]);
+
+    // Build cell map (same logic as week endpoint)
+    type ExportCell = { driverName: string | null; isWebAssigned: boolean };
+    const cellMap = new Map<string, ExportCell>();
+    for (const p of webPairings) {
+      const dateKey = p.validFrom.toISOString().slice(0, 10);
+      cellMap.set(`${p.lkwId}::${dateKey}`, { driverName: p.driver?.fullName ?? null, isWebAssigned: true });
+    }
+    for (const a of assignments) {
+      if (!a.lkwId) continue;
+      const dateKey = a.planningDate.toISOString().slice(0, 10);
+      cellMap.set(`${a.lkwId}::${dateKey}`, { driverName: a.driver?.fullName ?? null, isWebAssigned: false });
+    }
+
+    // Build Excel
+    const DAY_NAMES = ["Mo", "Di", "Mi", "Do", "Fr", "Sa", "So"];
+    const wb = new ExcelJS.Workbook();
+    wb.creator = "GROO Fleet Portal";
+    const ws = wb.addWorksheet(`KW ${String(week).padStart(2, "0")} ${year}`);
+
+    const HEADER_FILL: ExcelJS.Fill = { type: "pattern", pattern: "solid", fgColor: { argb: "FF1864AB" } };
+    const HEADER_FONT: Partial<ExcelJS.Font> = { bold: true, color: { argb: "FFFFFFFF" }, size: 11 };
+    const BORDER: Partial<ExcelJS.Borders> = {
+      top: { style: "thin", color: { argb: "FFD8DEE8" } },
+      left: { style: "thin", color: { argb: "FFD8DEE8" } },
+      bottom: { style: "thin", color: { argb: "FFD8DEE8" } },
+      right: { style: "thin", color: { argb: "FFD8DEE8" } },
+    };
+
+    // Color map (ARGB — no #)
+    const CELL_ARGB: Record<CellLabel, string> = {
+      assigned: "FFDCFCE7",
+      vacation: "FFFEF08A",
+      sick: "FFFCA5A5",
+      workshop: "FFFED7AA",
+      sold: "FF374151",
+      returned: "FFD1D5DB",
+      reserve: "FFDDD6FE",
+      "no-driver": "FFFECDD3",
+      inactive: "FF9CA3AF",
+    };
+
+    // Header row
+    const headerRow = ws.addRow(["LKW", ...DAY_NAMES.map((d, i) => `${d} ${days[i].slice(5).replace("-", ".")}`)]);
+    headerRow.eachCell((cell) => {
+      cell.fill = HEADER_FILL;
+      cell.font = HEADER_FONT;
+      cell.alignment = { horizontal: "center", vertical: "middle" };
+      cell.border = BORDER;
+    });
+    ws.getRow(1).height = 22;
+
+    // Set column widths
+    ws.getColumn(1).width = 12;
+    for (let i = 2; i <= 8; i++) ws.getColumn(i).width = 20;
+
+    // Data rows
+    for (const lkw of lkws) {
+      const rowValues: (string | null)[] = [lkw.number];
+      const rowColors: string[] = ["FFFFFFFF"];
+
+      for (const day of days) {
+        const dayDate = new Date(`${day}T00:00:00.000Z`);
+        const entry = cellMap.get(`${lkw.id}::${day}`);
+        const { label, driverName } = computeCell(
+          lkw, dayDate, entry?.driverName ?? null, null, entry?.isWebAssigned ?? false,
+        );
+        rowValues.push(driverName ?? (label !== "assigned" ? label.toUpperCase() : ""));
+        rowColors.push(CELL_ARGB[label]);
+      }
+
+      const row = ws.addRow(rowValues);
+      row.height = 18;
+      row.eachCell((cell, colNum) => {
+        cell.fill = { type: "pattern", pattern: "solid", fgColor: { argb: rowColors[colNum - 1] } };
+        cell.font = {
+          bold: colNum === 1,
+          color: { argb: rowColors[colNum - 1] === CELL_ARGB.sold ? "FFF3F4F6" : "FF111827" },
+          size: 10,
+        };
+        cell.alignment = { horizontal: colNum === 1 ? "left" : "center", vertical: "middle" };
+        cell.border = BORDER;
+      });
+    }
+
+    // Freeze top row
+    ws.views = [{ state: "frozen", ySplit: 1, activeCell: "A2" }];
+
+    const buffer = await wb.xlsx.writeBuffer();
+    const filename = `Kalender_KW${String(week).padStart(2, "0")}_${year}.xlsx`;
+
+    void reply
+      .header("Content-Type", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
+      .header("Content-Disposition", `attachment; filename="${filename}"`)
+      .send(Buffer.from(buffer));
   });
 }

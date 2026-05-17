@@ -1340,3 +1340,9 @@ th {
   text-overflow: ellipsis;
   white-space: nowrap;
 }
+
+.kalender-export-btn {
+  display: inline-flex;
+  align-items: center;
+  text-decoration: none;
+}
