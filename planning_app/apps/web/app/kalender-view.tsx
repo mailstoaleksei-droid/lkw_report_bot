@@ -20,6 +20,7 @@ interface KalenderCell {
   driverId: string | null;
   driverName: string | null;
   isWebAssigned: boolean;
+  isTransfer: boolean;
   label: CellLabel;
   color: string;
 }
@@ -729,7 +730,7 @@ export function KalenderView({ apiBase, canEdit = false }: KalenderViewProps) {
                         key={cell.date}
                         className={`kalender-cell${clickable ? " kalender-cell-editable" : ""}${cell.isWebAssigned ? " kalender-cell-web" : ""}`}
                         style={{ background: cell.color, color: textColor }}
-                        title={cell.driverName ? `${cell.driverName}${cell.isWebAssigned ? " (Web)" : ""}` : cell.label}
+                        title={cell.driverName ? `${cell.driverName}${cell.isWebAssigned ? " (Web)" : ""}${cell.isTransfer ? " ↔" : ""}` : cell.label}
                         onClick={clickable ? () => setAssignTarget({
                           lkwId: row.lkwId,
                           lkwNumber: row.lkwNumber,
@@ -740,7 +741,7 @@ export function KalenderView({ apiBase, canEdit = false }: KalenderViewProps) {
                         }) : undefined}
                       >
                         {cell.driverName
-                          ? <span className="cell-driver">{cell.driverName}{cell.isWebAssigned ? <sup className="web-dot">●</sup> : null}</span>
+                          ? <span className="cell-driver">{cell.driverName}{cell.isWebAssigned ? <sup className="web-dot">●</sup> : null}{cell.isTransfer ? <sup className="transfer-dot"> ↔</sup> : null}</span>
                           : badge
                             ? <span className="cell-badge">{badge}</span>
                             : null}

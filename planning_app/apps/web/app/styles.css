@@ -1346,3 +1346,10 @@ th {
   align-items: center;
   text-decoration: none;
 }
+
+.transfer-dot {
+  color: #3b82f6;
+  font-size: 10px;
+  font-weight: 700;
+  margin-left: 2px;
+}

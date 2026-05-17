@@ -78,7 +78,7 @@ function computeCell(
   dayDate: Date,
   assignedDriverName: string | null,
   driverAvailStatus: MasterStatus | null,
-  isWebAssigned: boolean,
+  _isWebAssigned: boolean,
 ): { label: CellLabel; driverName: string | null } {
   if (lkw.status === MasterStatus.SOLD && lkw.soldDate) {
     const soldDay = new Date(lkw.soldDate.toISOString().slice(0, 10) + "T00:00:00.000Z");
@@ -204,6 +204,15 @@ export async function registerKalenderRoutes(app: FastifyInstance, config: AppCo
       availMap.set(`${av.driverId}::${av.date.toISOString().slice(0, 10)}`, av.status);
     }
 
+    // Transfer map: driverId → Set of lkwIds assigned during the week
+    const driverWeekLkws = new Map<string, Set<string>>();
+    for (const [key, entry] of cellMap) {
+      if (!entry.driverId) continue;
+      const lkwId = key.split("::")[0];
+      if (!driverWeekLkws.has(entry.driverId)) driverWeekLkws.set(entry.driverId, new Set());
+      driverWeekLkws.get(entry.driverId)!.add(lkwId);
+    }
+
     // Build grid
     const lkwRows = lkws.map((lkw) => {
       const cells = days.map((day) => {
@@ -215,11 +224,15 @@ export async function registerKalenderRoutes(app: FastifyInstance, config: AppCo
         const { label, driverName } = computeCell(
           lkw, dayDate, entry?.driverName ?? null, driverAvailStatus, entry?.isWebAssigned ?? false,
         );
+        const isTransfer = entry?.driverId
+          ? (driverWeekLkws.get(entry.driverId)?.size ?? 0) > 1
+          : false;
         return {
           date: day,
           driverId: entry?.driverId ?? null,
           driverName,
           isWebAssigned: entry?.isWebAssigned ?? false,
+          isTransfer,
           label,
           color: CELL_COLORS[label],
         };
@@ -630,9 +643,6 @@ export async function registerKalenderRoutes(app: FastifyInstance, config: AppCo
         let label: CellLabel = "assigned";
         const allVacation = driverEntries.every((e) =>
           !e?.driverId || availMap.get(`${e.driverId}::${workDays[driverEntries.indexOf(e)]}`) === MasterStatus.VACATION,
-        );
-        const anyVacation = driverEntries.some((e) =>
-          e?.driverId && availMap.get(`${e.driverId}::${workDays[driverEntries.indexOf(e)]}`) === MasterStatus.VACATION,
         );
         const anySick = driverEntries.some((e) =>
           e?.driverId && availMap.get(`${e.driverId}::${workDays[driverEntries.indexOf(e)]}`) === MasterStatus.SICK,
