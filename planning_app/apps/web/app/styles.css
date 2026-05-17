@@ -1389,3 +1389,57 @@ th {
   text-overflow: ellipsis;
   white-space: nowrap;
 }
+
+.import-freshness-badge {
+  display: block;
+  font-size: 11px;
+  color: #16a34a;
+  margin-top: 3px;
+  font-weight: 500;
+}
+
+.import-freshness-never {
+  color: var(--muted);
+}
+
+.import-run-sourcetype {
+  font-size: 11px;
+  font-family: monospace;
+  color: var(--muted);
+}
+
+.import-status-badge {
+  display: inline-block;
+  border-radius: 4px;
+  font-size: 10px;
+  font-weight: 700;
+  padding: 1px 5px;
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+}
+
+.import-status-executed { background: #dcfce7; color: #15803d; }
+.import-status-failed   { background: #fee2e2; color: #b91c1c; }
+.import-status-preview  { background: #e0e7ff; color: #3730a3; }
+.import-status-validated { background: #fef9c3; color: #92400e; }
+.import-status-rolled_back { background: #f3f4f6; color: #6b7280; }
+
+.import-error-count {
+  background: #fee2e2;
+  color: #b91c1c;
+  border-radius: 4px;
+  font-size: 11px;
+  font-weight: 700;
+  padding: 1px 6px;
+}
+
+tr.import-run-failed { background: #fff5f5; }
+tr.import-run-ok { background: #f0fdf4; }
+
+.data-freshness-badge {
+  font-size: 11px;
+  color: #16a34a;
+  font-weight: 500;
+  white-space: nowrap;
+  align-self: center;
+}

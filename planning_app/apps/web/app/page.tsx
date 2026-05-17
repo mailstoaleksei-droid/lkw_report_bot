@@ -195,6 +195,20 @@ type ImportResult = {
   error?: string;
 };
 
+type ImportRunItem = {
+  id: string;
+  sourceType: string;
+  sourceFileName: string;
+  status: string;
+  createdAt: string;
+  executedAt: string | null;
+  rolledBackAt: string | null;
+  errorCount: number;
+  createdBy: string | null;
+};
+
+type ImportFreshness = Record<string, { executedAt: string; sourceFileName: string }>;
+
 type OrderDraft = {
   runde: string;
   description: string;
@@ -329,6 +343,10 @@ const translations = {
     exportHistory: "Export history",
     downloadLkwListe: "Download LKW list",
     downloadFahrerListe: "Download driver list",
+    importHistory: "Import history",
+    lastSync: "Last sync",
+    never: "Never",
+    errors: "Errors",
     freeLkw: "Free LKW",
     hide: "Hide",
     imports: "Imports",
@@ -434,6 +452,10 @@ const translations = {
     exportHistory: "Exportverlauf",
     downloadLkwListe: "LKW-Liste herunterladen",
     downloadFahrerListe: "Fahrerliste herunterladen",
+    importHistory: "Importverlauf",
+    lastSync: "Letzte Sync",
+    never: "Nie",
+    errors: "Fehler",
     freeLkw: "Freie LKW",
     hide: "Ausblenden",
     imports: "Importe",
@@ -539,6 +561,10 @@ const translations = {
     exportHistory: "История экспортов",
     downloadLkwListe: "Скачать список LKW",
     downloadFahrerListe: "Скачать список водителей",
+    importHistory: "История импортов",
+    lastSync: "Последняя синхр.",
+    never: "Никогда",
+    errors: "Ошибки",
     freeLkw: "Свободные LKW",
     hide: "Скрыть",
     imports: "Импорты",
@@ -685,6 +711,9 @@ export default function HomePage() {
   const [drivers, setDrivers] = useState<DriverItem[]>([]);
   const [audit, setAudit] = useState<AuditItem[]>([]);
   const [exportHistory, setExportHistory] = useState<ExportLogItem[]>([]);
+  const [importHistory, setImportHistory] = useState<ImportRunItem[]>([]);
+  const [importFreshness, setImportFreshness] = useState<ImportFreshness>({});
+  const [dataLoadedAt, setDataLoadedAt] = useState<string | null>(null);
   const [managedUsers, setManagedUsers] = useState<ManagedUser[]>([]);
   const [settings, setSettings] = useState<AppSettings>({
     defaultCountry: "DE",
@@ -759,6 +788,19 @@ export default function HomePage() {
     if (!user || activeSection !== "exports") return;
     apiFetch<{ ok: true; logs: ExportLogItem[] }>("/api/exports/history?limit=100")
       .then((result) => setExportHistory(result.logs))
+      .catch(() => {});
+  }, [user, activeSection]);
+
+  useEffect(() => {
+    if (!user || activeSection !== "imports") return;
+    Promise.all([
+      apiFetch<{ ok: true; freshness: ImportFreshness }>("/api/imports/freshness"),
+      apiFetch<{ ok: true; runs: ImportRunItem[] }>("/api/imports/history?limit=60"),
+    ])
+      .then(([fr, hr]) => {
+        setImportFreshness(fr.freshness);
+        setImportHistory(hr.runs);
+      })
       .catch(() => {});
   }, [user, activeSection]);
 
@@ -974,6 +1016,7 @@ export default function HomePage() {
       setAudit(auditResult.items);
       setManagedUsers(usersResult.items);
       setSettings(settingsResult.settings);
+      setDataLoadedAt(new Date().toISOString());
     } catch (caught) {
       setError(caught instanceof Error ? caught.message : "Failed to load data");
     } finally {
@@ -1667,6 +1710,11 @@ export default function HomePage() {
             <button type="button" onClick={() => loadDashboardData(selectedDate)} disabled={loading}>
               {t("refresh")}
             </button>
+            {dataLoadedAt ? (
+              <span className="data-freshness-badge" title={new Date(dataLoadedAt).toISOString()}>
+                ✓ {new Date(dataLoadedAt).toLocaleTimeString()}
+              </span>
+            ) : null}
             <div className="export-actions">
               <button type="button" className="secondary-button" onClick={() => exportTagesplanung("xls")}>
                 {t("exportExcel")}
@@ -1963,11 +2011,26 @@ export default function HomePage() {
           <div className="imports-grid">
             {importActions.map((action) => {
               const result = importResults[action.key];
+              const sourceType = ({
+                master: "reporting-db-master-data",
+                schedules: "reporting-db-schedules",
+                availability: "reporting-db-driver-availability",
+                pairings: "planning-lkw-driver-pairings",
+                "daily-plan": "excel-daily-plan",
+              } as Record<string, string>)[action.key];
+              const fresh = sourceType ? importFreshness[sourceType] : null;
               return (
                 <div className="import-card" key={action.key}>
                   <div>
                     <strong>{action.title}</strong>
                     <span>{t("reportingDbSource")}</span>
+                    {fresh ? (
+                      <span className="import-freshness-badge" title={fresh.sourceFileName}>
+                        ✓ {t("lastSync")}: {new Date(fresh.executedAt).toLocaleString()}
+                      </span>
+                    ) : (
+                      <span className="import-freshness-badge import-freshness-never">{t("never")}</span>
+                    )}
                   </div>
                   <div className="import-buttons">
                     <button
@@ -2003,6 +2066,38 @@ export default function HomePage() {
               );
             })}
           </div>
+
+          {importHistory.length > 0 ? (
+            <>
+              <h3 className="export-history-heading" style={{ marginTop: 28 }}>{t("importHistory")}</h3>
+              <div className="table-wrap compact-table">
+                <table>
+                  <thead>
+                    <tr>
+                      <th>{t("time")}</th>
+                      <th>{t("type")}</th>
+                      <th>{t("status")}</th>
+                      <th>{t("user")}</th>
+                      <th>Executed</th>
+                      <th>{t("errors")}</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {importHistory.map((run) => (
+                      <tr key={run.id} className={run.status === "FAILED" ? "import-run-failed" : run.status === "EXECUTED" ? "import-run-ok" : ""}>
+                        <td>{new Date(run.createdAt).toLocaleString()}</td>
+                        <td className="import-run-sourcetype">{run.sourceType}</td>
+                        <td><span className={`import-status-badge import-status-${run.status.toLowerCase()}`}>{run.status}</span></td>
+                        <td>{run.createdBy ?? "—"}</td>
+                        <td>{run.executedAt ? new Date(run.executedAt).toLocaleString() : "—"}</td>
+                        <td>{run.errorCount > 0 ? <span className="import-error-count">{run.errorCount}</span> : "—"}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </>
+          ) : null}
         </div>
         </section>
       ) : null}
