@@ -267,7 +267,17 @@ const masterStatusOptions = [
 ];
 
 type ViewMode = "lkw-first" | "orders-first";
-type AppSection = "planning" | "kalender" | "imports" | "lkw" | "drivers" | "audit" | "users" | "settings";
+type AppSection = "planning" | "kalender" | "imports" | "lkw" | "drivers" | "audit" | "users" | "settings" | "exports";
+
+type ExportLogItem = {
+  id: string;
+  exportType: string;
+  format: string;
+  filters: Record<string, unknown>;
+  outputPath: string | null;
+  createdAt: string;
+  createdBy: string | null;
+};
 type PeriodFilter = "day" | "week" | "month";
 type Language = "de" | "en" | "ru";
 
@@ -315,6 +325,10 @@ const translations = {
     executeImport: "Execute import",
     exportExcel: "Export Excel",
     exportPdf: "Export PDF",
+    exporte: "Exports",
+    exportHistory: "Export history",
+    downloadLkwListe: "Download LKW list",
+    downloadFahrerListe: "Download driver list",
     freeLkw: "Free LKW",
     hide: "Hide",
     imports: "Imports",
@@ -416,6 +430,10 @@ const translations = {
     executeImport: "Import ausführen",
     exportExcel: "Excel exportieren",
     exportPdf: "PDF exportieren",
+    exporte: "Exporte",
+    exportHistory: "Exportverlauf",
+    downloadLkwListe: "LKW-Liste herunterladen",
+    downloadFahrerListe: "Fahrerliste herunterladen",
     freeLkw: "Freie LKW",
     hide: "Ausblenden",
     imports: "Importe",
@@ -517,6 +535,10 @@ const translations = {
     executeImport: "Выполнить импорт",
     exportExcel: "Экспорт Excel",
     exportPdf: "Экспорт PDF",
+    exporte: "Отчёты",
+    exportHistory: "История экспортов",
+    downloadLkwListe: "Скачать список LKW",
+    downloadFahrerListe: "Скачать список водителей",
     freeLkw: "Свободные LKW",
     hide: "Скрыть",
     imports: "Импорты",
@@ -662,6 +684,7 @@ export default function HomePage() {
   const [lkw, setLkw] = useState<LkwItem[]>([]);
   const [drivers, setDrivers] = useState<DriverItem[]>([]);
   const [audit, setAudit] = useState<AuditItem[]>([]);
+  const [exportHistory, setExportHistory] = useState<ExportLogItem[]>([]);
   const [managedUsers, setManagedUsers] = useState<ManagedUser[]>([]);
   const [settings, setSettings] = useState<AppSettings>({
     defaultCountry: "DE",
@@ -731,6 +754,13 @@ export default function HomePage() {
     if (!user) return;
     loadDashboardData(selectedDate);
   }, [user, selectedDate, periodFilter]);
+
+  useEffect(() => {
+    if (!user || activeSection !== "exports") return;
+    apiFetch<{ ok: true; logs: ExportLogItem[] }>("/api/exports/history?limit=100")
+      .then((result) => setExportHistory(result.logs))
+      .catch(() => {});
+  }, [user, activeSection]);
 
   const metrics = useMemo(() => {
     const counters = planning?.counters || {
@@ -1492,6 +1522,7 @@ export default function HomePage() {
     { key: "lkw", label: t("lkwManagement") },
     { key: "drivers", label: t("driverManagement") },
     ...(canViewAudit ? [{ key: "audit" as AppSection, label: t("auditLog") }] : []),
+    { key: "exports" as AppSection, label: t("exporte") },
     ...(user.role === "ADMIN" ? [{ key: "users" as AppSection, label: t("userManagement") }] : []),
     ...(hasManagerAccess(user.role) ? [{ key: "settings" as AppSection, label: t("settings") }] : []),
   ];
@@ -2394,6 +2425,67 @@ export default function HomePage() {
           </div>
           </section>
         ) : null}
+
+      {activeSection === "exports" ? (
+        <section className="section-grid">
+          <div className="list-panel management-panel">
+            <div className="panel-header">
+              <h2>{t("exporte")}</h2>
+            </div>
+            <div className="export-download-row">
+              <a
+                className="primary-button"
+                href={`${apiBaseUrl}/api/exports/lkw-liste.xlsx`}
+                download
+              >
+                ↓ {t("downloadLkwListe")}
+              </a>
+              <a
+                className="primary-button"
+                href={`${apiBaseUrl}/api/exports/fahrer-liste.xlsx`}
+                download
+              >
+                ↓ {t("downloadFahrerListe")}
+              </a>
+            </div>
+            <h3 className="export-history-heading">{t("exportHistory")}</h3>
+            <div className="table-wrap compact-table">
+              <table>
+                <thead>
+                  <tr>
+                    <th>{t("time")}</th>
+                    <th>{t("type")}</th>
+                    <th>Format</th>
+                    <th>{t("user")}</th>
+                    <th>Filters</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {exportHistory.map((item) => (
+                    <tr key={item.id}>
+                      <td>{new Date(item.createdAt).toLocaleString()}</td>
+                      <td>{item.exportType}</td>
+                      <td>{item.format.toUpperCase()}</td>
+                      <td>{item.createdBy ?? "—"}</td>
+                      <td className="export-filters-cell">
+                        {Object.entries(item.filters)
+                          .filter(([, v]) => v !== null && v !== undefined && v !== "")
+                          .map(([k, v]) => `${k}=${String(v)}`)
+                          .join(", ") || "—"}
+                      </td>
+                    </tr>
+                  ))}
+                  {exportHistory.length === 0 ? (
+                    <tr>
+                      <td colSpan={5} className="muted">{t("loading")}</td>
+                    </tr>
+                  ) : null}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </section>
+      ) : null}
 
       {activeSection === "kalender" ? (
         <section className="section-grid kalender-section">

@@ -1360,3 +1360,32 @@ th {
   font-weight: 700;
   margin-left: 2px;
 }
+
+.export-download-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  margin-bottom: 24px;
+}
+
+.export-download-row a {
+  text-decoration: none;
+}
+
+.export-history-heading {
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--muted);
+  margin: 0 0 10px;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.export-filters-cell {
+  font-size: 11px;
+  color: var(--muted);
+  max-width: 280px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
