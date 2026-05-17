@@ -1,5 +1,5 @@
 # GROO Fleet Portal — Roadmap & Checklist
-> Версия: 1.0 | Дата: 2026-05-17 | Статус: Фазы 1-3 завершены ✅, данные Dispo 2026 импортированы ✅, переход к Фазе 4 (Deploy)
+> Версия: 1.1 | Дата: 2026-05-17 | Статус: Фазы 1-3 ✅, Dispo 2026 импортированы ✅, Фаза 4 — Railway конфигурация готова ✅ (деплой в процессе)
 
 ---
 
@@ -505,11 +505,24 @@ openpyxl + reportlab → PDF/Excel без VBA
 - [ ] Нормализация: даты DD.MM.YYYY, форматы номеров GR-OO1234
 
 ### Фаза 4 — Деплой 24/7 (2-3 дня)
-- [ ] Deploy API (Fastify) → Railway
-- [ ] Deploy Frontend (Next.js) → Railway
-- [ ] Deploy ETL → Railway Cron или GitHub Actions
-- [ ] Переменные окружения в Railway Secrets
-- [ ] Prisma migrations автоматически при деплое
+
+**Подготовлено (2026-05-17):**
+- [x] `apps/api/railway.json` + `apps/web/railway.json` — Railway конфиги для каждого сервиса
+- [x] `next.config.mjs` — rewrites `/api/*` → `API_INTERNAL_URL` (Railway private networking)
+  Браузер не обращается к API напрямую → cookies работают с `sameSite: lax`
+- [x] `config.ts` — читать `PORT` env var от Railway (с `API_PORT` как fallback)
+- [x] `Dockerfile` (api) — `prisma migrate deploy` перед стартом сервера
+- [x] `DEPLOY_RAILWAY.md` — пошаговый гайд с таблицей env vars
+- [x] `NEXT_PUBLIC_API_BASE_URL=""` (пусто) — web в production использует относительные пути
+
+**Осталось сделать в Railway dashboard:**
+- [ ] Создать Railway проект, подключить репозиторий
+- [ ] Добавить сервис **api**: Root Dir = `planning_app`, Config = `apps/api/railway.json`
+- [ ] Добавить сервис **web**: Root Dir = `planning_app`, Config = `apps/web/railway.json`
+- [ ] Включить Private Networking для api сервиса (имя должно быть `api`)
+- [ ] Заполнить env vars по таблице из DEPLOY_RAILWAY.md
+- [ ] Задеплоить, проверить `/api/healthz`, войти в портал
+- [ ] Deploy ETL → Railway Cron (Фаза 5, после базового деплоя)
 - [ ] Health check + Uptime Robot мониторинг
 - [ ] Подключить Microsoft Graph API (читать Excel из SharePoint)
   - [ ] Создать App Registration в Azure Portal
